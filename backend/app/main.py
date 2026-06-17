@@ -1,21 +1,41 @@
-# نقطة الانطلاق لتشغيل FastAPI
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
+from app.core.database import engine, Base
+
+# استيراد الموديلات هنا مهم جداً لكي يتعرف عليها Base.metadata أثناء الإنشاء
+from app.models.auth import User
+
+# 2️⃣ استيراد الـ api_router لتجميع المسارات (هذا السطر الذي كان ناقصاً أو معطلاً)
+from app.api.v1.api import api_router
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # [1️⃣] إنشاء الجداول بشكل Async عند تشغيل السيرفر
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    
+    yield
+    # هنا يمكنك وضع أي عمليات تنظيف عند إغلاق السيرفر مستقبلاً (مثل غلق اتصالات الواتساب)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json"
+    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    lifespan=lifespan
 )
 
-# إعداد الصلاحيات (CORS) للسماح لـ Next.js بالاتصال بالـ Backend
+# إعداد الـ CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # في الإنتاج سنحدد رابط سيرفر العميل فقط
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# سنقوم بربط المسارات لاحقاً هنا
+app.include_router(api_router, prefix=settings.API_V1_STR)
 
 @app.get("/")
 def root():
