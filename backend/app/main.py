@@ -3,7 +3,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import engine, Base
-
+from fastapi.security import OAuth2PasswordBearer
+from app.core.config import settings
 # استيراد الموديلات هنا مهم جداً لكي يتعرف عليها Base.metadata أثناء الإنشاء
 from app.models.auth import User
 
@@ -36,6 +37,8 @@ app.add_middleware(
 
 # سنقوم بربط المسارات لاحقاً هنا
 app.include_router(api_router, prefix=settings.API_V1_STR)
+# تهيئة المعيار القياسي وتحديد رابط الـ login الفعلي للنظام
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
 
 @app.get("/")
 def root():
