@@ -7,7 +7,8 @@ from fastapi.security import OAuth2PasswordBearer
 from app.core.config import settings
 # استيراد الموديلات هنا مهم جداً لكي يتعرف عليها Base.metadata أثناء الإنشاء
 from app.models.auth import User
-
+from app.models.client import Client
+from app.models.case import Case
 # 2️⃣ استيراد الـ api_router لتجميع المسارات (هذا السطر الذي كان ناقصاً أو معطلاً)
 from app.api.v1.api import api_router
 
