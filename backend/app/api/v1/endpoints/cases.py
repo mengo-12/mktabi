@@ -99,6 +99,34 @@ async def read_cases(
     return result.scalars().all()
 
 
+@router.get("/{id}", response_model=CaseResponse)
+async def read_case_by_id(
+    id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # 🧠 قمنا بإزالة السطر المسبب للمشكلة مؤقتاً لضمان تشغيل الصفحة فوراً
+    query = select(Case).where(Case.id == id, Case.is_active == True).options(
+        selectinload(Case.client),
+        selectinload(Case.lawyer)
+    )
+    
+    result = await db.execute(query)
+    db_case = result.scalar_one_or_none()
+    
+    if not db_case:
+        raise HTTPException(status_code=404, detail="الملف القضائي غير موجود أو تم أرشفته.")
+        
+    # جدار الحماية وعزل البيانات
+    if current_user.role not in [UserRole.ADMIN, UserRole.PARTNER]:
+        if db_case.lawyer_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="غير مصرح لك بالدخول على هذه القضية."
+            )
+            
+    return db_case
+
 # 📌 [3] مسار الأرشفة الصامتة للقضايا (Soft Delete)
 @router.delete("/{id}", response_model=dict)
 async def soft_delete_case(

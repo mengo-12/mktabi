@@ -1,11 +1,13 @@
 'use client';
 import { useState, useEffect } from 'react';
 import apiClient from '@/services/apiClient';
+import { useRouter } from 'next/navigation';
 
 export default function CasesPage() {
     const [cases, setCases] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const router = useRouter();
 
     // 📡 جلب البيانات حياً من الباك-إند عند تحميل الصفحة
     useEffect(() => {
@@ -136,7 +138,10 @@ export default function CasesPage() {
                                         {getStatusBadge(item.status)}
                                     </td>
                                     <td className="p-4 text-center">
-                                        <button className="px-3 py-1.5 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors">
+                                        <button
+                                            onClick={() => router.push(`/dashboard/cases/${item.id}`)}
+                                            className="px-3 py-1.5 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors"
+                                        >
                                             استعراض التفاصيل
                                         </button>
                                     </td>
