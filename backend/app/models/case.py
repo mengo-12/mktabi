@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import String, Enum, Text, ForeignKey, Date
+from sqlalchemy import String, Enum, Text, ForeignKey, Date, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 from datetime import date
@@ -36,3 +36,5 @@ class Case(Base):
     # 🔄 تفعيل الـ back-populates للربط ثنائي الاتجاه
     client: Mapped["Client"] = relationship("Client", back_populates="cases")
     lawyer: Mapped["User"] = relationship("User") # ربط مباشر مع جدول المستخدمين لمعرفة المحامي المسؤول
+    
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
