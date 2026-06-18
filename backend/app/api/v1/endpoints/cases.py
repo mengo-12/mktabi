@@ -108,7 +108,8 @@ async def read_case_by_id(
     # 🧠 قمنا بإزالة السطر المسبب للمشكلة مؤقتاً لضمان تشغيل الصفحة فوراً
     query = select(Case).where(Case.id == id, Case.is_active == True).options(
         selectinload(Case.client),
-        selectinload(Case.lawyer)
+        selectinload(Case.lawyer),
+        selectinload(Case.attachments)
     )
     
     result = await db.execute(query)

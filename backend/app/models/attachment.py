@@ -20,4 +20,4 @@ class Attachment(Base):
     uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     # 🔄 العلاقات العكسية
-    case: Mapped["Case"] = relationship("Case")
+    case: Mapped["Case"] = relationship("Case", back_populates="attachments")

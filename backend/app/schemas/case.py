@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
-from datetime import date
+from datetime import date, datetime # 👈 أضفنا datetime هنا لتوثيق وقت الرفع
 from app.models.case import CaseType, CaseStatus
 from app.models.client import ClientType
 
@@ -17,6 +17,18 @@ class LawyerMinOut(BaseModel):
     id: int
     full_name: str
     email: str
+
+    class Config:
+        from_attributes = True
+
+# 🚀 السحر الجديد: نموذج مصغر لعرض بيانات الملف المرفق في الفرونت-إند
+class AttachmentMinOut(BaseModel):
+    id: int
+    original_name: str
+    file_type: str
+    file_size: int
+    description: Optional[str] = None
+    uploaded_at: datetime
 
     class Config:
         from_attributes = True
@@ -53,9 +65,12 @@ class CaseResponse(CaseBase):
     lawyer_id: int
     is_active: bool
     
-    # هنا السحر: تضمين الكائنات كاملة ومختصرة تلقائياً بفضل SQLAlchemy relationships
+    # تضمين الكائنات كاملة ومختصرة تلقائياً بفضل SQLAlchemy relationships
     client: Optional[ClientMinOut] = None
     lawyer: Optional[LawyerMinOut] = None
+    
+    # 🚀 الخيط المفقود: السماح بتدفق مصفوفة المرفقات الحية إلى المتصفح تلقائياً
+    attachments: List[AttachmentMinOut] = []
 
     class Config:
         from_attributes = True

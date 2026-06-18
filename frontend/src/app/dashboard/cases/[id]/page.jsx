@@ -37,6 +37,7 @@ export default function CaseDetailsPage() {
     }, [id]);
 
     // 📤 2. دالة رفع مستند جديد محلياً مرتبط بهذه القضية
+    // 📤 دالة رفع مستند جديد محلياً مرتبط بهذه القضية
     const handleFileUpload = async (e) => {
         e.preventDefault();
         if (!selectedFile) return;
@@ -49,8 +50,8 @@ export default function CaseDetailsPage() {
             formData.append('file', selectedFile);
             formData.append('description', docDescription);
 
-            // إرسال الملف إلى نقطة الرفع المخصصة للقضية بالباك-إند
-            await apiClient.post(`/documents/upload/${id}`, formData, {
+            // 🚀 الرابط الصحيح والمطابق تماماً للباك-إند الخاص بك الآن:
+            await apiClient.post(`/documents/${id}/upload`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
 
@@ -68,12 +69,11 @@ export default function CaseDetailsPage() {
     // 📥 3. دالة تحميل / بث المستند الآمن برقم الـ ID الخاص به
     const handleDownloadDocument = async (docId, fileName) => {
         try {
-            // طلب الملف كـ Blob (Binary Large Object) للتعامل مع البث المباشر بأمان
+            // 🚀 تعديل الرابط هنا أيضاً إلى documents ليطابق الـ Router
             const response = await apiClient.get(`/documents/download/${docId}`, {
                 responseType: 'blob'
             });
 
-            // تحويل البث إلى رابط مؤقت بذاكرة المتصفح للتحميل تلقائياً وباسم الملف الأصلي
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
             link.href = url;
@@ -205,16 +205,17 @@ export default function CaseDetailsPage() {
                             {caseData.attachments?.length === 0 ? (
                                 <p className="text-xs text-slate-400 text-center py-6">لا توجد ملفات مرفوعة لهذه الدعوى بعد.</p>
                             ) : (
+
                                 caseData.attachments?.map((doc) => (
                                     <div key={doc.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-50 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/10 hover:border-blue-100 transition-colors">
                                         <div className="min-w-0 flex-1 pl-2">
-                                            <p className="text-xs font-bold text-slate-800 dark:text-slate-300 truncate" title={doc.file_name}>
-                                                {doc.file_name}
+                                            <p className="text-xs font-bold text-slate-800 dark:text-slate-300 truncate" title={doc.original_name}>
+                                                {doc.original_name} {/* 👈 حدثناها هنا لتقرأ الاسم الأصلي من السيرفر */}
                                             </p>
-                                            <p className="text-[10px] text-slate-400 mt-0.5 truncate">{doc.description || 'بدون وصف'}</p>
+                                            <p className="text-[10px] text-slate-400 mt-0.5 truncate">{doc.description || 'مستند قضائي مؤرشف'}</p>
                                         </div>
                                         <button
-                                            onClick={() => handleDownloadDocument(doc.id, doc.file_name)}
+                                            onClick={() => handleDownloadDocument(doc.id, doc.original_name)} // 👈 حدثناها هنا أيضاً
                                             className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg text-xs font-semibold transition-colors shrink-0"
                                             title="تحميل آمن كـ Stream"
                                         >
@@ -222,6 +223,7 @@ export default function CaseDetailsPage() {
                                         </button>
                                     </div>
                                 ))
+
                             )}
                         </div>
                     </div>
