@@ -17,6 +17,11 @@ export default function CaseDetailsPage() {
     const [docDescription, setDocDescription] = useState('');
     const [uploadError, setUploadError] = useState('');
 
+    // حالات خاصة بالنافذة المنبثقة لعرض الملف المباشر (Preview Modal)
+    const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+    const [previewUrl, setPreviewUrl] = useState('');
+    const [previewTitle, setPreviewTitle] = useState('');
+
     // 📡 1. جلب تفاصيل القضية الحية من السيرفر
     const fetchCaseDetails = async () => {
         try {
@@ -66,25 +71,51 @@ export default function CaseDetailsPage() {
         }
     };
 
-    // 📥 3. دالة تحميل / بث المستند الآمن برقم الـ ID الخاص به
-    const handleDownloadDocument = async (docId, fileName) => {
+    // // 📥 3. دالة تحميل / بث المستند الآمن برقم الـ ID الخاص به
+    // const handleDownloadDocument = async (docId, fileName) => {
+    //     try {
+    //         // 🚀 تعديل الرابط هنا أيضاً إلى documents ليطابق الـ Router
+    //         const response = await apiClient.get(`/documents/download/${docId}`, {
+    //             responseType: 'blob'
+    //         });
+
+    //         const url = window.URL.createObjectURL(new Blob([response.data]));
+    //         const link = document.createElement('a');
+    //         link.href = url;
+    //         link.setAttribute('download', fileName || `document_${docId}.pdf`);
+    //         document.body.appendChild(link);
+    //         link.click();
+    //         link.remove();
+    //     } catch (err) {
+    //         alert('فشل تحميل الملف. تأكد من صلاحياتك الأمنية على هذا المستند.');
+    //     }
+    // };
+
+    // 👁️ دالة جلب وبث المستند لعرضه مباشرة في النافذة المنبثقة
+    const handleViewDocument = async (docId, fileName) => {
         try {
-            // 🚀 تعديل الرابط هنا أيضاً إلى documents ليطابق الـ Router
+            setUploading(true); // استخدام مؤشر التحميل أثناء جلب الملف
+
+            // طلب الملف كـ Blob من الباك-إند
             const response = await apiClient.get(`/documents/download/${docId}`, {
                 responseType: 'blob'
             });
 
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', fileName || `document_${docId}.pdf`);
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
+            // 🚀 تحديد نوع الملف (MIME Type) بشكل صحيح ليقوم المتصفح بعرضه بدلاً من تحميله
+            const fileBlob = new Blob([response.data], { type: response.headers['content-type'] || 'application/pdf' });
+            const url = window.URL.createObjectURL(fileBlob);
+
+            // تخزين البيانات وفتح النافذة المنبثقة
+            setPreviewUrl(url);
+            setPreviewTitle(fileName);
+            setIsPreviewOpen(true);
         } catch (err) {
-            alert('فشل تحميل الملف. تأكد من صلاحياتك الأمنية على هذا المستند.');
+            alert('فشل استعراض الملف. تأكد من صلاحياتك الأمنية على هذا المستند.');
+        } finally {
+            setUploading(false);
         }
     };
+
 
     if (loading) {
         return (
@@ -214,12 +245,19 @@ export default function CaseDetailsPage() {
                                             </p>
                                             <p className="text-[10px] text-slate-400 mt-0.5 truncate">{doc.description || 'مستند قضائي مؤرشف'}</p>
                                         </div>
-                                        <button
+                                        {/* <button
                                             onClick={() => handleDownloadDocument(doc.id, doc.original_name)} // 👈 حدثناها هنا أيضاً
                                             className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg text-xs font-semibold transition-colors shrink-0"
                                             title="تحميل آمن كـ Stream"
                                         >
                                             ⬇️
+                                        </button> */}
+                                        <button
+                                            onClick={() => handleViewDocument(doc.id, doc.original_name)} // 👈 الدالة الجديدة هنا
+                                            className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg text-xs font-semibold transition-colors shrink-0 flex items-center gap-1"
+                                            title="استعراض المستند في المتصفح"
+                                        >
+                                            <span>👁️</span> استعراض
                                         </button>
                                     </div>
                                 ))
@@ -231,6 +269,56 @@ export default function CaseDetailsPage() {
                 </div>
 
             </div>
+
+
+
+            {/* 🏛️ النافذة المنبثقة لاستعراض المستندات القضائية (DMS Preview Modal) */}
+            {isPreviewOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white dark:bg-slate-900 w-full max-w-5xl h-[85vh] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
+
+                        {/* هيدر النافذة */}
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xl">📄</span>
+                                <h3 className="text-sm font-bold text-slate-800 dark:text-white truncate max-w-md" title={previewTitle}>
+                                    استعراض: {previewTitle}
+                                </h3>
+                            </div>
+
+                            {/* أزرار التحكم (إغلاق وتحميل) */}
+                            <div className="flex items-center gap-3">
+                                <a
+                                    href={previewUrl}
+                                    download={previewTitle}
+                                    className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 text-xs font-bold rounded-xl transition-colors flex items-center gap-1"
+                                >
+                                    📥 تحميل نسخة
+                                </a>
+                                <button
+                                    onClick={() => {
+                                        setIsPreviewOpen(false);
+                                        window.URL.revokeObjectURL(previewUrl); // تنظيف الذاكرة بعد الإغلاق
+                                    }}
+                                    className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 rounded-xl transition-colors font-bold text-sm"
+                                >
+                                    ❌ إغلاق
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* جسم النافذة وعارض الملفات المباشر */}
+                        <div className="flex-1 bg-slate-100 dark:bg-slate-950 p-2 relative">
+                            <iframe
+                                src={previewUrl}
+                                className="w-full h-full rounded-xl border-0 shadow-inner bg-white"
+                                title="Document Preview"
+                            />
+                        </div>
+
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
