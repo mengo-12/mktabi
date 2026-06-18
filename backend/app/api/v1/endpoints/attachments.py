@@ -110,3 +110,43 @@ async def download_protected_file(
         media_type=attachment.file_type,
         filename=attachment.original_name
     )
+
+# 🗑️ [3] مسار حذف المستند وقفل الملف المادي من السيرفر
+@router.delete("/{attachment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_case_attachment(
+    attachment_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # 1. جلب بيانات الوثيقة
+    stmt = select(Attachment).where(Attachment.id == attachment_id)
+    res = await db.execute(stmt)
+    attachment = res.scalar_one_or_none()
+    
+    if not attachment:
+        raise HTTPException(status_code=404, detail="المستند غير موجود أو تم حذفه مسبقاً.")
+
+    # 2. جلب القضية للتحقق من الصلاحيات الأمنية
+    case_res = await db.execute(select(Case).where(Case.id == attachment.case_id))
+    case = case_res.scalar_one_or_none()
+
+    # 🛡️ حماية الحذف: الأدمن، الشركاء، أو المحامي المسؤول عن القضية فقط
+    if current_user.role not in [UserRole.ADMIN, UserRole.PARTNER]:
+        if case.lawyer_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="عذراً، لا تمتلك الصلاحية القانونية لحذف مستندات هذه القضية."
+            )
+
+    # 3. الحذف المادي (Physical Delete) للملف من الهاردوير إذا كان موجوداً
+    if os.path.exists(attachment.file_path):
+        try:
+            os.remove(attachment.file_path)
+        except Exception as e:
+            print(f"فشل حذف الملف من القرص: {e}") # تسجيل التحذير دون تعطيل حذف قاعدة البيانات
+
+    # 4. الحذف البرمجي من قاعدة البيانات
+    await db.delete(attachment)
+    await db.commit()
+    
+    return None

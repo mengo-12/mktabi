@@ -116,6 +116,26 @@ export default function CaseDetailsPage() {
         }
     };
 
+    // 🗑️ دالة حذف المستند نهائياً من الأرشيف والسيرفر
+    const handleDeleteDocument = async (docId, fileName) => {
+        const isConfirmed = window.confirm(`هل أنت متأكد تماماً من حذف المستند "${fileName}" نهائياً؟ لا يمكن التراجع عن هذا الإجراء.`);
+        if (!isConfirmed) return;
+
+        try {
+            setUploading(true);
+            // إرسال طلب الحذف إلى الـ Router المرتبط بـ /documents
+            await apiClient.delete(`/documents/${docId}`);
+
+            // تحديث البيانات فوراً في الواجهة لإخفاء الملف المحذوف
+            fetchCaseDetails();
+            alert('تم حذف المستند بنجاح من الأرشيف الرقمي للشركة.');
+        } catch (err) {
+            alert(err.response?.data?.detail || 'فشل حذف الملف، قد لا تملك الصلاحية الكافية.');
+        } finally {
+            setUploading(false);
+        }
+    };
+
 
     if (loading) {
         return (
@@ -258,6 +278,15 @@ export default function CaseDetailsPage() {
                                             title="استعراض المستند في المتصفح"
                                         >
                                             <span>👁️</span> استعراض
+                                        </button>
+                                        
+                                        {/* 🚀 زر الحذف الجديد والأنيق */}
+                                        <button
+                                            onClick={() => handleDeleteDocument(doc.id, doc.original_name)}
+                                            className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1"
+                                            title="حذف المستند نهائياً"
+                                        >
+                                            🗑️
                                         </button>
                                     </div>
                                 ))
