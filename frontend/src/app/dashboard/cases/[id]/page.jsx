@@ -450,7 +450,13 @@ export default function CaseDetailsPage() {
     const [newHearing, setNewHearing] = useState({
         hearing_date: '', hearing_time: '', court_name: '', room_number: '', judge_name: '', summary: '', requirements: ''
     });
-    const [updateForm, setUpdateForm] = useState({ summary: '', requirements: '' });
+    const [updateForm, setUpdateForm] = useState({
+    caseNumber: '',
+    courtName: '',
+    opponentName: '',
+    summary: '',
+    requirements: ''
+});
 
     // 📡 1. جلب تفاصيل القضية والجلسات من السيرفر
     const fetchCaseDetails = async () => {

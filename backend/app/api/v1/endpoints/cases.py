@@ -213,10 +213,19 @@ async def soft_delete_case(
     return {"status": "success", "message": f"تم نقل القضية '{case.title}' إلى الأرشيف صامتاً بنجاح."}
 
 
-@router.patch("/{case_id}")
+@router.patch("/{case_id}", response_model=CaseResponse) # أضفنا response_model لضمان التوافق
 async def update_case(
-    case_id: int, 
-    case_update: CaseUpdate, 
+    case_id: int,
+    # المدخلات النصية (كلها اختيارية لأنها تعديل جزئي)
+    title: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+    status: Optional[CaseStatus] = Form(None),
+    case_number: Optional[str] = Form(None),
+    case_type: Optional[CaseType] = Form(None),
+    client_id: Optional[int] = Form(None),
+    lawyer_id: Optional[int] = Form(None),
+    # الملفات المرفقة
+    files: Optional[List[UploadFile]] = File(None),
     db: AsyncSession = Depends(get_db)
 ):
     # 1. البحث عن القضية
@@ -225,12 +234,42 @@ async def update_case(
     
     if not db_case:
         raise HTTPException(status_code=404, detail="القضية غير موجودة")
-
-    # 2. تحديث الحقول الممررة فقط
-    update_data = case_update.dict(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(db_case, key, value)
     
+    # 2. تحديث الحقول النصية (إذا أرسل المستخدم قيمة جديدة)
+    if title is not None: db_case.title = title
+    if description is not None: db_case.description = description
+    if status is not None: db_case.status = status
+    if case_number is not None: db_case.case_number = case_number
+    if case_type is not None: db_case.case_type = case_type
+    if client_id is not None: db_case.client_id = client_id
+    if lawyer_id is not None: db_case.lawyer_id = lawyer_id
+
+    # 3. معالجة الملفات الجديدة (إذا تم رفع ملفات)
+    if files:
+        for file in files:
+            unique_filename = f"{uuid4()}_{file.filename}"
+            file_path = os.path.join(UPLOAD_DIR, unique_filename)
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            
+            db_attachment = Attachment(
+                case_id=db_case.id,
+                original_name=file.filename,
+                file_path=file_path,
+                file_type=file.content_type or "application/octet-stream",
+                file_size=os.path.getsize(file_path),
+                uploaded_by=None # أو يمكنك إضافة current_user هنا إذا أردت
+            )
+            db.add(db_attachment)
+
+    # 4. الحفظ النهائي
     await db.commit()
-    await db.refresh(db_case)
-    return db_case
+    
+    # 5. إعادة تحميل الكائن مع العلاقات (لضمان عمل CaseResponse بشكل صحيح)
+    stmt = select(Case).where(Case.id == db_case.id).options(
+        selectinload(Case.client),
+        selectinload(Case.lawyer),
+        selectinload(Case.attachments)
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one()

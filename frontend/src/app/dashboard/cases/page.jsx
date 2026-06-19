@@ -191,6 +191,9 @@ export default function CasesPage() {
     const [selectedFiles, setSelectedFiles] = useState([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    const [isEditing, setIsEditing] = useState(false); // هل نحن في وضع تعديل؟
+    const [editingCaseId, setEditingCaseId] = useState(null); // معرف القضية الجاري تعديلها
+
     const router = useRouter();
 
     const fetchCases = async () => {
@@ -250,52 +253,56 @@ export default function CasesPage() {
         try {
             setIsSubmitting(true);
 
-            // ⚠️ بناء الـ FormData للشحن المتكامل (بيانات + ملفات ثنائية)
+            // 1. بناء الـ FormData
             const formData = new FormData();
-
-            // 1. إضافة البيانات النصية للـ Form بذكاء واجتناب النصوص الفارغة
             Object.keys(newCaseData).forEach((key) => {
                 const value = newCaseData[key];
-
-                // إذا كان الحقل يحتوي على قيمة نصية فعلية أو رقم
                 if (value !== '' && value !== null && value !== undefined) {
-                    // 🌟 حل مشكلة الـ Alias: الباك إند يتوقع 'status' والـ State لديك ترسل 'status' بالفعل، هذا ممتاز.
                     formData.append(key, value);
                 }
             });
 
-            // 2. حلقة التكرار لإضافة كافة الملفات المتعددة تحت مفتاح 'files' ليفهمها الباك إند كقائمة
+            // 2. إضافة الملفات
             selectedFiles.forEach((file) => {
                 formData.append('files', file);
             });
 
-            // 🌟 تعديل الـ Headers: يُفضل في Axios ترك المتصفح يحدد الـ boundary تلقائياً عند إرسال FormData
-            const response = await apiClient.post('/cases/', formData, {
-                headers: {
-                    // تركها فارغة أو عدم تحديدها يجعل المتصفح يضع الترويسة الصحيحة مع الـ Boundary المناسب للملفات المتعددة
-                    'Content-Type': 'multipart/form-data',
-                },
-            });
+            let response;
+            if (isEditing) {
+                // 🌟 مسار التعديل (PUT أو PATCH حسب ما يدعمه الباك إند)
+                response = await apiClient.patch(`/cases/${editingCaseId}`, formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                });
 
-            setCases([response.data, ...cases]);
+                // تحديث القائمة محلياً بعد التعديل
+                setCases(prev => prev.map(c => c.id === editingCaseId ? response.data : c));
+            } else {
+                // 🌟 مسار الإنشاء
+                response = await apiClient.post('/cases/', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                });
 
-            // إغلاق المودال وتصفير الواجهة
+                // إضافة القضية الجديدة للقائمة
+                setCases([response.data, ...cases]);
+            }
+
+            // 3. إغلاق المودال وتصفير البيانات
             setIsCaseModalOpen(false);
-            setSelectedFiles([]); // تصفير الملفات
+            setIsEditing(false); // إرجاع الحالة للوضع الافتراضي
+            setEditingCaseId(null);
+            setSelectedFiles([]);
             setNewCaseData({
                 title: '', description: '', status: 'pending',
                 case_number: '', case_type: 'commercial', court_name: '',
                 client_id: '', lawyer_id: ''
             });
-        } catch (err) {
-            console.error("تفاصيل الخطأ كاملة:", err.response?.data || err);
 
-            // استخراج رسالة الخطأ القادمة من FastAPI إن وجدت وعرضها للمستخدم لتسهيل تتبع المشاكل
+        } catch (err) {
+            console.error("خطأ أثناء حفظ البيانات:", err.response?.data || err);
             const errorDetail = err.response?.data?.detail;
             const errorMessage = typeof errorDetail === 'string'
                 ? errorDetail
-                : 'حدث خطأ أثناء إضافة القضية أو رفع الملفات المتعددة.';
-
+                : (isEditing ? 'حدث خطأ أثناء تحديث القضية.' : 'حدث خطأ أثناء إنشاء القضية.');
             alert(`⚠️ خطأ: ${errorMessage}`);
         } finally {
             setIsSubmitting(false);
@@ -330,6 +337,23 @@ export default function CasesPage() {
         }
     };
 
+    const openEditModal = (caseItem) => {
+        setEditingCaseId(caseItem.id);
+        setNewCaseData({
+            title: caseItem.title,
+            description: caseItem.description || '',
+            status: caseItem.status,
+            case_number: caseItem.case_number || '',
+            case_type: caseItem.case_type,
+            court_name: caseItem.court_name || '',
+            client_id: caseItem.client?.id || '',
+            lawyer_id: caseItem.lawyer?.id || ''
+        });
+        setSelectedFiles([]); // تصفير الملفات المختارة
+        setIsEditing(true);
+        setIsCaseModalOpen(true);
+    };
+
     return (
         <div className="space-y-6">
 
@@ -341,7 +365,20 @@ export default function CasesPage() {
                 </div>
                 <div>
                     <button
-                        onClick={() => setIsCaseModalOpen(true)}
+                        onClick={() => {
+                            setIsEditing(false);
+                            setNewCaseData({
+                                title: '',
+                                description: '',
+                                status: 'pending',
+                                case_number: '',
+                                case_type: 'commercial',
+                                court_name: '',
+                                client_id: '',
+                                lawyer_id: ''
+                            });
+                            setIsCaseModalOpen(true);
+                        }}
                         className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-xl shadow-md transition-colors"
                     >
                         ＋ إضافة قضية جديدة
@@ -431,6 +468,14 @@ export default function CasesPage() {
                                             استعراض التفاصيل
                                         </button>
                                     </td>
+                                    <td className="p-4 text-center">
+                                        <button
+                                            onClick={() => openEditModal(item)}
+                                            className="ml-2 px-3 py-1.5 border border-blue-200 text-blue-600 hover:bg-blue-50 rounded-lg text-xs font-semibold"
+                                        >
+                                            تعديل
+                                        </button>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -445,10 +490,12 @@ export default function CasesPage() {
 
                         <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
                             <div>
-                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">إضافة قضية جديدة للنظام</h3>
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                                    {isEditing ? 'تعديل بيانات القضية' : 'إضافة قضية جديدة للنظام'}
+                                </h3>
                                 <p className="text-xs text-slate-400 mt-0.5">أدخل تفاصيل وموضوع ملف القضية الجديد وارفع مستنداتها</p>
                             </div>
-                            <button onClick={() => setIsCaseModalOpen(false)} className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors">
+                            <button onClick={() => { setIsCaseModalOpen(false); setIsEditing(false); }} className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors">
                                 <X size={18} />
                             </button>
                         </div>
