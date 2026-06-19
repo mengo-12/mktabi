@@ -51,10 +51,11 @@ async def create_case(
     db.add(db_case)
     await db.commit()
     
-    # جلب البيانات مجدداً مع عمل Eager Loading للعلاقات لكي تظهر في الـ Response
+    # جلب البيانات مجدداً مع عمل Eager Loading للعلاقات كاملة لكي تظهر في الـ Response وتطابق الـ Schema
     stmt = select(Case).where(Case.id == db_case.id).options(
         selectinload(Case.client),
-        selectinload(Case.lawyer)
+        selectinload(Case.lawyer),
+        selectinload(Case.attachments) # ✅ مصلح هنا
     )
     result = await db.execute(stmt)
     return result.scalar_one()
@@ -76,10 +77,11 @@ async def read_cases(
     - Admin / Partner: يشاهدون جميع قضايا المكتب بدون استثناء.
     - Associate / Trainee: يعود لهم النظام فقط بالقضايا المسندة إليهم برمجياً.
     """
-    # استخدام selectinload لضمان جلب بيانات الموكل والمحامي بشكل Async فعال جداً وبأداء سريع
+    # 🛠️ الحل هنا: أضفنا selectinload(Case.attachments) ليتطابق الاستعلام مع متطلبات CaseResponse بالكامل ويمنع خطأ الـ Greenlet
     query = select(Case).where(Case.is_active == True).options(
         selectinload(Case.client),
-        selectinload(Case.lawyer)
+        selectinload(Case.lawyer),
+        selectinload(Case.attachments) # ✅ تمت الإضافة بنجاح لحل مشكلة الـ 500 و Network Error
     )
 
     # 🧠 تطبيق شرط العزل الذكي (Data Isolation Guard)
@@ -105,7 +107,6 @@ async def read_case_by_id(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # 🧠 قمنا بإزالة السطر المسبب للمشكلة مؤقتاً لضمان تشغيل الصفحة فوراً
     query = select(Case).where(Case.id == id, Case.is_active == True).options(
         selectinload(Case.client),
         selectinload(Case.lawyer),
@@ -142,7 +143,7 @@ async def soft_delete_case(
     case = result.scalar_one_or_none()
     
     if not case:
-        raise HTTPException(status_code=404, detail="القضية غير موجودة في النظام.")
+        raise HTTPException(status_code=404, detail="القضية غير موجودة in النظام.")
     if not case.is_active:
         raise HTTPException(status_code=400, detail="هذه القضية مؤرشفة بالفعل سابقاً.")
         

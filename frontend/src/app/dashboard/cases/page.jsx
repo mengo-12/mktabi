@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import apiClient from '@/services/apiClient';
 import { useRouter } from 'next/navigation';
+import { ArrowLeft, FileText, UploadCloud, Eye, Trash2, X, Download, ImageIcon } from 'lucide-react';
 
 export default function CasesPage() {
     const [cases, setCases] = useState([]);
@@ -31,17 +32,17 @@ export default function CasesPage() {
 
     // 🎨 دالة ذكية لتلوين حالة القضية ديناميكياً (Status Badges)
     const getStatusBadge = (status) => {
-        const statusMap = {
-            'ACTIVE': { text: 'نشطة', styles: 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-900' },
-            'PENDING': { text: 'قيد الانتظار', styles: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900' },
-            'CLOSED': { text: 'مغلقة', styles: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700' },
-            'APPEAL': { text: 'استئناف', styles: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-400 dark:border-purple-900' }
+        const statuses = {
+            pending: { text: "تحت الدراسة", className: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200" },
+            active: { text: "نشطة / متداولة", className: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200" },
+            appeal: { text: "قيد الاستئناف", className: "bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400 border-purple-200" },
+            supreme: { text: "قيد المحكمة العليا", className: "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 border-indigo-200" },
+            closed: { text: "مغلقة / منتهية", className: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400 border-slate-300" }
         };
 
-        const current = statusMap[status?.toUpperCase()] || { text: status, styles: 'bg-slate-50 text-slate-600 border-slate-200' };
-
+        const current = statuses[status] || { text: status, className: "bg-slate-50 text-slate-600" };
         return (
-            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${current.styles}`}>
+            <span className={`px-2.5 py-1 text-xs font-bold rounded-full border ${current.className}`}>
                 {current.text}
             </span>
         );
