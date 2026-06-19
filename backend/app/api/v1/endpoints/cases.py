@@ -1,33 +1,53 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+import os
+import shutil
+from uuid import uuid4
+from fastapi import APIRouter, Depends, HTTPException, status, Query, File, Form, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
+from datetime import date
 
 from app.core.database import get_db
 from app.models.auth import User, UserRole
 from app.models.client import Client
 from app.models.case import Case, CaseType, CaseStatus
-from app.schemas.case import CaseCreate, CaseResponse, CaseUpdate
+from app.models.attachment import Attachment  # استيراد الموديل الخاص بك
+from app.schemas.case import CaseResponse
 from app.api.deps import RoleChecker, get_current_user
 
 router = APIRouter()
 
-# الصلاحيات المسموح لها بالإدخال والتعديل والأرشفة
 allowed_creators = RoleChecker([UserRole.ADMIN, UserRole.PARTNER, UserRole.SECRETARY])
 
-# 📌 [1] مسار إنشاء قضية جديدة مع التحقق الصارم من الروابط
+# 📁 المجلد المحلي المخصص لحفظ ملفات القضايا على السيرفر (On-Premises)
+UPLOAD_DIR = "uploaded_case_files"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
 @router.post("/", response_model=CaseResponse, status_code=status.HTTP_201_CREATED)
 async def create_case(
-    case_in: CaseCreate,
+    # حقول القضية من خلال الـ Form
+    title: str = Form(...),
+    client_id: int = Form(...),
+    lawyer_id: int = Form(...),
+    case_number: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+    case_type: CaseType = Form(CaseType.COMMERCIAL),
+    status_filter: CaseStatus = Form(CaseStatus.PENDING, alias="status"),
+    start_date: Optional[date] = Form(None),
+    
+    # 📂 استقبال مصفوفة الملفات المتعددة
+    files: Optional[List[UploadFile]] = File(None),
+    
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(allowed_creators)
+    current_user: User = Depends(allowed_creators) # المستخدم الحالي الذي يقوم بالعملية
 ):
     """
-    إنشاء قضية جديدة مع التحقق الفوري من وجود الموكل والمحامي في قاعدة البيانات.
+    إنشاء قضية جديدة ورفع مستندات متعددة مع ربطها تلقائياً بالموظف الذي قام بالرفع.
     """
     # 1. التحقق من وجود الموكل
-    client_res = await db.execute(select(Client).where(Client.id == case_in.client_id))
+    client_res = await db.execute(select(Client).where(Client.id == client_id))
     client = client_res.scalar_one_or_none()
     if not client:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="الموكل المعين غير موجود في النظام.")
@@ -35,27 +55,66 @@ async def create_case(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="لا يمكن ربط قضية بموكل مؤرشف غير نشط.")
 
     # 2. التحقق من وجود المحامي المسؤول
-    lawyer_res = await db.execute(select(User).where(User.id == case_in.lawyer_id))
+    lawyer_res = await db.execute(select(User).where(User.id == lawyer_id))
     lawyer = lawyer_res.scalar_one_or_none()
     if not lawyer:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="المحامي المسؤول غير موجود في النظام.")
 
-    # 3. التحقق من عدم تكرار رقم القضية بالمحكمة
-    if case_in.case_number:
-        case_num_res = await db.execute(select(Case).where(Case.case_number == case_in.case_number))
+    # 3. التحقق من عدم تكرار رقم القضية
+    if case_number:
+        case_num_res = await db.execute(select(Case).where(Case.case_number == case_number))
         if case_num_res.scalar_one_or_none():
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="رقم القضية هذا مسجل مسبقاً بقضية أخرى.")
 
-    # حفظ القضية
-    db_case = Case(**case_in.model_dump(), is_active=True)
+    # 4. حفظ كائن القضية مبدئياً
+    final_start_date = start_date or date.today()
+    db_case = Case(
+        title=title,
+        client_id=client_id,
+        lawyer_id=lawyer_id,
+        case_number=case_number,
+        description=description,
+        case_type=case_type,
+        status=status_filter,
+        start_date=final_start_date,
+        is_active=True
+    )
     db.add(db_case)
+    await db.flush() # توليد ID القضية لربط المرفقات بها
+
+    # 5. معالجة وحفظ الملفات المرفوعة
+    if files:
+        for file in files:
+            # توليد اسم فريد للملف لمنع التداخل والتعارض على القرص الصلب
+            unique_filename = f"{uuid4()}_{file.filename}"
+            file_path = os.path.join(UPLOAD_DIR, unique_filename)
+            
+            # كتابة الملف في السيرفر المحلي
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+                
+            # الحصول على الحجم الحقيقي بعد الحفظ بالبايت
+            file_size = os.path.getsize(file_path)
+
+            # ✨ السحر هنا: إنشاء سجل المرفق بناءً على الـ Model الخاص بك بدقة
+            db_attachment = Attachment(
+                case_id=db_case.id,
+                original_name=file.filename,
+                file_path=file_path,                               # مسار الملف الفعلي كاملاً
+                file_type=file.content_type or "application/octet-stream", # MIME Type
+                file_size=file_size,                               # الحجم بالبايت
+                uploaded_by=current_user.id                        # 🌟 ربط المرفق بالمسؤول الذي قام برفعه حالياً
+            )
+            db.add(db_attachment)
+
+    # حفظ الحزمة كاملة (القضية + المرفقات المتعددة) في قاعدة البيانات
     await db.commit()
     
-    # جلب البيانات مجدداً مع عمل Eager Loading للعلاقات كاملة لكي تظهر في الـ Response وتطابق الـ Schema
+    # إعادة تحميل القضية مع عمل Eager Loading للعلاقات لضمان مطابقة الـ Schema المرسلة للفرونت إند
     stmt = select(Case).where(Case.id == db_case.id).options(
         selectinload(Case.client),
         selectinload(Case.lawyer),
-        selectinload(Case.attachments) # ✅ مصلح هنا
+        selectinload(Case.attachments)
     )
     result = await db.execute(stmt)
     return result.scalar_one()

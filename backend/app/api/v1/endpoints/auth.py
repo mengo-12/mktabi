@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func
 
+from typing import List
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.security import verify_password, create_access_token, get_password_hash
@@ -122,3 +123,15 @@ async def get_admin_dashboard(
         "status": "success",
         "message": f"مرحباً بك يا أستاذ {current_user.full_name} في لوحة التحكم الإدارية الحساسة!"
     }
+
+@router.get("/users", response_model=List[UserOut])
+async def get_all_users(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # اختيارياً: لحماية المسار وجعله للمسجلين فقط
+):
+    """
+    مسار يجلب كافة المستخدمين (المحامين/الموظفين) لتغذية القوائم المنسدلة في الفرونت إند.
+    """
+    result = await db.execute(select(User).where(User.is_active == True))
+    users = result.scalars().all()
+    return users
