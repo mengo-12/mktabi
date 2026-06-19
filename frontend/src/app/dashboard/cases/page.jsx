@@ -318,6 +318,18 @@ export default function CasesPage() {
         );
     };
 
+    const handleUpdateCase = async (caseId, updatedData) => {
+        try {
+            const response = await apiClient.patch(`/cases/${caseId}`, updatedData);
+            // تحديث حالة الـ state في الفرونت إند فوراً لتعكس التغيير
+            setCases(prevCases => prevCases.map(c => c.id === caseId ? response.data : c));
+            alert("تم تحديث القضية بنجاح");
+        } catch (err) {
+            console.error("خطأ أثناء التحديث:", err);
+            alert("فشل تحديث القضية");
+        }
+    };
+
     return (
         <div className="space-y-6">
 
@@ -398,7 +410,19 @@ export default function CasesPage() {
                                     <td className="p-4">
                                         <div className="font-medium text-slate-800 dark:text-slate-300">{item.lawyer?.full_name || <span className="text-slate-400 text-xs">غير معين</span>}</div>
                                     </td>
-                                    <td className="p-4">{getStatusBadge(item.status)}</td>
+                                    <td className="p-4">
+                                        <select
+                                            value={item.status}
+                                            onChange={(e) => handleUpdateCase(item.id, { status: e.target.value })}
+                                            className="text-xs font-bold rounded-full border px-2 py-1 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 cursor-pointer"
+                                        >
+                                            <option value="pending">تحت الدراسة</option>
+                                            <option value="active">نشطة / متداولة</option>
+                                            <option value="appeal">قيد الاستئناف</option>
+                                            <option value="supreme">قيد المحكمة العليا</option>
+                                            <option value="closed">مغلقة / منتهية</option>
+                                        </select>
+                                    </td>
                                     <td className="p-4 text-center">
                                         <button
                                             onClick={() => router.push(`/dashboard/cases/${item.id}`)}

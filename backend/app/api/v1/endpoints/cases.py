@@ -15,6 +15,8 @@ from app.models.case import Case, CaseType, CaseStatus
 from app.models.attachment import Attachment  # استيراد الموديل الخاص بك
 from app.schemas.case import CaseResponse
 from app.api.deps import RoleChecker, get_current_user
+from app.models.case import Case # تأكد من استيراد الموديل
+from app.schemas.case import CaseUpdate # تحتاج لتعريف هذا الـ Schema
 
 router = APIRouter()
 
@@ -209,3 +211,26 @@ async def soft_delete_case(
     case.is_active = False
     await db.commit()
     return {"status": "success", "message": f"تم نقل القضية '{case.title}' إلى الأرشيف صامتاً بنجاح."}
+
+
+@router.patch("/{case_id}")
+async def update_case(
+    case_id: int, 
+    case_update: CaseUpdate, 
+    db: AsyncSession = Depends(get_db)
+):
+    # 1. البحث عن القضية
+    result = await db.execute(select(Case).where(Case.id == case_id))
+    db_case = result.scalar_one_or_none()
+    
+    if not db_case:
+        raise HTTPException(status_code=404, detail="القضية غير موجودة")
+
+    # 2. تحديث الحقول الممررة فقط
+    update_data = case_update.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_case, key, value)
+    
+    await db.commit()
+    await db.refresh(db_case)
+    return db_case
