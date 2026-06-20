@@ -261,8 +261,9 @@ export default function ClientsPage() {
                             </h3>
                             <button onClick={() => setIsFormModalOpen(false)} className="text-slate-400 hover:text-slate-600 text-sm">✕</button>
                         </div>
-                        <form onSubmit={handleFormSubmit} className="p-6 space-y-4 text-right">
-                            {/* حقل تصنيف الكيان */}
+                        <form onSubmit={handleFormSubmit} className="p-6 space-y-4 text-right" dir="rtl">
+
+                            {/* 1. حقل تصنيف الكيان القانوني */}
                             <div>
                                 <label className="block text-xs font-semibold text-slate-500 mb-1">تصنيف الكيان القانوني *</label>
                                 <select
@@ -271,11 +272,12 @@ export default function ClientsPage() {
                                     className="w-full p-2.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:border-blue-500 cursor-pointer"
                                 >
                                     <option value="individual">أفراد (مواطن / مقيم)</option>
+                                    {/* 💡 تم التعديل إلى corporate ليطابق الـ Enum تماماً */}
                                     <option value="corporate">شركات / مؤسسات / كيانات تجارية</option>
                                 </select>
                             </div>
 
-                            {/* الحقول الديناميكية المتغيرة بناءً على تصنيف العميل */}
+                            {/* 2. الحقول الديناميكية المتغيرة بناءً على التصنيف */}
                             {formData.client_type === "individual" ? (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in duration-150">
                                     <div>
@@ -284,6 +286,7 @@ export default function ClientsPage() {
                                     </div>
                                     <div>
                                         <label className="block text-xs font-semibold text-slate-500 mb-1">رقم الهوية الوطنية / الإقامة *</label>
+                                        {/* 💡 مطابقة حقل national_id */}
                                         <input type="text" required maxLength={10} value={formData.national_id} onChange={(e) => setFormData({ ...formData, national_id: e.target.value })} className="w-full p-2.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none font-mono" />
                                     </div>
                                 </div>
@@ -296,47 +299,47 @@ export default function ClientsPage() {
                                         </div>
                                         <div>
                                             <label className="block text-xs font-semibold text-slate-500 mb-1">رقم السجل التجاري CR *</label>
-                                            <input type="text" required value={formData.cr_number} onChange={(e) => setFormData({ ...formData, cr_number: e.target.value })} className="w-full p-2.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none font-mono" />
+                                            {/* 💡 تم التعديل إلى commercial_register بدلاً من cr_number */}
+                                            <input type="text" required value={formData.commercial_register} onChange={(e) => setFormData({ ...formData, commercial_register: e.target.value })} className="w-full p-2.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none font-mono" />
                                         </div>
                                     </div>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-900/40 p-3 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
                                         <div>
-                                            <label className="block text-xs font-semibold text-slate-500 mb-1">الشخص المسؤول عن التواصل</label>
-                                            <input type="text" placeholder="اسم الممثل القانوني" value={formData.contact_person} onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })} className="w-full p-2.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none" />
+                                            <label className="block text-xs font-semibold text-slate-500 mb-1">الشخص المسؤول عن التواصل *</label>
+                                            {/* 💡 تم التعديل إلى company_representative بدلاً من contact_person */}
+                                            <input type="text" required={formData.client_type === "corporate"} placeholder="اسم الممثل القانوني" value={formData.company_representative} onChange={(e) => setFormData({ ...formData, company_representative: e.target.value })} className="w-full p-2.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none" />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-semibold text-slate-500 mb-1">المسمى الوظيفي للممثل</label>
-                                            <input type="text" placeholder="مثال: مدير الشؤون القانونية" value={formData.contact_title} onChange={(e) => setFormData({ ...formData, contact_title: e.target.value })} className="w-full p-2.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none" />
+                                            <label className="block text-xs font-semibold text-slate-500 mb-1">العنوان الوطني / تفاصيل إضافية</label>
+                                            <input type="text" placeholder="رقم المبنى، الحي" value={formData.address || ''} onChange={(e) => setFormData({ ...formData, address: e.target.value })} className="w-full p-2.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none" />
                                         </div>
                                     </div>
                                 </div>
                             )}
 
-                            {/* حقول الاتصال الأساسية الثابتة */}
+                            {/* 3. حقول الاتصال الأساسية */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-500 mb-1">رقم الجوال (صيغة دولية) *</label>
-                                    <input type="tel" required placeholder="+9665xxxxxxxx" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="w-full p-2.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none font-mono" />
+                                    <label className="block text-xs font-semibold text-slate-500 mb-1">رقم الجوال *</label>
+                                    {/* 💡 تم التعديل إلى phone_number بدلاً من phone */}
+                                    <input type="tel" required placeholder="05xxxxxxxx" value={formData.phone_number} onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })} className="w-full p-2.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none font-mono" />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-500 mb-1">البريد الإلكتروني</label>
                                     <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full p-2.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none" />
                                 </div>
                             </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-500 mb-1">العنوان الوطني الكامل</label>
-                                <input type="text" placeholder="رقم المبنى، اسم الشارع، الحي، المدينة" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} className="w-full p-2.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none" />
-                            </div>
 
                             <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">
                                 <button type="button" onClick={() => setIsFormModalOpen(false)} className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl">إلغاء</button>
-                                <button type="submit" disabled={isSubmitting} className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md disabled:bg-blue-400">{isSubmitting ? 'جاري الحفظ...' : 'حفظ الملف برمجياً'}</button>
+                                <button type="submit" disabled={isSubmitting} className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md disabled:bg-blue-400">
+                                    {isSubmitting ? 'جاري الحفظ...' : 'حفظ الملف برمجياً'}
+                                </button>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
-
             {/* خامساً: لوحة استعراض سجل الموكل (Client Profile Drawer) */}
             {isProfileDrawerOpen && selectedClient && (
                 <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
