@@ -127,7 +127,7 @@ export default function LawyersManagement() {
     }
 
     return (
-        <div className="p-6 bg-gray-50 min-h-screen" dir="rtl">
+        <div className="p-6 min-h-screen" dir="rtl">
             {/* رأس الصفحة */}
             <div className="mb-8 flex justify-between items-center">
                 <div>
