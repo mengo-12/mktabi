@@ -99,3 +99,37 @@ async def soft_delete_client(
     await db.commit()
     
     return {"status": "success", "message": f"تم نقل الموكل '{client.name}' إلى الأرشيف بنجاح."}
+
+# 📌 [4] مسار تحديث بيانات الموكل
+@router.patch("/{id}", response_model=ClientResponse)
+async def update_client(
+    id: int,
+    client_in: ClientUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(allowed_staff)
+):
+    """
+    تحديث بيانات موكل موجود جزئياً أو كلياً.
+    مسموح فقط للـ: Admin, Partner, Secretary.
+    """
+    result = await db.execute(select(Client).where(Client.id == id))
+    client = result.scalar_one_or_none()
+    
+    if not client:
+        raise HTTPException(status_code=404, detail="الموكل غير موجود في النظام.")
+        
+    # التحقق من عدم تكرار رقم الهاتف إذا تم إرساله للتحديث
+    if client_in.phone_number and client_in.phone_number != client.phone_number:
+        phone_query = select(Client).where(Client.phone_number == client_in.phone_number)
+        phone_result = await db.execute(phone_query)
+        if phone_result.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="رقم الهاتف الجديد مستخدم لموكل آخر بالفعل.")
+
+    # تحديث الحقول ديناميكياً بناءً على ما تم إرساله فقط
+    update_data = client_in.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(client, key, value)
+        
+    await db.commit()
+    await db.refresh(client)
+    return client
