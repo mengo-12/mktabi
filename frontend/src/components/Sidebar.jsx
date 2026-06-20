@@ -11,6 +11,9 @@ export default function Sidebar() {
         { name: 'الرئيسية', path: '/dashboard', icon: '📊' },
         { name: 'إدارة الموكلين', path: '/dashboard/clients', icon: '👥' },
         { name: 'إدارة القضايا', path: '/dashboard/cases', icon: '💼' },
+        { name: 'المالية', path: '/dashboard/finance', icon: '💰' },
+        { name: 'المحامين', path: '/dashboard/lawyers', icon: '⚖️' },
+
     ];
 
     return (
