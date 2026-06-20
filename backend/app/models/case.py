@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import String, Enum, Text, ForeignKey, Date, Boolean
+from sqlalchemy import String, Enum, Text, ForeignKey, Date, Boolean, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 from datetime import date
@@ -28,6 +28,10 @@ class Case(Base):
     case_type: Mapped[CaseType] = mapped_column(Enum(CaseType), default=CaseType.COMMERCIAL, nullable=False)
     status: Mapped[CaseStatus] = mapped_column(Enum(CaseStatus), default=CaseStatus.PENDING, nullable=False)
     start_date: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
+
+    # 🌟 الحقول المالية الجديدة لأتعاب المحاماة الخاصة بهذه القضية
+    case_value: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)  # إجمالي الأتعاب المتفق عليها مع الموكل لهذه القضية
+    amount_paid: Mapped[float] = mapped_column(Float, default=0.0, nullable=False) # ما قام الموكل بسداده لك حتى الآن لهذه القضية
 
     # 🔗 الروابط الخارجية (Foreign Keys)
     client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)

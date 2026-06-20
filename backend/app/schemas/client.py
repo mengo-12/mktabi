@@ -61,3 +61,17 @@ class ClientDetailResponse(ClientResponse):
     cases: List[CaseResponse] = []
     class Config:
         from_attributes = True
+
+# 6 كائن مالي فرعي مخصص للملخص
+class ClientFinancialSummary(BaseModel):
+    total_contracts_amount: float = Field(0.0, description="إجمالي قيمة العقود المتفق عليها")
+    total_paid_amount: float = Field(0.0, description="إجمالي المبالغ المدفوعة فعلياً")
+    total_due_amount: float = Field(0.0, description="إجمالي المستحقات المعلقة (الديون)")
+
+# تحديث نموذج الاستجابة المفصل ليشمل الملخص المالي
+class ClientDetailResponse(ClientResponse):
+    cases: List[CaseResponse] = []
+    financial_summary: Optional[ClientFinancialSummary] = None # 🌟 الحقل المالي الجديد
+    
+    class Config:
+        from_attributes = True

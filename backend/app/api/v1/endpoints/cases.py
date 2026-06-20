@@ -12,24 +12,21 @@ from app.core.database import get_db
 from app.models.auth import User, UserRole
 from app.models.client import Client
 from app.models.case import Case, CaseType, CaseStatus
-from app.models.attachment import Attachment  # استيراد الموديل الخاص بك
+from app.models.attachment import Attachment 
 from app.schemas.case import CaseResponse
 from app.api.deps import RoleChecker, get_current_user
-from app.models.case import Case # تأكد من استيراد الموديل
-from app.schemas.case import CaseUpdate # تحتاج لتعريف هذا الـ Schema
+from app.schemas.case import CaseUpdate 
 
 router = APIRouter()
 
 allowed_creators = RoleChecker([UserRole.ADMIN, UserRole.PARTNER, UserRole.SECRETARY])
 
-# 📁 المجلد المحلي المخصص لحفظ ملفات القضايا على السيرفر (On-Premises)
 UPLOAD_DIR = "uploaded_case_files"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 @router.post("/", response_model=CaseResponse, status_code=status.HTTP_201_CREATED)
 async def create_case(
-    # حقول القضية من خلال الـ Form
     title: str = Form(...),
     client_id: int = Form(...),
     lawyer_id: int = Form(...),
@@ -39,14 +36,16 @@ async def create_case(
     status_filter: CaseStatus = Form(CaseStatus.PENDING, alias="status"),
     start_date: Optional[date] = Form(None),
     
-    # 📂 استقبال مصفوفة الملفات المتعددة
-    files: Optional[List[UploadFile]] = File(None),
+    # 🌟 استقبال الحقول المالية الجديدة من الـ Form
+    case_value: float = Form(0.0, description="إجمالي أتعاب المحاماة"),
+    amount_paid: float = Form(0.0, description="المبلغ المدفوع مقدمًا"),
     
+    files: Optional[List[UploadFile]] = File(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(allowed_creators) # المستخدم الحالي الذي يقوم بالعملية
+    current_user: User = Depends(allowed_creators) 
 ):
     """
-    إنشاء قضية جديدة ورفع مستندات متعددة مع ربطها تلقائياً بالموظف الذي قام بالرفع.
+    إنشاء قضية جديدة مع الأتعاب المالية ورفع مستندات متعددة.
     """
     # 1. التحقق من وجود الموكل
     client_res = await db.execute(select(Client).where(Client.id == client_id))
@@ -68,7 +67,7 @@ async def create_case(
         if case_num_res.scalar_one_or_none():
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="رقم القضية هذا مسجل مسبقاً بقضية أخرى.")
 
-    # 4. حفظ كائن القضية مبدئياً
+    # 4. حفظ كائن القضية مع تضمين الحقول المالية
     final_start_date = start_date or date.today()
     db_case = Case(
         title=title,
@@ -79,40 +78,37 @@ async def create_case(
         case_type=case_type,
         status=status_filter,
         start_date=final_start_date,
+        # 🌟 هنا تم إصلاح المشكلة وتمرير القيم الممررة من الفرونت إند
+        case_value=case_value,   
+        amount_paid=amount_paid, 
         is_active=True
     )
     db.add(db_case)
-    await db.flush() # توليد ID القضية لربط المرفقات بها
+    await db.flush() 
 
     # 5. معالجة وحفظ الملفات المرفوعة
     if files:
         for file in files:
-            # توليد اسم فريد للملف لمنع التداخل والتعارض على القرص الصلب
             unique_filename = f"{uuid4()}_{file.filename}"
             file_path = os.path.join(UPLOAD_DIR, unique_filename)
             
-            # كتابة الملف في السيرفر المحلي
             with open(file_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
                 
-            # الحصول على الحجم الحقيقي بعد الحفظ بالبايت
             file_size = os.path.getsize(file_path)
 
-            # ✨ السحر هنا: إنشاء سجل المرفق بناءً على الـ Model الخاص بك بدقة
             db_attachment = Attachment(
                 case_id=db_case.id,
                 original_name=file.filename,
-                file_path=file_path,                               # مسار الملف الفعلي كاملاً
-                file_type=file.content_type or "application/octet-stream", # MIME Type
-                file_size=file_size,                               # الحجم بالبايت
-                uploaded_by=current_user.id                        # 🌟 ربط المرفق بالمسؤول الذي قام برفعه حالياً
+                file_path=file_path,                               
+                file_type=file.content_type or "application/octet-stream", 
+                file_size=file_size,                               
+                uploaded_by=current_user.id                        
             )
             db.add(db_attachment)
 
-    # حفظ الحزمة كاملة (القضية + المرفقات المتعددة) في قاعدة البيانات
     await db.commit()
     
-    # إعادة تحميل القضية مع عمل Eager Loading للعلاقات لضمان مطابقة الـ Schema المرسلة للفرونت إند
     stmt = select(Case).where(Case.id == db_case.id).options(
         selectinload(Case.client),
         selectinload(Case.lawyer),
@@ -122,7 +118,7 @@ async def create_case(
     return result.scalar_one()
 
 
-# 📌 [2] مسار العرض الذكي وعزل البيانات (Role-Based Data Isolation)
+# 📌 مسار العرض وجلب البيانات
 @router.get("/", response_model=List[CaseResponse])
 async def read_cases(
     skip: int = Query(0, ge=0),
@@ -133,23 +129,15 @@ async def read_cases(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    جلب القضايا بذكاء عزل الصلاحيات:
-    - Admin / Partner: يشاهدون جميع قضايا المكتب بدون استثناء.
-    - Associate / Trainee: يعود لهم النظام فقط بالقضايا المسندة إليهم برمجياً.
-    """
-    # 🛠️ الحل هنا: أضفنا selectinload(Case.attachments) ليتطابق الاستعلام مع متطلبات CaseResponse بالكامل ويمنع خطأ الـ Greenlet
     query = select(Case).where(Case.is_active == True).options(
         selectinload(Case.client),
         selectinload(Case.lawyer),
-        selectinload(Case.attachments) # ✅ تمت الإضافة بنجاح لحل مشكلة الـ 500 و Network Error
+        selectinload(Case.attachments) 
     )
 
-    # 🧠 تطبيق شرط العزل الذكي (Data Isolation Guard)
     if current_user.role not in [UserRole.ADMIN, UserRole.PARTNER]:
         query = query.where(Case.lawyer_id == current_user.id)
 
-    # تطبيق الفلاتر الإضافية
     if search:
         query = query.where(Case.title.ilike(f"%{search}%"))
     if case_type:
@@ -180,7 +168,6 @@ async def read_case_by_id(
     if not db_case:
         raise HTTPException(status_code=404, detail="الملف القضائي غير موجود أو تم أرشفته.")
         
-    # جدار الحماية وعزل البيانات
     if current_user.role not in [UserRole.ADMIN, UserRole.PARTNER]:
         if db_case.lawyer_id != current_user.id:
             raise HTTPException(
@@ -190,33 +177,30 @@ async def read_case_by_id(
             
     return db_case
 
-# 📌 [3] مسار الأرشفة الصامتة للقضايا (Soft Delete)
+
 @router.delete("/{id}", response_model=dict)
 async def soft_delete_case(
     id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(allowed_creators)
 ):
-    """
-    أرشفة القضية صامتاً (Soft Delete) بتحويل حقل is_active إلى False.
-    """
     result = await db.execute(select(Case).where(Case.id == id))
     case = result.scalar_one_or_none()
     
     if not case:
-        raise HTTPException(status_code=404, detail="القضية غير موجودة in النظام.")
+        raise HTTPException(status_code=404, detail="القضية غير موجودة في النظام.")
     if not case.is_active:
         raise HTTPException(status_code=400, detail="هذه القضية مؤرشفة بالفعل سابقاً.")
         
     case.is_active = False
     await db.commit()
-    return {"status": "success", "message": f"تم نقل القضية '{case.title}' إلى الأرشيف صامتاً بنجاح."}
+    return {"status": "success", "message": f"تم نقل القضية '{case.title}' إلى الأرشيف بنجاح."}
 
 
-@router.patch("/{case_id}", response_model=CaseResponse) # أضفنا response_model لضمان التوافق
+# 📌 تعديل مسار التحديث ليشمل الحقول المالية أيضاً
+@router.patch("/{case_id}", response_model=CaseResponse) 
 async def update_case(
     case_id: int,
-    # المدخلات النصية (كلها اختيارية لأنها تعديل جزئي)
     title: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     status: Optional[CaseStatus] = Form(None),
@@ -224,7 +208,11 @@ async def update_case(
     case_type: Optional[CaseType] = Form(None),
     client_id: Optional[int] = Form(None),
     lawyer_id: Optional[int] = Form(None),
-    # الملفات المرفقة
+    
+    # 🌟 إضافة الحقول هنا لإمكانية تعديل الأتعاب أو المبالغ المدفوعة لاحقاً
+    case_value: Optional[float] = Form(None),
+    amount_paid: Optional[float] = Form(None),
+    
     files: Optional[List[UploadFile]] = File(None),
     db: AsyncSession = Depends(get_db)
 ):
@@ -235,7 +223,7 @@ async def update_case(
     if not db_case:
         raise HTTPException(status_code=404, detail="القضية غير موجودة")
     
-    # 2. تحديث الحقول النصية (إذا أرسل المستخدم قيمة جديدة)
+    # 2. تحديث الحقول النصية والمالية الجديدة
     if title is not None: db_case.title = title
     if description is not None: db_case.description = description
     if status is not None: db_case.status = status
@@ -243,8 +231,12 @@ async def update_case(
     if case_type is not None: db_case.case_type = case_type
     if client_id is not None: db_case.client_id = client_id
     if lawyer_id is not None: db_case.lawyer_id = lawyer_id
+    
+    # 🌟 تحديث القيم المالية إذا تم إرسالها من النموذج
+    if case_value is not None: db_case.case_value = case_value
+    if amount_paid is not None: db_case.amount_paid = amount_paid
 
-    # 3. معالجة الملفات الجديدة (إذا تم رفع ملفات)
+    # 3. معالجة الملفات الجديدة
     if files:
         for file in files:
             unique_filename = f"{uuid4()}_{file.filename}"
@@ -258,14 +250,14 @@ async def update_case(
                 file_path=file_path,
                 file_type=file.content_type or "application/octet-stream",
                 file_size=os.path.getsize(file_path),
-                uploaded_by=None # أو يمكنك إضافة current_user هنا إذا أردت
+                uploaded_by=None 
             )
             db.add(db_attachment)
 
     # 4. الحفظ النهائي
     await db.commit()
     
-    # 5. إعادة تحميل الكائن مع العلاقات (لضمان عمل CaseResponse بشكل صحيح)
+    # 5. إعادة تحميل الكائن مع العلاقات
     stmt = select(Case).where(Case.id == db_case.id).options(
         selectinload(Case.client),
         selectinload(Case.lawyer),

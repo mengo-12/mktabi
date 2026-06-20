@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List
 from datetime import date, datetime # 👈 أضفنا datetime هنا لتوثيق وقت الرفع
 from app.models.case import CaseType, CaseStatus
@@ -42,10 +42,21 @@ class CaseBase(BaseModel):
     status: CaseStatus = Field(default=CaseStatus.PENDING)
     start_date: date = Field(default_factory=date.today)
 
+    # 🌟 الحقول المالية الجديدة لأتعاب المحاماة والمدفوعات لكل قضية
+    case_value: float = Field(default=0.0, ge=0.0, description="إجمالي أتعاب المحاماة المتفق عليها لهذه القضية")
+    amount_paid: float = Field(default=0.0, ge=0.0, description="المبلغ المسدد من الأتعاب حتى الآن")
+
 # 3️⃣ نموذج الإنشاء (يستقبل المعرفات كأرقام إلزامية)
-class CaseCreate(CaseBase):
+class CaseCreate(BaseModel):
+    title: str
+    case_number: Optional[str] = None
+    case_type: str
+    status: str
+    court_name: Optional[str] = None
     client_id: int
     lawyer_id: int
+    case_value: float = 0.0   # 🌟 تأكد من وجود هذا الحقل هنا
+    amount_paid: float = 0.0  # 🌟 وتأكد من وجود هذا الحقل هنا
 
 # 4️⃣ نموذج التحديث الجزئي
 class CaseUpdate(BaseModel):
@@ -57,6 +68,10 @@ class CaseUpdate(BaseModel):
     start_date: Optional[date] = None
     lawyer_id: Optional[int] = None
     is_active: Optional[bool] = None
+
+    # 🌟 إمكانية تحديث القيم المالية للقضية لاحقاً
+    case_value: Optional[float] = Field(None, ge=0.0)
+    amount_paid: Optional[float] = Field(None, ge=0.0)
 
 # 5️⃣ نموذج الاستجابة الذكي والشامل لـ Next.js
 class CaseResponse(CaseBase):

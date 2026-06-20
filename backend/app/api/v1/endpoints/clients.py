@@ -144,7 +144,7 @@ async def read_client_by_id(
     current_user: User = Depends(get_current_user)
 ):
     """
-    جلب بيانات موكل محدد مع تحميل قائمة قضاياه ومرفقات القضايا تلقائياً لمنع أخطاء الـ Greenlet
+    جلب بيانات موكل محدد مع تحميل قائمة قضاياه، ومرفقاتها، واحتساب الوضع المالي والمستحقات حياً.
     """
     query = (
         select(Client)
@@ -160,5 +160,25 @@ async def read_client_by_id(
     if not client:
         raise HTTPException(status_code=404, detail="الموكل غير موجود في النظام.")
     
-    # 💡 تم إزالة db.refresh هنا للحفاظ على العلاقات المشحونة بـ selectinload
+    # 🌟 حسابات المستحقات المالية حياً (Dynamic Financial Calculation)
+    # ملاحظة للمطورين: يتم ربطها لاحقاً بجداول الفواتير Invoices والمدفوعات Payments الفعليه
+    # في الوقت الحالي، سنضع الحسابات الافتراضية بناءً على المتوفر لضمان عدم تعطل الـ Next.js:
+    
+    total_contracts = 0.0
+    total_paid = 0.0
+    
+    # احتساب أولي من واقع مجموع مبالغ القضايا إذا كانت مخزنة في جدول القضايا
+    for case in client.cases:
+        total_contracts += getattr(case, "case_value", 0.0) # نفترض وجود حقل قيمة القضية
+        total_paid += getattr(case, "amount_paid", 0.0)
+        
+    total_due = total_contracts - total_paid
+
+    # حقن البيانات المالية ديناميكياً في كائن العميل قبل إرساله
+    client.financial_summary = {
+        "total_contracts_amount": total_contracts,
+        "total_paid_amount": total_paid,
+        "total_due_amount": total_due
+    }
+    
     return client
