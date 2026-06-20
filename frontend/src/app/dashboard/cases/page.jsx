@@ -156,11 +156,23 @@ export default function CasesPage() {
 
     const handleUpdateCase = async (caseId, updatedData) => {
         try {
-            const response = await apiClient.patch(`/cases/${caseId}`, updatedData);
+            // 🌟 تحويل البيانات المالية أو الحالات إلى FormData لتتوافق مع الباك-إند
+            const formData = new FormData();
+            Object.keys(updatedData).forEach((key) => {
+                formData.append(key, updatedData[key]);
+            });
+
+            // إرسال الطلب بصيغة multipart/form-data
+            const response = await apiClient.patch(`/cases/${caseId}`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+
+            // تحديث الواجهة محلياً بالقيمة الجديدة الراجعة من السيرفر
             setCases(prevCases => prevCases.map(c => c.id === caseId ? response.data : c));
+            alert("تم تحديث حالة القضية بنجاح");
         } catch (err) {
             console.error("خطأ أثناء التحديث السريع للحالة:", err);
-            alert("فشل تحديث الحالة");
+            alert("فشل تحديث الحالة، يرجى التحقق من اتصال السيرفر.");
         }
     };
 

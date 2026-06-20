@@ -203,7 +203,7 @@ async def update_case(
     case_id: int,
     title: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
-    status: Optional[CaseStatus] = Form(None),
+    status: Optional[CaseStatus] = Form(None, alias="status"),
     case_number: Optional[str] = Form(None),
     case_type: Optional[CaseType] = Form(None),
     client_id: Optional[int] = Form(None),
