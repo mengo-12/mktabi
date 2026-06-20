@@ -288,7 +288,18 @@ export default function CasesPage() {
                                     </td>
                                     {/* 🌟 إظهار أتعاب المحاماة المحفوظة في جدول الاستعراض الرئيسي للمكتب */}
                                     <td className="p-4 font-semibold text-slate-900 dark:text-slate-100">
-                                        {item.case_value ? `${item.case_value.toLocaleString()} ر.س` : '0 ر.س'}
+                                        <div className="font-semibold text-slate-900 dark:text-slate-100">
+                                            {item.case_value ? `${item.case_value.toLocaleString()} ر.س` : '0 ر.س'}
+                                        </div>
+                                        {item.case_value > 0 && (
+                                            <div className="mt-1 w-24 bg-slate-100 dark:bg-slate-750 rounded-full h-1.5 overflow-hidden">
+                                                <div
+                                                    className="bg-green-500 h-1.5 rounded-full"
+                                                    style={{ width: `${Math.min((item.amount_paid / item.case_value) * 100, 100)}%` }}
+                                                ></div>
+                                            </div>
+                                        )}
+
                                     </td>
                                     <td className="p-4">
                                         <select
