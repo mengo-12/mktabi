@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field, model_validator
-from typing import Optional
+from typing import List, Optional
+from app.schemas.case import CaseResponse
 from app.models.client import ClientType
 
 # 1️⃣ النموذج الأساسي للحقول المشتركة
@@ -52,5 +53,11 @@ class ClientResponse(ClientBase):
     company_representative: Optional[str] = None
     is_active: bool
 
+    class Config:
+        from_attributes = True
+
+# 5️⃣ نموذج الاستجابة المفصل للملف الشخصي (يحتوي على القضايا المتداخلة)
+class ClientDetailResponse(ClientResponse):
+    cases: List[CaseResponse] = []
     class Config:
         from_attributes = True

@@ -7,8 +7,9 @@ from typing import List, Optional
 from app.core.database import get_db
 from app.models.auth import User, UserRole
 from app.models.client import Client, ClientType
-from app.schemas.client import ClientCreate, ClientResponse, ClientUpdate
+from app.schemas.client import ClientCreate, ClientResponse, ClientUpdate, ClientDetailResponse
 from app.api.deps import RoleChecker, get_current_user
+from app.models.case import Case
 
 router = APIRouter()
 
@@ -118,18 +119,46 @@ async def update_client(
     if not client:
         raise HTTPException(status_code=404, detail="الموكل غير موجود في النظام.")
         
-    # التحقق من عدم تكرار رقم الهاتف إذا تم إرساله للتحديث
     if client_in.phone_number and client_in.phone_number != client.phone_number:
         phone_query = select(Client).where(Client.phone_number == client_in.phone_number)
         phone_result = await db.execute(phone_query)
         if phone_result.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="رقم الهاتف الجديد مستخدم لموكل آخر بالفعل.")
 
-    # تحديث الحقول ديناميكياً بناءً على ما تم إرساله فقط
     update_data = client_in.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(client, key, value)
         
     await db.commit()
     await db.refresh(client)
+    return client
+
+
+# 📌 [5] مسار جلب تفاصيل موكل محدد مع قضاياه الحية ومرفقاتها
+from sqlalchemy.orm import selectinload
+
+@router.get("/{id}", response_model=ClientDetailResponse)
+async def read_client_by_id(
+    id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    جلب بيانات موكل محدد مع تحميل قائمة قضاياه ومرفقات القضايا تلقائياً لمنع أخطاء الـ Greenlet
+    """
+    query = (
+        select(Client)
+        .where(Client.id == id)
+        .options(
+            selectinload(Client.cases).selectinload(Case.attachments)
+        )
+    )
+    
+    result = await db.execute(query)
+    client = result.scalar_one_or_none()
+    
+    if not client:
+        raise HTTPException(status_code=404, detail="الموكل غير موجود في النظام.")
+    
+    # 💡 تم إزالة db.refresh هنا للحفاظ على العلاقات المشحونة بـ selectinload
     return client

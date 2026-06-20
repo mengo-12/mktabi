@@ -138,14 +138,18 @@ export default function ClientsPage() {
     // فتح لوحة استعراض السجل الكامل (Drawer) للموكل
     const openClientProfile = async (client) => {
         try {
-            // نفضل جلب بيانات العميل كاملة مع علاقاته (القضايا والمستندات) إذا كان الباك إند يدعم ذلك في مسار الـ GET id
+            setLoading(true);
+            // جلب الموكل مع قضاياه المضمنة مباشرة من المسار الجديد
             const response = await apiClient.get(`/clients/${client.id}`);
             setSelectedClient(response.data);
             setIsProfileDrawerOpen(true);
         } catch (err) {
-            // حل بديل في حال عدم دعم التداخل: استخدام الكائن الحالي
+            console.error("خطأ أثناء جلب ملف الموكل وقضاياه الحصرية:", err);
+            // حل احتياطي في حال حدوث مشكلة في الشبكة
             setSelectedClient(client);
             setIsProfileDrawerOpen(true);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -235,7 +239,7 @@ export default function ClientsPage() {
                                         <td className="p-4 font-mono text-slate-600 dark:text-slate-300">
                                             {client.client_type === 'corporate' ? `سجل: ${client.cr_number}` : `هوية: ${client.national_id}`}
                                         </td>
-                                        <td className="p-4 font-mono">{client.phone}</td>
+                                        <td className="p-4 font-mono">{client.phone_number}</td>
                                         <td className="p-4 text-slate-500">{client.email || '-'}</td>
                                         <td className="p-4 flex items-center justify-center gap-2">
                                             <button onClick={() => openEditModal(client)} className="px-2 py-1 text-slate-500 hover:text-blue-600 font-medium">تعديل</button>
