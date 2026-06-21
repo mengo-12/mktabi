@@ -84,7 +84,8 @@ export default function NotificationBell({ lawyerId }) {
                     </div>
 
                     <div className="divide-y divide-slate-50 dark:divide-slate-700/50">
-                        {notifications.length === 0 ? (
+                        {/* 🎯 أضفنا فحص Array.isArray لضمان عدم حدوث الخطأ نهائياً */}
+                        {!Array.isArray(notifications) || notifications.length === 0 ? (
                             <div className="p-6 text-center text-sm text-slate-400 dark:text-slate-500">
                                 لا توجد تنبيهات جديدة حالياً
                             </div>

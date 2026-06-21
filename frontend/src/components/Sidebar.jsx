@@ -14,6 +14,7 @@ export default function Sidebar() {
         { name: 'المالية', path: '/dashboard/finance', icon: '💰' },
         { name: 'المحامين', path: '/dashboard/lawyers', icon: '⚖️' },
         { name: 'مواعيد الزيارات', path: '/dashboard/visits', icon: '📅' },
+        { name: 'تقارير الأداء', path: '/dashboard/analytics', icon: '📈' },
 
 
     ];

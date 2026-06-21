@@ -1,13 +1,13 @@
 # app/models/notification.py
 from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey
 from datetime import datetime
-from app.database import Base
+from app.core.database import Base
 
 class InAppNotification(Base):
     __tablename__ = "in_app_notifications"
 
     id = Column(Integer, primary_key=True, index=True)
-    lawyer_id = Column(Integer, ForeignKey("lawyers.id"), nullable=False) # المحامي المستهدف
+    lawyer_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     title = Column(String(255), nullable=False)                         # عنوان التنبيه
     message = Column(Text, nullable=False)                              # نص التنبيه
     category = Column(String(50), default="general")                    # session, task, visit
