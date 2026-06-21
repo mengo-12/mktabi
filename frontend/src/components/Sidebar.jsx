@@ -16,6 +16,7 @@ export default function Sidebar() {
         { name: 'مواعيد الزيارات', path: '/dashboard/visits', icon: '📅' },
         { name: 'تقارير الأداء', path: '/dashboard/analytics', icon: '📈' },
         { name: 'المهام', path: '/dashboard/tasks', icon: '📝' },
+        { name: 'المساعد الذكي للمواعيد', path: '/dashboard/schedule', icon: '⏳' },
 
 
     ];

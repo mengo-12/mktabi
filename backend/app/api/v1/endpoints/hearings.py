@@ -15,6 +15,8 @@ from app.api.deps import RoleChecker, get_current_user
 from app.models.notification import InAppNotification
 from app.services.websocket_manager import notifier_manager
 
+from datetime import date, datetime, timedelta
+
 router = APIRouter()
 
 # 🛡️ دالة مساعدة داخلية للتحقق من الصلاحية الأمنية للمحامي على القضية
@@ -148,5 +150,76 @@ async def update_hearing_details(
             )
         except Exception as e:
             print(f"⚠️ خطأ غير مؤثر في تنبيه التعديل: {str(e)}")
+
+        # ⏱️ [4] مسار ذكي لترتيب الجلسات اليومية وكشف التداخلات للمحامي الحالي
+@router.get("/daily-schedule", response_model=dict)
+async def get_daily_smart_schedule(
+    target_date: str = None, # يمكن تمرير تاريخ معين أو تركه لليوم تلقائياً
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # تحديد التاريخ المستهدف (اليوم الافتراضي)
+    query_date = date.fromisoformat(target_date) if target_date else date.today()
+
+    # 1. جلب جميع القضايا المسندة لهذا المحامي
+    cases_stmt = select(Case.id).where(Case.lawyer_id == current_user.id, Case.is_active == True)
+    cases_res = await db.execute(cases_stmt)
+    case_ids = [row[0] for row in cases_res.all()]
+
+    if not case_ids:
+        return {"date": str(query_date), "hearings": [], "conflicts_detected": False}
+
+    # 2. جلب جميع جلسات اليوم لهذه القضايا مرتبة بالوقت
+    hearings_stmt = (
+        select(Hearing, Case.title.label("case_title"))
+        .join(Case, Case.id == Hearing.case_id)
+        .where(Hearing.case_id.in_(case_ids), Hearing.hearing_date == query_date)
+        .order_by(Hearing.hearing_time.asc())
+    )
+    hearings_res = await db.execute(hearings_stmt)
+    rows = hearings_res.all()
+
+    formatted_hearings = []
+    conflicts_detected = False
+
+    # 3. خوارزمية ترتيب وكشف التداخل الزمني (Conflict Detection)
+    for i, row in enumerate(rows):
+        hearing, case_title = row[0], row[1]
+        has_conflict = False
+        conflict_with = None
+
+        # تحويل الوقت الحالي لمقارنته
+        current_time = hearing.hearing_time
+
+        # فحص الجلسة السابقة أو اللاحقة لمعرفة هل الفارق الزمني أقل من ساعة مثلاً؟
+        if i > 0:
+            prev_hearing = rows[i-1][0]
+            # إذا كان الفارق بين الجلستين أقل من 60 دقيقة (تداخل محتمل)
+            if current_time and prev_hearing.hearing_time:
+                # تحويل الأوقات إلى datetime للمقارنة الرياضية
+                dt_current = datetime.combine(date.today(), current_time)
+                dt_prev = datetime.combine(date.today(), prev_hearing.hearing_time)
+                
+                if (dt_current - dt_prev) < timedelta(minutes=60):
+                    has_conflict = True
+                    conflicts_detected = True
+                    conflict_with = f"جلسة قضية: {rows[i-1][1]}"
+
+        formatted_hearings.append({
+            "id": hearing.id,
+            "case_title": case_title,
+            "court_name": hearing.court_name or "غير محدد",
+            "room_number": hearing.room_number or "غير محدد",
+            "time": hearing.hearing_time.strftime('%I:%M %p') if hearing.hearing_time else "غير محدد",
+            "has_conflict": has_conflict,
+            "conflict_reason": f"تداخل زمني حاد مع ({conflict_with})" if has_conflict else None
+        })
+
+    return {
+        "date": str(query_date),
+        "total_hearings": len(formatted_hearings),
+        "conflicts_detected": conflicts_detected,
+        "hearings": formatted_hearings
+    }
 
     return hearing
