@@ -1,3 +1,5 @@
+from unittest import case
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -9,6 +11,9 @@ from app.models.case import Case
 from app.models.auth import User, UserRole
 from app.schemas.hearing import HearingCreate, HearingResponse, HearingUpdate
 from app.api.deps import RoleChecker, get_current_user
+
+from app.models.notification import InAppNotification
+from app.services.websocket_manager import notifier_manager
 
 router = APIRouter()
 
@@ -47,6 +52,32 @@ async def create_new_hearing(
     db.add(new_hearing)
     await db.commit()
     await db.refresh(new_hearing)
+
+# 🔔 إطلاق تنبيه فوري: قيد جلسة جديدة للمحامي المسؤول عن القضية
+    try:
+        session_time = new_hearing.hearing_time.strftime('%I:%M %p') if new_hearing.hearing_time else ""
+        db_notif = InAppNotification(
+            lawyer_id=case.lawyer_id,  # إرسال التنبيه للمحامي صاحب القضية
+            title="⚖️ جلسة قضائية جديدة مقيدة",
+            message=f"تمت جدولة جلسة لقضية ({case.title}) بتاريخ {new_hearing.hearing_date} الساعة {session_time} في {new_hearing.court_name or 'المحكمة'}.",
+            category="session"
+        )
+        db.add(db_notif)
+        await db.commit()
+
+        await notifier_manager.send_personal_notification(
+            lawyer_id=case.lawyer_id,
+            notification_data={
+                "id": db_notif.id,
+                "title": db_notif.title,
+                "message": db_notif.message,
+                "category": db_notif.category,
+                "created_at": str(db_notif.created_at)
+            }
+        )
+    except Exception as e:
+        print(f"⚠️ خطأ غير مؤثر في التنبيهات: {str(e)}")
+
     return new_hearing
 
 
@@ -91,4 +122,31 @@ async def update_hearing_details(
         
     await db.commit()
     await db.refresh(hearing)
+    
+    # 🔔 إطلاق تنبيه فوري: في حال تم تعديل أو تأجيل موعد الجلسة
+    if is_rescheduled:
+        try:
+            session_time = hearing.hearing_time.strftime('%I:%M %p') if hearing.hearing_time else ""
+            db_notif = InAppNotification(
+                lawyer_id=case.lawyer_id,
+                title="🔄 تعديل وتأجيل في موعد الجلسة",
+                message=f"تنبيه: تم تعديل موعد جلسة قضية ({case.title}) ليصبح بتاريخ {hearing.hearing_date} الساعة {session_time}.",
+                category="session"
+            )
+            db.add(db_notif)
+            await db.commit()
+
+            await notifier_manager.send_personal_notification(
+                lawyer_id=case.lawyer_id,
+                notification_data={
+                    "id": db_notif.id,
+                    "title": db_notif.title,
+                    "message": db_notif.message,
+                    "category": db_notif.category,
+                    "created_at": str(db_notif.created_at)
+                }
+            )
+        except Exception as e:
+            print(f"⚠️ خطأ غير مؤثر في تنبيه التعديل: {str(e)}")
+
     return hearing
