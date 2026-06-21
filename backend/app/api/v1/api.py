@@ -1,6 +1,7 @@
 # تجميع كل المسارات
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, clients, cases, attachments, hearings, lawyers, visits, analytics
+from app.api.v1.endpoints import auth, clients, cases, attachments, hearings, lawyers, visits, analytics, tasks, notifications
+from app.models.task import Task
 
 api_router = APIRouter()
 # ربط مسارات الـ Auth وتحت وسم (Tag) واضح في الـ Swagger
@@ -11,4 +12,6 @@ api_router.include_router(attachments.router, prefix="/documents", tags=["Docume
 api_router.include_router(hearings.router, prefix="/hearings", tags=["Hearings Management"]) # 👈 ربط مسار إدارة الجلسات
 api_router.include_router(lawyers.router, prefix="/lawyers", tags=["Lawyers & Team Management"]) # 👇 ربط مسار إدارة المحامين وطاقم العمل الجديد وحمايته بصلاحيات الإدارة
 api_router.include_router(visits.router, prefix="/visits", tags=["Office Visits & Appointments"]) # 👇 ربط مسار إدارة مواعيد وزيارات المكتب الجديد
-api_router.include_router(analytics.router, prefix="/analytics", tags=["Analytics & Reports"]) 
+api_router.include_router(analytics.router, prefix="/analytics", tags=["Analytics & Reports"]) # 👇 ربط مسار التحليلات والتقارير الجديد
+api_router.include_router(tasks.router, prefix="/tasks", tags=["Tasks Management"]) # 👇 ربط مسار إدارة المهام الجديد
+api_router.include_router(notifications.router, prefix="/notifications", tags=["Notifications & WebSockets"]) # 🔔 🎯 السطر الجديد: تفعيل ربط مسار التنبيهات والـ WebSockets في السيرفر

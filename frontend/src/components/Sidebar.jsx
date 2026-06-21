@@ -15,6 +15,7 @@ export default function Sidebar() {
         { name: 'المحامين', path: '/dashboard/lawyers', icon: '⚖️' },
         { name: 'مواعيد الزيارات', path: '/dashboard/visits', icon: '📅' },
         { name: 'تقارير الأداء', path: '/dashboard/analytics', icon: '📈' },
+        { name: 'المهام', path: '/dashboard/tasks', icon: '📝' },
 
 
     ];
