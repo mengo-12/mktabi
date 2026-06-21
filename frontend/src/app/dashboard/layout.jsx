@@ -3,9 +3,10 @@ import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
+import NotificationBell from '@/components/NotificationBell';
 
 export default function DashboardLayout({ children }) {
-    const { logout } = useAuth();
+    const { logout, user } = useAuth();
     const router = useRouter();
     const [isAuthorized, setIsAuthorized] = useState(false);
     const [checking, setChecking] = useState(true); // مؤشر فحص محلي صارم
@@ -37,21 +38,28 @@ export default function DashboardLayout({ children }) {
         );
     }
 
-    return (
+return (
         <div className="min-h-screen flex bg-slate-50 dark:bg-slate-900" dir="rtl">
-            {/* القائمة الجانبية الثابتة */}
             <Sidebar />
 
-            {/* منطقة المحتوى */}
             <div className="flex-1 flex flex-col min-w-0">
                 <header className="bg-white dark:bg-slate-800 h-16 shadow-sm border-b border-slate-100 dark:border-slate-700 px-6 flex justify-between items-center">
                     <h1 className="text-lg font-bold text-slate-800 dark:text-white">نظام مكتب المحاماة الذكي</h1>
-                    <button
-                        onClick={logout}
-                        className="text-sm font-semibold text-red-500 hover:text-red-700 transition-colors"
-                    >
-                        تسجيل الخروج
-                    </button>
+                    
+                    {/* أزرار التحكم في الترويسة اليمنى */}
+                    <div className="flex items-center gap-4">
+                        {/* 👈 3. زر جرس التنبيهات الحية مربوط ديناميكياً بـ id المحامي */}
+                        {user?.id && <NotificationBell lawyerId={user.id} />}
+                        
+                        <div className="h-6 w-px bg-slate-200 dark:bg-slate-700"></div>
+
+                        <button
+                            onClick={logout}
+                            className="text-sm font-semibold text-red-500 hover:text-red-700 transition-colors"
+                        >
+                            تسجيل الخروج
+                        </button>
+                    </div>
                 </header>
 
                 <main className="flex-1 p-6 overflow-y-auto">

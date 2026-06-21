@@ -16,6 +16,8 @@ from app.models.attachment import Attachment
 from app.schemas.case import CaseResponse
 from app.api.deps import RoleChecker, get_current_user
 from app.schemas.case import CaseUpdate 
+from app.models.notification import InAppNotification  # موديل التنبيهات داخل النظام
+from app.services.websocket_manager import NotificationManager
 
 router = APIRouter()
 
@@ -45,7 +47,7 @@ async def create_case(
     current_user: User = Depends(allowed_creators) 
 ):
     """
-    إنشاء قضية جديدة مع الأتعاب المالية ورفع مستندات متعددة.
+    إنشاء قضية جديدة مع الأتعاب المالية ورفع مستندات متعددة، مع إطلاق تنبيه فوري للمحامي المسؤول.
     """
     # 1. التحقق من وجود الموكل
     client_res = await db.execute(select(Client).where(Client.id == client_id))
@@ -78,7 +80,6 @@ async def create_case(
         case_type=case_type,
         status=status_filter,
         start_date=final_start_date,
-        # 🌟 هنا تم إصلاح المشكلة وتمرير القيم الممررة من الفرونت إند
         case_value=case_value,   
         amount_paid=amount_paid, 
         is_active=True
@@ -100,15 +101,48 @@ async def create_case(
             db_attachment = Attachment(
                 case_id=db_case.id,
                 original_name=file.filename,
-                file_path=file_path,                               
+                file_path=file_path,                                               
                 file_type=file.content_type or "application/octet-stream", 
-                file_size=file_size,                               
-                uploaded_by=current_user.id                        
+                file_size=file_size,                                               
+                uploaded_by=current_user.id                                        
             )
             db.add(db_attachment)
 
+    # حفظ القضية والمرفقات نهائياً
     await db.commit()
-    
+
+    # ================== 🔔 نظام التنبيهات الفورية الجديد ==================
+    try:
+        from app.models.notification import InAppNotification
+        from app.services.websocket_manager import notifier_manager
+
+        # أ: صياغة التنبيه وحفظه في قاعدة البيانات ليجده المحامي في أي وقت
+        db_notif = InAppNotification(
+            lawyer_id=lawyer_id,
+            title="💼 قضية جديدة مسندة إليك",
+            message=f"تم تعيينك محامياً مسؤولاً عن القضية: ({title}) للموكل: {client.name}.",
+            category="case"
+        )
+        db.add(db_notif)
+        await db.commit() # حفظ التنبيه
+
+        # ب: دفعه حياً ومباشرة عبر الـ WebSocket للمتصفح إذا كان المحامي متصلاً الآن
+        await notifier_manager.send_personal_notification(
+            lawyer_id=lawyer_id,
+            notification_data={
+                "id": db_notif.id,
+                "title": db_notif.title,
+                "message": db_notif.message,
+                "category": db_notif.category,
+                "created_at": str(db_notif.created_at)
+            }
+        )
+    except Exception as e:
+        # وضع الحماية (Try/Except) لضمان عدم تعطل استجابة الـ API في حال وجود أي مشكلة في سيرفر الـ WebSocket
+        print(f"⚠️ خطأ أثناء إرسال التنبيه الفوري: {str(e)}")
+    # ===================================================================
+
+    # 6. جلب وإرجاع الكائن المتكامل مع العلاقات للعرض في Next.js
     stmt = select(Case).where(Case.id == db_case.id).options(
         selectinload(Case.client),
         selectinload(Case.lawyer),
@@ -116,7 +150,6 @@ async def create_case(
     )
     result = await db.execute(stmt)
     return result.scalar_one()
-
 
 # 📌 مسار العرض وجلب البيانات
 @router.get("/", response_model=List[CaseResponse])

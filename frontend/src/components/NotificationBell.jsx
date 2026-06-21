@@ -1,0 +1,111 @@
+'use client';
+import { useEffect, useState, useRef } from 'react';
+
+export default function NotificationBell({ lawyerId }) {
+    const [notifications, setNotifications] = useState([]);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef(null);
+
+    useEffect(() => {
+        if (!lawyerId) return;
+
+        // 1. جلب التنبيهات السابقة غير المقروءة عند تحميل الصفحة
+        // ملاحظة: قم بتعديل الرابط الأساسي ليتوافق مع الـ API URL الخاص بك إذا كان مختلفاً
+        fetch(`http://localhost:8000/api/v1/notifications/unread/${lawyerId}`)
+            .then((res) => res.json())
+            .then((data) => {
+                setNotifications(data);
+                setUnreadCount(data.length);
+            })
+            .catch((err) => console.error("Error fetching notifications:", err));
+
+        // 2. الاتصال بالقناة الحية لاستقبال التنبيهات الفورية عبر الـ WebSocket
+        const ws = new WebSocket(`ws://localhost:8000/api/v1/notifications/ws/${lawyerId}`);
+
+        ws.onmessage = (event) => {
+            const newNotif = JSON.parse(event.data);
+            // إضافة التنبيه الجديد لأعلى القائمة وزيادة العداد
+            setNotifications((prev) => [newNotif, ...prev]);
+            setUnreadCount((prev) => prev + 1);
+
+            // اختياري: تشغيل صوت تنبيه خفيف جداً لجلب الانتباه عند وصول الإشعار حياً
+            try {
+                const audio = new Audio('/sounds/notification.mp3');
+                audio.play();
+            } catch (e) { }
+        };
+
+        // إغلاق الاتصال عند مغادرة الصفحة أو تسجيل الخروج
+        return () => ws.close();
+    }, [lawyerId]);
+
+    // إغلاق القائمة المنسدلة عند الضغط خارج المكون
+    useEffect(() => {
+        function handleClickOutside(event) {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setIsOpen(false);
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    // تفريغ العداد عند فتح التنبيهات وقراءتها
+    const handleToggleDropdown = () => {
+        setIsOpen(!isOpen);
+        if (!isOpen) {
+            setUnreadCount(0);
+            // اختياري: يمكنك هنا إرسال طلب للباك إند لتحديد التنبيهات كـ "مقروءة" في قاعدة البيانات
+        }
+    };
+
+    return (
+        <div className="relative" ref={dropdownRef}>
+            {/* زر أيقونة الجرس */}
+            <button
+                onClick={handleToggleDropdown}
+                className="relative p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-all duration-200"
+            >
+                <span className="text-xl">🔔</span>
+                {unreadCount > 0 && (
+                    <span className="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white animate-pulse">
+                        {unreadCount}
+                    </span>
+                )}
+            </button>
+
+            {/* القائمة المنسدلة للتنبيهات */}
+            {isOpen && (
+                <div className="absolute left-0 mt-2 w-80 max-h-96 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-y-auto z-50 py-2 transition-all">
+                    <div className="px-4 py-2 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                        <span className="font-bold text-sm text-slate-800 dark:text-white">التنبيهات الإدارية حية</span>
+                        <span className="text-xs bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-0.5 rounded-full font-medium">Real-time</span>
+                    </div>
+
+                    <div className="divide-y divide-slate-50 dark:divide-slate-700/50">
+                        {notifications.length === 0 ? (
+                            <div className="p-6 text-center text-sm text-slate-400 dark:text-slate-500">
+                                لا توجد تنبيهات جديدة حالياً
+                            </div>
+                        ) : (
+                            notifications.map((notif) => (
+                                <div key={notif.id || Math.random()} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                                    <div className="flex items-start gap-2">
+                                        <span className="text-base mt-0.5">
+                                            {notif.category === 'case' ? '💼' : notif.category === 'visit' ? '📅' : '⚖️'}
+                                        </span>
+                                        <div>
+                                            <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">{notif.title}</h4>
+                                            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">{notif.message}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}

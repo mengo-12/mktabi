@@ -23,11 +23,11 @@ export default function LawyersManagement() {
     });
 
     const roleMapping = {
-        admin: { label: 'مدير النظام', color: 'bg-rose-50 text-rose-700 border-rose-100' },
-        partner: { label: 'محامي شريك', color: 'bg-purple-50 text-purple-700 border-purple-100' },
-        associate: { label: 'محامي مستشار', color: 'bg-blue-50 text-blue-700 border-blue-100' },
-        trainee: { label: 'محامي متدرب', color: 'bg-amber-50 text-amber-700 border-amber-100' },
-        secretary: { label: 'سكرتارية', color: 'bg-slate-50 text-slate-700 border-slate-100' },
+        admin: { label: 'مدير النظام', color: 'bg-rose-50 text-rose-600 dark:bg-rose-950/20 border-rose-100 dark:border-rose-900/30' },
+        partner: { label: 'محامي شريك', color: 'bg-purple-50 text-purple-600 dark:bg-purple-950/20 border-purple-100 dark:border-purple-900/30' },
+        associate: { label: 'محامي مستشار', color: 'bg-blue-50 text-blue-600 dark:bg-blue-950/20 border-blue-100 dark:border-blue-900/30' },
+        trainee: { label: 'محامي متدرب', color: 'bg-amber-50 text-amber-600 dark:bg-amber-950/20 border-amber-100 dark:border-amber-900/30' },
+        secretary: { label: 'سكرتارية', color: 'bg-slate-50 text-slate-600 dark:bg-slate-900/40 border-slate-100 dark:border-slate-800' },
     };
 
     // 1️⃣ جلب قائمة الطاقم
@@ -127,16 +127,16 @@ export default function LawyersManagement() {
     }
 
     return (
-        <div className="p-6 min-h-screen" dir="rtl">
+        <div className="p-6 bg-gray-50 dark:bg-slate-900 min-h-screen space-y-6 text-right" dir="rtl">
             {/* رأس الصفحة */}
-            <div className="mb-8 flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">إدارة الطاقم والمحامين</h1>
-                    <p className="text-sm text-gray-500 mt-1">تعديل صلاحيات المحامين أو إضافة أعضاء جدد للفريق.</p>
+                    <h1 className="text-base font-bold text-slate-900 dark:text-white">⚖️ إدارة الطاقم والمحامين</h1>
+                    <p className="text-xs text-slate-400 mt-1">تعديل صلاحيات المحامين أو إضافة أعضاء جدد للفريق والمكتب.</p>
                 </div>
                 <button
                     onClick={openAddModal}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm flex items-center gap-2"
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-2"
                 >
                     <UserPlus className="w-4 h-4" />
                     إضافة عضو جديد
@@ -146,16 +146,16 @@ export default function LawyersManagement() {
             {error && (
                 <div className="mb-6 bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-lg flex items-center gap-3">
                     <AlertCircle className="w-5 h-5" />
-                    <p className="text-sm font-medium">{error}</p>
+                    <p className="text-xs font-medium">{error}</p>
                 </div>
             )}
 
-            {/* الجدول */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            {/* الجدول بتصميم Slate المتناسق */}
+            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-right border-collapse">
+                    <table className="w-full text-right border-collapse text-xs">
                         <thead>
-                            <tr className="bg-gray-50 border-b border-gray-200 text-gray-600 text-sm font-semibold">
+                            <tr className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 font-bold border-b border-slate-100 dark:border-slate-700">
                                 <th className="p-4">الاسم الكامل</th>
                                 <th className="p-4">البريد الإلكتروني</th>
                                 <th className="p-4">رقم الهاتف</th>
@@ -164,32 +164,44 @@ export default function LawyersManagement() {
                                 <th className="p-4 text-center">الإجراءات</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
                             {team.map((member) => (
-                                <tr key={member.id} className="hover:bg-gray-50/70 transition-colors">
-                                    <td className="p-4 font-semibold text-gray-900">{member.full_name}</td>
-                                    <td className="p-4 text-gray-600 font-sans"><div className="flex items-center gap-2"><Mail className="w-4 h-4 text-gray-400" />{member.email}</div></td>
-                                    <td className="p-4 text-gray-600 font-sans">
-                                        {member.phone_number ? <div className="flex items-center gap-2"><Phone className="w-4 h-4 text-gray-400" />{member.phone_number}</div> : <span className="text-gray-400 italic">غير محدد</span>}
+                                <tr key={member.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/40 transition-colors">
+                                    <td className="p-4 font-bold text-slate-900 dark:text-white">{member.full_name}</td>
+                                    <td className="p-4 text-slate-600 dark:text-slate-300 font-sans">
+                                        <div className="flex items-center gap-2">
+                                            <Mail className="w-3.5 h-3.5 text-slate-400" />
+                                            {member.email}
+                                        </div>
+                                    </td>
+                                    <td className="p-4 text-slate-600 dark:text-slate-300 font-sans">
+                                        {member.phone_number ? (
+                                            <div className="flex items-center gap-2">
+                                                <Phone className="w-3.5 h-3.5 text-slate-400" />
+                                                {member.phone_number}
+                                            </div>
+                                        ) : (
+                                            <span className="text-slate-400 italic">غير محدد</span>
+                                        )}
                                     </td>
                                     <td className="p-4">
-                                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${roleMapping[member.role]?.color || 'bg-gray-100'}`}>
+                                        <span className={`px-2.5 py-1 rounded-md font-bold text-[10px] border ${roleMapping[member.role]?.color || 'bg-slate-100'}`}>
                                             {roleMapping[member.role]?.label || member.role}
                                         </span>
                                     </td>
                                     <td className="p-4">
                                         {member.is_active ? (
-                                            <span className="text-emerald-600 flex items-center gap-1.5 font-medium"><CheckCircle2 className="w-4 h-4" /> نشط</span>
+                                            <span className="text-emerald-500 flex items-center gap-1.5 font-bold"><CheckCircle2 className="w-3.5 h-3.5" /> نشط</span>
                                         ) : (
-                                            <span className="text-rose-500 flex items-center gap-1.5 font-medium"><XCircle className="w-4 h-4" /> معطل</span>
+                                            <span className="text-rose-400 flex items-center gap-1.5 font-bold"><XCircle className="w-3.5 h-3.5" /> معطل</span>
                                         )}
                                     </td>
                                     <td className="p-4 text-center">
                                         <button
                                             onClick={() => openEditModal(member)}
-                                            className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded-lg transition-colors inline-flex items-center gap-1.5"
+                                            className="text-blue-500 hover:text-blue-600 font-medium flex items-center justify-center gap-1 mx-auto"
                                         >
-                                            <Edit2 className="w-4 h-4" />
+                                            <Edit2 className="w-3.5 h-3.5" />
                                             تعديل
                                         </button>
                                     </td>
@@ -200,51 +212,51 @@ export default function LawyersManagement() {
                 </div>
             </div>
 
-            {/* النافذة المنبثقة المشتركة للإضافة والتعديل */}
+            {/* النافذة المنبثقة المشتركة (Modal) */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
-                        <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                            <h3 className="text-lg font-bold text-gray-900">{editMode ? 'تعديل بيانات العضو' : 'إضافة عضو فريق جديد'}</h3>
-                            <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+                    <div className="bg-white dark:bg-slate-800 w-full max-w-md rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
+                            <h3 className="text-xs font-bold text-slate-900 dark:text-white">{editMode ? 'تعديل بيانات العضو' : 'إضافة عضو فريق جديد'}</h3>
+                            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 text-sm">✕</button>
                         </div>
 
                         <form onSubmit={handleSubmit} className="p-5 space-y-4">
                             <div>
-                                <label className="block text-xs font-bold text-gray-700 mb-1">الاسم الكامل</label>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1">الاسم الكامل *</label>
                                 <input
                                     type="text" required value={formData.full_name}
                                     onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                                    className="w-full border border-gray-300 rounded-lg p-2.5 text-sm"
+                                    className="w-full p-2.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none text-slate-800 dark:text-white"
                                 />
                             </div>
 
                             {!editMode && (
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-700 mb-1">البريد الإلكتروني</label>
+                                    <label className="block text-xs font-semibold text-slate-500 mb-1">البريد الإلكتروني *</label>
                                     <input
                                         type="email" required value={formData.email}
                                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                        className="w-full border border-gray-300 rounded-lg p-2.5 text-sm font-sans"
+                                        className="w-full p-2.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none font-sans text-slate-800 dark:text-white"
                                     />
                                 </div>
                             )}
 
                             <div>
-                                <label className="block text-xs font-bold text-gray-700 mb-1">رقم الجوال</label>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1">رقم الجوال</label>
                                 <input
                                     type="text" value={formData.phone_number}
                                     onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
-                                    className="w-full border border-gray-300 rounded-lg p-2.5 text-sm font-sans"
+                                    className="w-full p-2.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none font-sans text-slate-800 dark:text-white"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-gray-700 mb-1">الدور والصلاحية القانونية</label>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1">الدور والصلاحية القانونية *</label>
                                 <select
                                     value={formData.role}
                                     onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                                    className="w-full border border-gray-300 rounded-lg p-2.5 text-sm bg-white"
+                                    className="w-full p-2.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none cursor-pointer text-slate-800 dark:text-white"
                                 >
                                     <option value="partner">محامي شريك (Partner)</option>
                                     <option value="associate">محامي مستشار / ممارس (Associate)</option>
@@ -253,14 +265,13 @@ export default function LawyersManagement() {
                                 </select>
                             </div>
 
-                            {/* حقل حالة الحساب يظهر فقط أثناء التعديل لتجميد العضو أو تفعيله */}
                             {editMode && (
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-700 mb-1">حالة الحساب</label>
+                                    <label className="block text-xs font-semibold text-slate-500 mb-1">حالة الحساب</label>
                                     <select
                                         value={formData.is_active ? "true" : "false"}
                                         onChange={(e) => setFormData({ ...formData, is_active: e.target.value === "true" })}
-                                        className="w-full border border-gray-300 rounded-lg p-2.5 text-sm bg-white"
+                                        className="w-full p-2.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none cursor-pointer text-slate-800 dark:text-white"
                                     >
                                         <option value="true">نشط (يستطيع دخول المنصة)</option>
                                         <option value="false">معطل / مجمد (يُمنع من الدخول)</option>
@@ -270,19 +281,19 @@ export default function LawyersManagement() {
 
                             {!editMode && (
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-700 mb-1">كلمة المرور الأولية</label>
+                                    <label className="block text-xs font-semibold text-slate-500 mb-1">كلمة المرور الأولية *</label>
                                     <input
                                         type="password" required minLength={8} value={formData.password}
                                         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                                        className="w-full border border-gray-300 rounded-lg p-2.5 text-sm font-sans"
+                                        className="w-full p-2.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none font-sans text-slate-800 dark:text-white"
                                     />
                                 </div>
                             )}
 
-                            <div className="pt-4 border-t border-gray-100 flex justify-end gap-3">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">إلغاء</button>
-                                <button type="submit" disabled={submitting} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
-                                    {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                            <div className="pt-4 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-3">
+                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl">إلغاء</button>
+                                <button type="submit" disabled={submitting} className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md disabled:bg-blue-400 flex items-center gap-2">
+                                    {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                                     {editMode ? 'حفظ التغييرات' : 'حفظ الحساب الجديد'}
                                 </button>
                             </div>
