@@ -2,19 +2,25 @@
 import { useState, useEffect } from 'react';
 import apiClient from '@/services/apiClient';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, FileText, UploadCloud, Eye, Trash2, X, Download, ImageIcon, Paperclip, DollarSign } from 'lucide-react';
+import { ArrowLeft, FileText, UploadCloud, Eye, Trash2, X, Download, ImageIcon, Paperclip, DollarSign, Search, Filter } from 'lucide-react';
 
 export default function CasesPage() {
     const [cases, setCases] = useState([]);
+    const [filteredCases, setFilteredCases] = useState([]); // 🌟 قائمة القضايا المفلترة المعروضة
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
     const [clients, setClients] = useState([]);
-    const [lawyers, setLawyers] = useState([]);
+    const [lawyers, setLayers] = useState([]);
 
     const [isCaseModalOpen, setIsCaseModalOpen] = useState(false);
 
-    // 🌟 1. تم تحديث الـ State الافتراضي ليشمل الحقول المالية الجديدة
+    // 🔍 1. حالات (States) البحث والتصفية الجديدة
+    const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [typeFilter, setTypeFilter] = useState('all');
+
+    // الـ State الافتراضي للمودال يشمل الحقول المالية
     const [newCaseData, setNewCaseData] = useState({
         title: '',
         description: '',
@@ -24,16 +30,15 @@ export default function CasesPage() {
         court_name: '',
         client_id: '',
         lawyer_id: '',
-        case_value: 0.0,    // إجمالي قيمة العقد/الأتعاب
-        amount_paid: 0.0    // المبلغ المدفوع مقدماً أو حتى الآن
+        case_value: 0.0,
+        amount_paid: 0.0
     });
 
-    // 📂 حالة تخزين الملفات المختارة للرفع
     const [selectedFiles, setSelectedFiles] = useState([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const [isEditing, setIsEditing] = useState(false); // هل نحن في وضع تعديل؟
-    const [editingCaseId, setEditingCaseId] = useState(null); // معرف القضية الجاري تعديلها
+    const [isEditing, setIsEditing] = useState(false);
+    const [editingCaseId, setEditingCaseId] = useState(null);
 
     const router = useRouter();
 
@@ -43,6 +48,7 @@ export default function CasesPage() {
             setError('');
             const response = await apiClient.get('/cases/');
             setCases(response.data);
+            setFilteredCases(response.data); // تعيين القيمة الابتدائية
         } catch (err) {
             console.error(err);
             setError('حدث خطأ أثناء جلب ملفات القضايا من السيرفر.');
@@ -52,7 +58,6 @@ export default function CasesPage() {
     };
 
     const fetchDropdownData = async () => {
-        // 1. جلب بيانات العملاء
         try {
             const clientsRes = await apiClient.get('/clients/');
             setClients(clientsRes.data);
@@ -60,10 +65,9 @@ export default function CasesPage() {
             console.error('❌ خطأ في جلب بيانات العملاء:', err);
         }
 
-        // 2. جلب بيانات المحامين والموظفين
         try {
             const lawyersRes = await apiClient.get('/auth/users/');
-            setLawyers(lawyersRes.data);
+            setLayers(lawyersRes.data);
         } catch (err) {
             console.error('❌ خطأ في جلب بيانات المحامين:', err);
         }
@@ -74,7 +78,35 @@ export default function CasesPage() {
         fetchDropdownData();
     }, []);
 
-    // 📥 التعامل مع اختيار الملفات المتعددة
+    // 🔍 2. منطق تصفية القضايا تلقائياً عند تغيير البحث أو الفلاتر
+    useEffect(() => {
+        let result = cases;
+
+        // الفلترة بالبحث النصي (العنوان، رقم القضية، اسم الموكل، اسم المحكمة)
+        if (searchQuery.trim() !== '') {
+            const query = searchQuery.toLowerCase();
+            result = result.filter(item => 
+                item.title?.toLowerCase().includes(query) ||
+                item.case_number?.toLowerCase().includes(query) ||
+                item.court_name?.toLowerCase().includes(query) ||
+                item.client?.name?.toLowerCase().includes(query) ||
+                item.lawyer?.full_name?.toLowerCase().includes(query)
+            );
+        }
+
+        // الفلترة حسب الحالة
+        if (statusFilter !== 'all') {
+            result = result.filter(item => item.status === statusFilter);
+        }
+
+        // الفلترة حسب نوع القضية
+        if (typeFilter !== 'all') {
+            result = result.filter(item => item.case_type === typeFilter);
+        }
+
+        setFilteredCases(result);
+    }, [searchQuery, statusFilter, typeFilter, cases]);
+
     const handleFileChange = (e) => {
         if (e.target.files) {
             const filesArray = Array.from(e.target.files);
@@ -82,23 +114,19 @@ export default function CasesPage() {
         }
     };
 
-    // 🗑️ حذف ملف من القائمة قبل الرفع
     const removeFileFromList = (indexToRemove) => {
         setSelectedFiles((prevFiles) => prevFiles.filter((_, idx) => idx !== indexToRemove));
     };
 
-    // 💾 دالة إرسال البيانات والملفات الشاملة باستخدام FormData
     const handleCreateCaseSubmit = async (e) => {
         e.preventDefault();
         try {
             setIsSubmitting(true);
 
-            // 1. بناء الـ FormData
             const formData = new FormData();
             Object.keys(newCaseData).forEach((key) => {
                 const value = newCaseData[key];
                 if (value !== '' && value !== null && value !== undefined) {
-                    // 🌟 تأكيد تحويل الأرقام إلى نصوص صريحة صالحة للإرسال دون مشاكل في الـ Parsing بالباك إند
                     if (key === 'case_value' || key === 'amount_paid') {
                         formData.append(key, String(Number(value)));
                     } else {
@@ -106,32 +134,26 @@ export default function CasesPage() {
                     }
                 }
             });
-            // 2. إضافة الملفات
+
             selectedFiles.forEach((file) => {
                 formData.append('files', file);
             });
 
             let response;
             if (isEditing) {
-                // 🌟 مسار التعديل عبر الباك إند
                 response = await apiClient.patch(`/cases/${editingCaseId}`, formData, {
                     headers: { 'Content-Type': 'multipart/form-data' },
                 });
-
-                // تحديث القائمة محلياً بعد التعديل
                 setCases(prev => prev.map(c => c.id === editingCaseId ? response.data : c));
                 alert("تم تحديث القضية وبياناتها المالية بنجاح");
             } else {
-                // 🌟 مسار الإنشاء الجديد
                 response = await apiClient.post('/cases/', formData, {
                     headers: { 'Content-Type': 'multipart/form-data' },
                 });
-
                 setCases([response.data, ...cases]);
                 alert("تم إنشاء القضية بنجاح");
             }
 
-            // 3. إغلاق المودال وتصفير البيانات بالكامل
             setIsCaseModalOpen(false);
             setIsEditing(false);
             setEditingCaseId(null);
@@ -156,18 +178,15 @@ export default function CasesPage() {
 
     const handleUpdateCase = async (caseId, updatedData) => {
         try {
-            // 🌟 تحويل البيانات المالية أو الحالات إلى FormData لتتوافق مع الباك-إند
             const formData = new FormData();
             Object.keys(updatedData).forEach((key) => {
                 formData.append(key, updatedData[key]);
             });
 
-            // إرسال الطلب بصيغة multipart/form-data
             const response = await apiClient.patch(`/cases/${caseId}`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
 
-            // تحديث الواجهة محلياً بالقيمة الجديدة الراجعة من السيرفر
             setCases(prevCases => prevCases.map(c => c.id === caseId ? response.data : c));
             alert("تم تحديث حالة القضية بنجاح");
         } catch (err) {
@@ -176,7 +195,6 @@ export default function CasesPage() {
         }
     };
 
-    // 🌟 تحديث منطق تعبئة المودال عند التعديل ليشمل سحب القيم المالية الحالية للقضية
     const openEditModal = (caseItem) => {
         setEditingCaseId(caseItem.id);
         setNewCaseData({
@@ -229,6 +247,61 @@ export default function CasesPage() {
                 </div>
             )}
 
+            {/* 🔍 3. شريط البحث والفلاتر الجديد (UX/UI متميز) */}
+            <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-xs flex flex-col md:flex-row gap-4 items-center justify-between">
+                
+                {/* مدخل البحث النصي */}
+                <div className="relative w-full md:max-w-md">
+                    <span className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-400">
+                        <Search size={18} />
+                    </span>
+                    <input
+                        type="text"
+                        placeholder="ابحث باسم القضية، رقم القيد، اسم الموكل، أو المحكمة..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pr-10 pl-4 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:border-blue-500 text-slate-900 dark:text-white"
+                    />
+                </div>
+
+                {/* خيارات الفرز والتصفية */}
+                <div className="flex flex-wrap w-full md:w-auto items-center gap-3 justify-start md:justify-end">
+                    
+                    {/* فلتر الحالة */}
+                    <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                        <span className="text-xs font-bold text-slate-400 shrink-0">الحالة:</span>
+                        <select
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value)}
+                            className="w-full sm:w-auto px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-semibold text-slate-700 dark:text-slate-200 focus:outline-none"
+                        >
+                            <option value="all">الكل</option>
+                            <option value="pending">تحت الدراسة</option>
+                            <option value="active">نشطة / متداولة</option>
+                            <option value="appeal">قيد الاستئناف</option>
+                            <option value="supreme">قيد المحكمة العليا</option>
+                            <option value="closed">مغلقة / منتهية</option>
+                        </select>
+                    </div>
+
+                    {/* فلتر النوع */}
+                    <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                        <span className="text-xs font-bold text-slate-400 shrink-0">التصنيف:</span>
+                        <select
+                            value={typeFilter}
+                            onChange={(e) => setTypeFilter(e.target.value)}
+                            className="w-full sm:w-auto px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-semibold text-slate-700 dark:text-slate-200 focus:outline-none"
+                        >
+                            <option value="all">الكل</option>
+                            <option value="commercial">تجاري</option>
+                            <option value="labor">عمالي</option>
+                            <option value="criminal">جنائي</option>
+                            <option value="civil">حقوقي / مدني</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
             {/* الجدول الرئيسي */}
             <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
@@ -239,7 +312,7 @@ export default function CasesPage() {
                                 <th className="p-4">عنوان وموضوع القضية</th>
                                 <th className="p-4">الموكل (العميل)</th>
                                 <th className="p-4">المحامي المسؤول</th>
-                                <th className="p-4">أتعاب القضية</th> {/* 🌟 إضافة عمود مالي مختصر في الجدول الرئيسي */}
+                                <th className="p-4">أتعاب القضية</th>
                                 <th className="p-4">الحالة</th>
                                 <th className="p-4 text-center" colSpan="2">الإجراءات</th>
                             </tr>
@@ -262,15 +335,16 @@ export default function CasesPage() {
                                 ))
                             )}
 
-                            {!loading && cases.length === 0 && (
+                            {/* 💡 فحص ما إذا كانت نتائج الفلترة فارغة */}
+                            {!loading && filteredCases.length === 0 && (
                                 <tr>
                                     <td colSpan="7" className="p-12 text-center text-slate-400 dark:text-slate-500 font-medium">
-                                        📭 لا توجد قضايا مسجلة في النظام حالياً أو لا تملك صلاحية لاستعراضها.
+                                        📭 لا توجد نتائج مطابقة لخيارات البحث أو الفلترة المحددة.
                                     </td>
                                 </tr>
                             )}
 
-                            {!loading && cases.map((item) => (
+                            {!loading && filteredCases.map((item) => (
                                 <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                                     <td className="p-4 font-mono font-bold text-slate-700 dark:text-slate-300">#{item.id}</td>
                                     <td className="p-4">
@@ -278,6 +352,9 @@ export default function CasesPage() {
                                         <div className="flex gap-2 items-center mt-1 text-xs text-slate-400">
                                             {item.case_number && <span>رقم القيد: {item.case_number}</span>}
                                             {item.court_name && <span>• {item.court_name}</span>}
+                                            <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded text-[10px]">
+                                                {item.case_type === 'commercial' ? 'تجاري' : item.case_type === 'labor' ? 'عمالي' : item.case_type === 'criminal' ? 'جنائي' : 'حقوقي'}
+                                            </span>
                                         </div>
                                     </td>
                                     <td className="p-4">
@@ -286,20 +363,18 @@ export default function CasesPage() {
                                     <td className="p-4">
                                         <div className="font-medium text-slate-800 dark:text-slate-300">{item.lawyer?.full_name || <span className="text-slate-400 text-xs">غير معين</span>}</div>
                                     </td>
-                                    {/* 🌟 إظهار أتعاب المحاماة المحفوظة في جدول الاستعراض الرئيسي للمكتب */}
                                     <td className="p-4 font-semibold text-slate-900 dark:text-slate-100">
                                         <div className="font-semibold text-slate-900 dark:text-slate-100">
                                             {item.case_value ? `${item.case_value.toLocaleString()} ر.س` : '0 ر.س'}
                                         </div>
                                         {item.case_value > 0 && (
-                                            <div className="mt-1 w-24 bg-slate-100 dark:bg-slate-750 rounded-full h-1.5 overflow-hidden">
+                                            <div className="mt-1 w-24 bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
                                                 <div
                                                     className="bg-green-500 h-1.5 rounded-full"
                                                     style={{ width: `${Math.min((item.amount_paid / item.case_value) * 100, 100)}%` }}
                                                 ></div>
                                             </div>
                                         )}
-
                                     </td>
                                     <td className="p-4">
                                         <select
@@ -401,7 +476,6 @@ export default function CasesPage() {
                                     </select>
                                 </div>
 
-                                {/* 🌟 حقول الإدخال المالية الجديدة داخل الـ Form (جنباً إلى جنب لتوفير المساحة) */}
                                 <div>
                                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1">
                                         <DollarSign size={12} className="text-blue-500" /> إجمالي أتعاب القضية (ر.س)
@@ -437,7 +511,6 @@ export default function CasesPage() {
                                 <textarea rows="2" placeholder="اكتب هنا ملخص الدعوى..." value={newCaseData.description} onChange={(e) => setNewCaseData({ ...newCaseData, description: e.target.value })} className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:border-blue-500 text-slate-900 dark:text-white" ></textarea>
                             </div>
 
-                            {/* حقل رفع الملفات المتعددة المتطور */}
                             <div className="space-y-2">
                                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">مستندات وأوراق القضية (مرفقات متعددة)</label>
                                 <div className="relative border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all text-center group cursor-pointer">
@@ -450,18 +523,17 @@ export default function CasesPage() {
                                     <div className="flex flex-col items-center justify-center space-y-1">
                                         <UploadCloud size={28} className="text-blue-500 group-hover:scale-110 transition-transform" />
                                         <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">اضغط هنا أو اسحب الملفات لرفعها</p>
-                                        <p className="text-[10px] text-slate-400">يدعم الـ PDF، الصور، والمستندات القانونية (يمكنك اختيار أكثر من ملف)</p>
+                                        <p className="text-[10px] text-slate-400">يدعم الـ PDF، الصور، والمستندات القانونية</p>
                                     </div>
                                 </div>
 
-                                {/* قائمة عرض الملفات المختارة حالياً */}
                                 {selectedFiles.length > 0 && (
                                     <div className="bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-100 dark:border-slate-800 space-y-1.5 max-h-36 overflow-y-auto">
                                         <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1">
                                             <Paperclip size={12} /> الملفات الجاهزة للرفع ({selectedFiles.length}):
                                         </p>
                                         {selectedFiles.map((file, idx) => (
-                                            <div key={idx} className="flex items-center justify-between bg-white dark:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-100 dark:border-slate-750 text-xs shadow-2xs">
+                                            <div key={idx} className="flex items-center justify-between bg-white dark:bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-100 dark:border-slate-700 text-xs shadow-2xs">
                                                 <div className="flex items-center gap-2 truncate text-slate-700 dark:text-slate-200">
                                                     <FileText size={14} className="text-slate-400 shrink-0" />
                                                     <span className="truncate max-w-[280px] font-medium">{file.name}</span>
@@ -483,7 +555,7 @@ export default function CasesPage() {
                             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 mt-4">
                                 <button type="button" onClick={() => setIsCaseModalOpen(false)} className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl">إلغاء</button>
                                 <button type="submit" disabled={isSubmitting} className="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 rounded-xl shadow-md">
-                                    {isSubmitting ? 'جاري حفظ البيانات والملفات...' : (isEditing ? 'تعديل وحفظ التغييرات' : 'إنشاء الملف')}
+                                    {isSubmitting ? 'جاري حفظ البيانات والملفات...' : (isEditing ? 'تعديل وحفظ التغييرات' : 'إنشاء قضية جديدة')}
                                 </button>
                             </div>
                         </form>

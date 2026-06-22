@@ -55,7 +55,7 @@ async def mark_notification_as_read(
 # 🔌 [3] نقطة اتصال الـ WebSocket 
 @router.websocket("/ws/{lawyer_id}")
 async def websocket_endpoint(websocket: WebSocket, lawyer_id: int):
-    await notifier_manager.connect(websocket, lawyer_id)
+    await notifier_manager.connect(websocket=websocket, lawyer_id=lawyer_id)
     try:
         while True:
             data = await websocket.receive_text()

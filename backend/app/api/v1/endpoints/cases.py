@@ -156,28 +156,40 @@ async def create_case(
 async def read_cases(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    search: Optional[str] = Query(None, description="البحث في العناوين"),
+    search: Optional[str] = Query(None, description="البحث في العناوين، الأرقام، الأوصاف، وأسماء الموكلين"),
     case_type: Optional[CaseType] = Query(None),
     status_filter: Optional[CaseStatus] = Query(None, alias="status"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = select(Case).where(Case.is_active == True).options(
+    # نقوم بعمل join مع جدول Client لتمكين البحث باسم الموكل أيضاً
+    query = select(Case).join(Case.client).where(Case.is_active == True).options(
         selectinload(Case.client),
         selectinload(Case.lawyer),
         selectinload(Case.attachments) 
     )
 
+    # حماية البيانات: المحامي العادي يرى قضاياه فقط، بينما الـ Admin والـ Partner يروون كل شيء
     if current_user.role not in [UserRole.ADMIN, UserRole.PARTNER]:
         query = query.where(Case.lawyer_id == current_user.id)
 
+    # 🔍 السحر هنا: بحث ذكي وشامل في عدة حقول متبوعة بـ OR
     if search:
-        query = query.where(Case.title.ilike(f"%{search}%"))
+        search_filter = f"%{search}%"
+        query = query.where(
+            (Case.title.ilike(search_filter)) |
+            (Case.case_number.ilike(search_filter)) |
+            (Case.description.ilike(search_filter)) |
+            (Client.name.ilike(search_filter))  # البحث باسم الموكل مباشرة
+        )
+        
+    # 📑 الفلترة المباشرة بحسب الخيارات المستهدفة
     if case_type:
         query = query.where(Case.case_type == case_type)
     if status_filter:
         query = query.where(Case.status == status_filter)
 
+    # الترتيب من الأحدث للأقدم ثم تفعيل الـ Pagination
     query = query.order_by(Case.id.desc()).offset(skip).limit(limit)
     result = await db.execute(query)
     return result.scalars().all()

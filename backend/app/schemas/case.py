@@ -35,7 +35,7 @@ class AttachmentMinOut(BaseModel):
 
 # 2️⃣ النموذج المشترك للقضايا
 class CaseBase(BaseModel):
-    title: str = Field(..., min_length=5, max_length=250)
+    title: str = Field(..., min_length=1, max_length=250)
     case_number: Optional[str] = Field(None, max_length=100)
     description: Optional[str] = None
     case_type: CaseType = Field(default=CaseType.COMMERCIAL)
