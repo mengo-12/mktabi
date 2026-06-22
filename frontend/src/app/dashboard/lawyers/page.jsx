@@ -1,16 +1,21 @@
+// frontend\src\app\dashboard\lawyers\page.jsx
 'use client';
 import { useState, useEffect } from 'react';
-import { UserPlus, Edit2, Mail, Phone, CheckCircle2, XCircle, Loader2, AlertCircle } from 'lucide-react';
+import { UserPlus, Edit2, Mail, Phone, CheckCircle2, XCircle, Loader2, AlertCircle, Search, Filter } from 'lucide-react';
 
 export default function LawyersManagement() {
     const [team, setTeam] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
+    // 🔍 حالات البحث والفلترة الجديدة
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedRoleFilter, setSelectedRoleFilter] = useState('');
+
     // حالات التحكم في النافذة المنبثقة (Modal)
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
-    const [editMode, setEditMode] = useState(false); // للتفريق بين الإضافة والتعديل
+    const [editMode, setEditMode] = useState(false); 
     const [selectedUserId, setSelectedUserId] = useState(null);
 
     const [formData, setFormData] = useState({
@@ -30,13 +35,19 @@ export default function LawyersManagement() {
         secretary: { label: 'سكرتارية', color: 'bg-slate-50 text-slate-600 dark:bg-slate-900/40 border-slate-100 dark:border-slate-800' },
     };
 
-    // 1️⃣ جلب قائمة الطاقم
+    // 1️⃣ جلب قائمة الطاقم المحدث لدعم البارامترات ديناميكياً
     const fetchTeam = async () => {
         try {
             setLoading(true);
             setError(null);
             const token = localStorage.getItem('token');
-            const response = await fetch('http://localhost:8000/api/v1/lawyers/', {
+            
+            // بناء الـ Query Parameters للبحث والفلترة
+            const params = new URLSearchParams();
+            if (searchQuery) params.append('search', searchQuery);
+            if (selectedRoleFilter) params.append('role', selectedRoleFilter);
+
+            const response = await fetch(`http://localhost:8000/api/v1/lawyers/?${params.toString()}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (!response.ok) throw new Error('فشل في جلب قائمة أعضاء الفريق');
@@ -49,26 +60,29 @@ export default function LawyersManagement() {
         }
     };
 
+    // إعادة الاستدعاء التلقائي عند تغيير نصوص البحث أو اختيار الفلتر
     useEffect(() => {
-        fetchTeam();
-    }, []);
+        const delayDebounceFn = setTimeout(() => {
+            fetchTeam();
+        }, 400); // Debounce بمقدار 400ms لحماية السيرفر أثناء الكتابة المستمرة
 
-    // 2️⃣ تجهيز النافذة لعملية التعديل ببيانات المستخدم المختار
+        return () => clearTimeout(delayDebounceFn);
+    }, [searchQuery, selectedRoleFilter]);
+
     const openEditModal = (user) => {
         setEditMode(true);
         setSelectedUserId(user.id);
         setFormData({
             full_name: user.full_name,
-            email: user.email, // الباك إند لا يعدل الإيميل في مسار التعديل الحالي ولكنه يعرض للقراءة
+            email: user.email, 
             phone_number: user.phone_number || '',
             role: user.role,
-            password: '', // نترك كلمة المرور فارغة لأن التعديل الإداري لا يتطلبها دائماً
+            password: '', 
             is_active: user.is_active
         });
         setIsModalOpen(true);
     };
 
-    // 3️⃣ تجهيز النافذة لعملية الإضافة الجديدة
     const openAddModal = () => {
         setEditMode(false);
         setSelectedUserId(null);
@@ -76,7 +90,6 @@ export default function LawyersManagement() {
         setIsModalOpen(true);
     };
 
-    // 4️⃣ معالجة الإرسال (إما إنشاء أو تعديل)
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
@@ -89,7 +102,6 @@ export default function LawyersManagement() {
 
             const method = editMode ? 'PUT' : 'POST';
 
-            // عند التعديل، نرسل فقط الحقول المدعومة في السكيما المخصصة للتعديل بجانب الإدارة
             const bodyData = editMode
                 ? { full_name: formData.full_name, phone_number: formData.phone_number, role: formData.role, is_active: formData.is_active }
                 : formData;
@@ -117,15 +129,6 @@ export default function LawyersManagement() {
         }
     };
 
-    if (loading) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50" dir="rtl">
-                <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-                <p className="text-gray-500 mt-4">جاري تحميل قائمة الطاقم...</p>
-            </div>
-        );
-    }
-
     return (
         <div className="p-6 bg-gray-50 dark:bg-slate-900 min-h-screen space-y-6 text-right" dir="rtl">
             {/* رأس الصفحة */}
@@ -143,72 +146,115 @@ export default function LawyersManagement() {
                 </button>
             </div>
 
+            {/* 🛠️ قسم البحث والتصفية الجديد */}
+            <div className="flex flex-col md:flex-row gap-3 items-center justify-between bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                {/* حقل البحث */}
+                <div className="relative w-full md:w-96">
+                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                        type="text"
+                        placeholder="ابحث باسم المحامي، البريد الإلكتروني أو الجوال..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pr-10 pl-4 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:border-blue-500 text-slate-800 dark:text-white placeholder-slate-400"
+                    />
+                </div>
+
+                {/* قائمة اختيار الفلترة حسب الدور */}
+                <div className="relative w-full md:w-60 flex items-center gap-2">
+                    <Filter className="w-4 h-4 text-slate-400 shrink-0" />
+                    <select
+                        value={selectedRoleFilter}
+                        onChange={(e) => setSelectedRoleFilter(e.target.value)}
+                        className="w-full p-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:border-blue-500 cursor-pointer text-slate-700 dark:text-white"
+                    >
+                        <option value="">كل طاقم العمل والمحامين</option>
+                        <option value="admin">مدير النظام (Admin)</option>
+                        <option value="partner">محامي شريك (Partner)</option>
+                        <option value="associate">محامي مستشار (Associate)</option>
+                        <option value="trainee">محامي متدرب (Trainee)</option>
+                        <option value="secretary">سكرتارية (Secretary)</option>
+                    </select>
+                </div>
+            </div>
+
             {error && (
-                <div className="mb-6 bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-lg flex items-center gap-3">
+                <div className="bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-lg flex items-center gap-3">
                     <AlertCircle className="w-5 h-5" />
                     <p className="text-xs font-medium">{error}</p>
                 </div>
             )}
 
-            {/* الجدول بتصميم Slate المتناسق */}
+            {/* الجدول */}
             <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-right border-collapse text-xs">
-                        <thead>
-                            <tr className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 font-bold border-b border-slate-100 dark:border-slate-700">
-                                <th className="p-4">الاسم الكامل</th>
-                                <th className="p-4">البريد الإلكتروني</th>
-                                <th className="p-4">رقم الهاتف</th>
-                                <th className="p-4">الدور / الصلاحية</th>
-                                <th className="p-4">الحالة</th>
-                                <th className="p-4 text-center">الإجراءات</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
-                            {team.map((member) => (
-                                <tr key={member.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/40 transition-colors">
-                                    <td className="p-4 font-bold text-slate-900 dark:text-white">{member.full_name}</td>
-                                    <td className="p-4 text-slate-600 dark:text-slate-300 font-sans">
-                                        <div className="flex items-center gap-2">
-                                            <Mail className="w-3.5 h-3.5 text-slate-400" />
-                                            {member.email}
-                                        </div>
-                                    </td>
-                                    <td className="p-4 text-slate-600 dark:text-slate-300 font-sans">
-                                        {member.phone_number ? (
-                                            <div className="flex items-center gap-2">
-                                                <Phone className="w-3.5 h-3.5 text-slate-400" />
-                                                {member.phone_number}
-                                            </div>
-                                        ) : (
-                                            <span className="text-slate-400 italic">غير محدد</span>
-                                        )}
-                                    </td>
-                                    <td className="p-4">
-                                        <span className={`px-2.5 py-1 rounded-md font-bold text-[10px] border ${roleMapping[member.role]?.color || 'bg-slate-100'}`}>
-                                            {roleMapping[member.role]?.label || member.role}
-                                        </span>
-                                    </td>
-                                    <td className="p-4">
-                                        {member.is_active ? (
-                                            <span className="text-emerald-500 flex items-center gap-1.5 font-bold"><CheckCircle2 className="w-3.5 h-3.5" /> نشط</span>
-                                        ) : (
-                                            <span className="text-rose-400 flex items-center gap-1.5 font-bold"><XCircle className="w-3.5 h-3.5" /> معطل</span>
-                                        )}
-                                    </td>
-                                    <td className="p-4 text-center">
-                                        <button
-                                            onClick={() => openEditModal(member)}
-                                            className="text-blue-500 hover:text-blue-600 font-medium flex items-center justify-center gap-1 mx-auto"
-                                        >
-                                            <Edit2 className="w-3.5 h-3.5" />
-                                            تعديل
-                                        </button>
-                                    </td>
+                    {loading ? (
+                        <div className="p-12 flex flex-col items-center justify-center gap-2">
+                            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                            <p className="text-xs text-slate-400">جاري تحديث النتائج...</p>
+                        </div>
+                    ) : team.length === 0 ? (
+                        <div className="p-12 text-center text-slate-400 text-xs italic">
+                            لا توجد نتائج مطابقة لخيارات البحث الحالية.
+                        </div>
+                    ) : (
+                        <table className="w-full text-right border-collapse text-xs">
+                            <thead>
+                                <tr className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 font-bold border-b border-slate-100 dark:border-slate-700">
+                                    <th className="p-4">الاسم الكامل</th>
+                                    <th className="p-4">البريد الإلكتروني</th>
+                                    <th className="p-4">رقم الهاتف</th>
+                                    <th className="p-4">الدور / الصلاحية</th>
+                                    <th className="p-4">الحالة</th>
+                                    <th className="p-4 text-center">الإجراءات</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
+                                {team.map((member) => (
+                                    <tr key={member.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/40 transition-colors">
+                                        <td className="p-4 font-bold text-slate-900 dark:text-white">{member.full_name}</td>
+                                        <td className="p-4 text-slate-600 dark:text-slate-300 font-sans">
+                                            <div className="flex items-center gap-2">
+                                                <Mail className="w-3.5 h-3.5 text-slate-400" />
+                                                {member.email}
+                                            </div>
+                                        </td>
+                                        <td className="p-4 text-slate-600 dark:text-slate-300 font-sans">
+                                            {member.phone_number ? (
+                                                <div className="flex items-center gap-2">
+                                                    <Phone className="w-3.5 h-3.5 text-slate-400" />
+                                                    {member.phone_number}
+                                                </div>
+                                            ) : (
+                                                <span className="text-slate-400 italic">غير محدد</span>
+                                            )}
+                                        </td>
+                                        <td className="p-4">
+                                            <span className={`px-2.5 py-1 rounded-md font-bold text-[10px] border ${roleMapping[member.role]?.color || 'bg-slate-100'}`}>
+                                                {roleMapping[member.role]?.label || member.role}
+                                            </span>
+                                        </td>
+                                        <td className="p-4">
+                                            {member.is_active ? (
+                                                <span className="text-emerald-500 flex items-center gap-1.5 font-bold"><CheckCircle2 className="w-3.5 h-3.5" /> نشط</span>
+                                            ) : (
+                                                <span className="text-rose-400 flex items-center gap-1.5 font-bold"><XCircle className="w-3.5 h-3.5" /> معطل</span>
+                                            )}
+                                        </td>
+                                        <td className="p-4 text-center">
+                                            <button
+                                                onClick={() => openEditModal(member)}
+                                                className="text-blue-500 hover:text-blue-600 font-medium flex items-center justify-center gap-1 mx-auto"
+                                            >
+                                                <Edit2 className="w-3.5 h-3.5" />
+                                                تعديل
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
                 </div>
             </div>
 
