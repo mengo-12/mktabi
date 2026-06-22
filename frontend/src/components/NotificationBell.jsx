@@ -11,12 +11,13 @@ export default function NotificationBell({ lawyerId }) {
         if (!lawyerId) return;
 
         // 1. جلب التنبيهات السابقة غير المقروءة عند تحميل الصفحة
-        // ملاحظة: قم بتعديل الرابط الأساسي ليتوافق مع الـ API URL الخاص بك إذا كان مختلفاً
         fetch(`http://localhost:8000/api/v1/notifications/unread/${lawyerId}`)
             .then((res) => res.json())
             .then((data) => {
-                setNotifications(data);
-                setUnreadCount(data.length);
+                if (Array.isArray(data)) {
+                    setNotifications(data);
+                    setUnreadCount(data.length);
+                }
             })
             .catch((err) => console.error("Error fetching notifications:", err));
 
@@ -25,18 +26,15 @@ export default function NotificationBell({ lawyerId }) {
 
         ws.onmessage = (event) => {
             const newNotif = JSON.parse(event.data);
-            // إضافة التنبيه الجديد لأعلى القائمة وزيادة العداد
             setNotifications((prev) => [newNotif, ...prev]);
             setUnreadCount((prev) => prev + 1);
 
-            // اختياري: تشغيل صوت تنبيه خفيف جداً لجلب الانتباه عند وصول الإشعار حياً
             try {
                 const audio = new Audio('/sounds/notification.mp3');
                 audio.play();
             } catch (e) { }
         };
 
-        // إغلاق الاتصال عند مغادرة الصفحة أو تسجيل الخروج
         return () => ws.close();
     }, [lawyerId]);
 
@@ -51,12 +49,32 @@ export default function NotificationBell({ lawyerId }) {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // تفريغ العداد عند فتح التنبيهات وقراءتها
-    const handleToggleDropdown = () => {
-        setIsOpen(!isOpen);
-        if (!isOpen) {
+    // 🔄 دالة فتح القائمة وتحديث حالة التنبيهات في قاعدة البيانات
+    const handleToggleDropdown = async () => {
+        const nextOpenState = !isOpen;
+        setIsOpen(nextOpenState);
+
+        // إذا فتح المستخدم القائمة وهناك تنبيهات غير مقروءة
+        if (nextOpenState && unreadCount > 0) {
+            // 1. تصفير العداد فورياً في الواجهة لتحسين تجربة المستخدم
             setUnreadCount(0);
-            // اختياري: يمكنك هنا إرسال طلب للباك إند لتحديد التنبيهات كـ "مقروءة" في قاعدة البيانات
+
+            // 2. تحديث التنبيهات الحالية في قاعدة البيانات لكي لا تعود عند الـ Refresh
+            const token = localStorage.getItem('token');
+            
+            // نمر حلقة لتحديث كل تنبيه غير مقروء في السيرفر
+            const updatePromises = notifications.map((notif) =>
+                fetch(`http://localhost:8000/api/v1/notifications/${notif.id}/read`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                }).catch(err => console.error(`Failed to mark notification ${notif.id} as read:`, err))
+            );
+
+            // انتهاء تحديث البيانات في الخلفية
+            await Promise.all(updatePromises);
         }
     };
 
@@ -79,12 +97,11 @@ export default function NotificationBell({ lawyerId }) {
             {isOpen && (
                 <div className="absolute left-0 mt-2 w-80 max-h-96 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-y-auto z-50 py-2 transition-all">
                     <div className="px-4 py-2 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                        <span className="font-bold text-sm text-slate-800 dark:text-white">التنبيهات الإدارية حية</span>
+                        <span className="font-bold text-sm text-slate-800 dark:text-white">التنبيهات الإدارية الحية</span>
                         <span className="text-xs bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-0.5 rounded-full font-medium">Real-time</span>
                     </div>
 
                     <div className="divide-y divide-slate-50 dark:divide-slate-700/50">
-                        {/* 🎯 أضفنا فحص Array.isArray لضمان عدم حدوث الخطأ نهائياً */}
                         {!Array.isArray(notifications) || notifications.length === 0 ? (
                             <div className="p-6 text-center text-sm text-slate-400 dark:text-slate-500">
                                 لا توجد تنبيهات جديدة حالياً
