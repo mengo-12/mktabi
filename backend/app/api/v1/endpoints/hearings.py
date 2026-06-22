@@ -48,8 +48,8 @@ async def create_new_hearing(
     current_user: User = Depends(get_current_user)
 ):
     # التحقق من الصلاحية الأمنية للمستخدم على القضية أولاً
-    await verify_case_access(hearing_in.case_id, current_user, db)
-    
+    case = await verify_case_access(hearing_in.case_id, current_user, db)
+
     new_hearing = Hearing(**hearing_in.model_dump())
     db.add(new_hearing)
     await db.commit()
@@ -119,6 +119,8 @@ async def update_hearing_details(
     
     # 3. تحديث الحقول المرسلة فقط ديناميكياً
     update_data = hearing_update.model_dump(exclude_unset=True)
+    is_rescheduled = "hearing_date" in update_data or "hearing_time" in update_data
+    
     for key, value in update_data.items():
         setattr(hearing, key, value)
         

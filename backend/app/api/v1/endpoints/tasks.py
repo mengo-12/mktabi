@@ -65,7 +65,7 @@ async def create_task(
                 "title": db_notif.title,
                 "message": db_notif.message,
                 "category": db_notif.category,
-                "created_at": str(db_notif.created_at),
+                # "created_at": str(db_notif.created_at),
                 "created_at": db_notif.created_at.isoformat()
             }
         )
