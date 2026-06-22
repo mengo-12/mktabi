@@ -307,8 +307,10 @@ import {
     Users, 
     Briefcase, 
     FileSignature,
-    HelpCircle,
-    X
+    X,
+    Search,
+    Filter,
+    Trash2
 } from 'lucide-react';
 
 export default function OfficeVisits() {
@@ -316,6 +318,11 @@ export default function OfficeVisits() {
     const [lawyers, setLawyers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+
+    // متغيرات التحكم بالبحث والفلترة
+    const [searchTerm, setSearchTerm] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
+    const [lawyerFilter, setLawyerFilter] = useState('');
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -328,7 +335,6 @@ export default function OfficeVisits() {
         notes: ''
     });
 
-    // ستايلات مخصصة ومعبرة لكل حالة بلمسة فاخرة
     const statusMapping = {
         pending: { label: 'قيد الانتظار', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' },
         confirmed: { label: 'مؤكد', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20' },
@@ -336,14 +342,21 @@ export default function OfficeVisits() {
         cancelled: { label: 'ملغية', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20' },
     };
 
+    // ربط جلب البيانات مع الباك إند باستخدام الـ Query Params الجديدة للبحث والفلترة
     const fetchData = async () => {
         try {
             setLoading(true);
             setError(null);
             const token = localStorage.getItem('token');
 
+            // بناء الرابط مع الـ Filters المحددة
+            let visitsUrl = 'http://localhost:8000/api/v1/visits/?';
+            if (searchTerm) visitsUrl += `search=${encodeURIComponent(searchTerm)}&`;
+            if (statusFilter) visitsUrl += `status_filter=${statusFilter}&`;
+            if (lawyerFilter) visitsUrl += `lawyer_id=${lawyerFilter}&`;
+
             const [visitsRes, lawyersRes] = await Promise.all([
-                fetch('http://localhost:8000/api/v1/visits/', { headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch(visitsUrl, { headers: { 'Authorization': `Bearer ${token}` } }),
                 fetch('http://localhost:8000/api/v1/lawyers/', { headers: { 'Authorization': `Bearer ${token}` } })
             ]);
 
@@ -358,9 +371,14 @@ export default function OfficeVisits() {
         }
     };
 
+    // إعادة جلب البيانات تلقائياً عند تغيير أي فلتر أو نص بحث
     useEffect(() => {
-        fetchData();
-    }, []);
+        const delayDebounceFn = setTimeout(() => {
+            fetchData();
+        }, 300); // Debounce بمقدار 300ms لمنع تكرار الطلبات أثناء الكتابة السريعة
+
+        return () => clearTimeout(delayDebounceFn);
+    }, [searchTerm, statusFilter, lawyerFilter]);
 
     const handleCreateVisit = async (e) => {
         e.preventDefault();
@@ -401,7 +419,27 @@ export default function OfficeVisits() {
         }
     };
 
-    if (loading) {
+    // دالة حذف موعد الزيارة الجديدة
+    const handleDeleteVisit = async (visitId) => {
+        if (!confirm('هل أنت متأكد من رغبتك في حذف موعد هذه الزيارة نهائياً؟')) return;
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`http://localhost:8000/api/v1/visits/${visitId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                fetchData();
+            } else {
+                throw new Error('فشل تنفيذ أمر الحذف من السيرفر');
+            }
+        } catch (err) {
+            alert(err.message);
+        }
+    };
+
+    if (loading && visits.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[400px] gap-3 text-slate-500 dark:text-slate-400">
                 <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
@@ -412,7 +450,7 @@ export default function OfficeVisits() {
 
     return (
         <div className="space-y-6 p-4 md:p-6 max-w-7xl mx-auto" dir="rtl">
-            {/* رأس الصفحة الإستراتيجي */}
+            {/* رأس الصفحة */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-[#141C2F] p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-all">
                 <div className="flex items-center gap-3">
                     <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl shrink-0">
@@ -439,7 +477,48 @@ export default function OfficeVisits() {
                 </div>
             )}
 
-            {/* جدول المواعيد الفاخر المحمي للتشتت */}
+            {/* 🔍 شريط البحث والفلترة الاحترافي الجديد */}
+            <div className="bg-white dark:bg-[#141C2F] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm grid grid-cols-1 md:grid-cols-4 gap-3 items-center">
+                <div className="relative md:col-span-2">
+                    <Search className="absolute right-3 top-3 w-4 h-4 text-slate-400" />
+                    <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="ابحث باسم الزائر أو رقم الهاتف..."
+                        className="w-full pr-9 pl-3 py-2 text-xs bg-slate-50 dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:border-amber-500/50 text-slate-800 dark:text-slate-100 font-medium"
+                    />
+                </div>
+
+                <div>
+                    <select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        className="w-full p-2 text-xs bg-slate-50 dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:border-amber-500/50 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
+                    >
+                        <option value="">كل الحالات</option>
+                        <option value="pending">قيد الانتظار</option>
+                        <option value="confirmed">مؤكد</option>
+                        <option value="completed">اكتملت الزيارة</option>
+                        <option value="cancelled">ملغية</option>
+                    </select>
+                </div>
+
+                <div>
+                    <select
+                        value={lawyerFilter}
+                        onChange={(e) => setLawyerFilter(e.target.value)}
+                        className="w-full p-2 text-xs bg-slate-50 dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:border-amber-500/50 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
+                    >
+                        <option value="">كل المحامين المستضيفين</option>
+                        {lawyers.map(lawyer => (
+                            <option key={lawyer.id} value={lawyer.id}>{lawyer.full_name}</option>
+                        ))}
+                    </select>
+                </div>
+            </div>
+
+            {/* جدول المواعيد */}
             <div className="bg-white dark:bg-[#141C2F] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-right border-collapse text-xs">
@@ -450,7 +529,7 @@ export default function OfficeVisits() {
                                 <th className="p-4">التوقيت والتاريخ</th>
                                 <th className="p-4">المحامي المستضيف</th>
                                 <th className="p-4">الحالة</th>
-                                <th className="p-4 text-center">الإجراء السريع</th>
+                                <th className="p-4 text-center">الإجراءات</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -500,29 +579,35 @@ export default function OfficeVisits() {
                                                     {statusMapping[visit.status]?.label}
                                                 </span>
                                             </td>
-                                            <td className="p-4 text-center">
-                                                {visit.status === 'pending' ? (
-                                                    <div className="flex items-center justify-center gap-3">
-                                                        <button
-                                                            onClick={() => handleUpdateStatus(visit.id, 'completed')}
-                                                            className="text-emerald-500 hover:text-emerald-600 font-bold flex items-center gap-1 transition-colors"
-                                                            title="تحديد كمكتمل عند وصول الزائر"
-                                                        >
-                                                            <CheckCircle2 className="w-4 h-4" /> وصول
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleUpdateStatus(visit.id, 'cancelled')}
-                                                            className="text-rose-400 hover:text-rose-600 font-bold flex items-center gap-1 transition-colors"
-                                                            title="إلغاء الموعد"
-                                                        >
-                                                            <XCircle className="w-4 h-4" /> إلغاء
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium italic bg-slate-100 dark:bg-[#0F172A] px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-800">
-                                                        تمت معالجته
-                                                    </span>
-                                                )}
+                                            <td className="p-4">
+                                                <div className="flex items-center justify-center gap-4">
+                                                    {visit.status === 'pending' && (
+                                                        <>
+                                                            <button
+                                                                onClick={() => handleUpdateStatus(visit.id, 'completed')}
+                                                                className="text-emerald-500 hover:text-emerald-600 font-bold flex items-center gap-1 transition-colors"
+                                                                title="تحديد كمكتمل عند وصول الزائر"
+                                                            >
+                                                                <CheckCircle2 className="w-4 h-4" /> وصول
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleUpdateStatus(visit.id, 'cancelled')}
+                                                                className="text-rose-400 hover:text-rose-600 font-bold flex items-center gap-1 transition-colors"
+                                                                title="إلغاء الموعد"
+                                                            >
+                                                                <XCircle className="w-4 h-4" /> إلغاء
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                    {/* زر الحذف النهائي المضاف حديثاً متناسق ومحمي */}
+                                                    <button
+                                                        onClick={() => handleDeleteVisit(visit.id)}
+                                                        className="text-slate-400 hover:text-rose-500 transition-colors p-1"
+                                                        title="حذف الزيارة نهائياً"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     );
@@ -530,7 +615,7 @@ export default function OfficeVisits() {
                             ) : (
                                 <tr>
                                     <td colSpan="6" className="p-16 text-center text-xs text-slate-400 dark:text-slate-500 font-medium italic">
-                                        لا توجد مواعيد زيارات مسجلة حالياً في هذا الجدول.
+                                        لا توجد مواعيد زيارات تطابق خيارات البحث الحالية.
                                     </td>
                                 </tr>
                             )}
@@ -539,7 +624,7 @@ export default function OfficeVisits() {
                 </div>
             </div>
 
-            {/* المودال الاحترافي المتناسق بالكامل مع الهوية المظلمة والمضاءة */}
+            {/* المودال الافتراضي */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                     <div className="bg-white dark:bg-[#141C2F] w-full max-w-md rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
