@@ -34,7 +34,7 @@ export function AuthProvider({ children }) {
             formData.append('username', username);
             formData.append('password', password);
 
-            const response = await apiClient.post('/auth/login', formData, {
+            const response = await apiClient.post('/api/v1/auth/login', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
 
