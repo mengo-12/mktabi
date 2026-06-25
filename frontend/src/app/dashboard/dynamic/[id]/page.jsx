@@ -563,13 +563,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { dynamicService } from '@/services/dynamicService';
-import { Plus, Table, LayoutGrid, FileText, Save, Trash2, Settings, X, Link, Paperclip, ChevronDown, ListPlus } from 'lucide-react';
+import { Plus, Table, LayoutGrid, FileText, Save, Trash2, Settings, X, Link, Paperclip, ChevronDown, ListPlus, Search, Filter, RefreshCw } from 'lucide-react';
 
 export default function DynamicSectionPage() {
     const { id: sectionId } = useParams();
     const [tables, setTables] = useState([]);
     const [activeTable, setActiveTable] = useState(null);
     const [rows, setRows] = useState([]);
+    const [filteredRows, setFilteredRows] = useState([]); 
     const [viewMode, setViewMode] = useState('table');
 
     // حالات النوافذ المنبثقة (Modals)
@@ -579,28 +580,90 @@ export default function DynamicSectionPage() {
     const [editingRow, setEditingRow] = useState(null); 
     const [rowData, setRowData] = useState({});
 
-    // العمل على إدارة الأعمدة وهيكل الجدول
+    // إدارة الأعمدة وهيكل الجدول
     const [manageColumns, setManageColumns] = useState([]);
     const [newColumnName, setNewColumnName] = useState('');
     const [newColumnType, setNewColumnType] = useState('text');
     
-    // إعدادات الحقول المتقدمة (خيارات Dropdown أو الجدول المستهدف للعلاقة)
+    // إعدادات الحقول المتقدمة
     const [dropdownOptions, setDropdownOptions] = useState([]);
     const [newOptionInput, setNewOptionInput] = useState('');
     const [selectedRelationTableId, setSelectedRelationTableId] = useState('');
 
-    // تتبع الخلية النشطة للتعديل داخل الجدول الرئيسي
+    // تتبع الخلية النشطة للتعديل داخل الجدول
     const [editingCell, setEditingCell] = useState(null);
     const [editValue, setEditValue] = useState("");
 
-    // تتبع حالة تعديل اسم العمود الحالي داخل الـ Settings Modal
-    const [editingColumnId, setEditingColumnId] = useState(null);
+    // حالات محرك البحث والفلترة الذكي
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedFilterColumn, setSelectedFilterColumn] = useState('');
+    const [filterOperator, setFilterOperator] = useState('contains'); 
+    const [filterValue, setFilterValue] = useState('');
+    const [filterDateStart, setFilterDateStart] = useState('');
+    const [filterDateEnd, setFilterDateEnd] = useState('');
+
+    // تتبع حالة ترتيب الحقول بالسحب والإفلات
+    const [draggedColIndex, setDraggedColIndex] = useState(null);
 
     useEffect(() => {
         if (sectionId) {
             loadSectionContent();
         }
     }, [sectionId]);
+
+    // محرك الفلترة والتصفية الفوري
+    useEffect(() => {
+        let result = [...rows];
+
+        if (searchTerm.trim() !== '') {
+            const term = searchTerm.toLowerCase();
+            result = result.filter(row => {
+                return Object.values(row.cells_data).some(val => 
+                    String(val).toLowerCase().includes(term)
+                );
+            });
+        }
+
+        if (selectedFilterColumn) {
+            const column = activeTable?.columns_definition.find(c => c.id === selectedFilterColumn);
+            
+            if (column) {
+                result = result.filter(row => {
+                    const cellValue = row.cells_data[selectedFilterColumn];
+                    
+                    if (column.type === 'text' || column.type === 'dropdown' || column.type === 'relation' || column.type === 'attachment') {
+                        if (!filterValue) return true;
+                        return String(cellValue || '').toLowerCase().includes(String(filterValue).toLowerCase());
+                    }
+                    
+                    if (column.type === 'number') {
+                        if (!filterValue) return true;
+                        const numCell = Number(cellValue || 0);
+                        const numFilter = Number(filterValue);
+                        if (filterOperator === 'gt') return numCell > numFilter;
+                        if (filterOperator === 'lt') return numCell < numFilter;
+                        if (filterOperator === 'eq') return numCell === numFilter;
+                    }
+
+                    if (column.type === 'date') {
+                        if (!filterDateStart && !filterDateEnd) return true;
+                        const cellDate = new Date(cellValue);
+                        if (isNaN(cellDate.getTime())) return false; 
+                        
+                        if (filterDateStart && filterDateEnd) {
+                            return cellDate >= new Date(filterDateStart) && cellDate <= new Date(filterDateEnd);
+                        }
+                        if (filterDateStart) return cellDate >= new Date(filterDateStart);
+                        if (filterDateEnd) return cellDate <= new Date(filterDateEnd);
+                    }
+
+                    return true;
+                });
+            }
+        }
+
+        setFilteredRows(result);
+    }, [searchTerm, selectedFilterColumn, filterOperator, filterValue, filterDateStart, filterDateEnd, rows, activeTable]);
 
     const loadSectionContent = async () => {
         try {
@@ -621,6 +684,7 @@ export default function DynamicSectionPage() {
         try {
             const rowsData = await dynamicService.getRowsByTable(tableId);
             setRows(rowsData);
+            setFilteredRows(rowsData);
         } catch (error) {
             console.error("خطأ في جلب الصفوف:", error);
         }
@@ -629,8 +693,32 @@ export default function DynamicSectionPage() {
     const handleTableChange = (table) => {
         setActiveTable(table);
         setViewMode(table.view_mode || 'table');
+        resetFilters();
         loadTableRows(table.id);
     };
+
+    const resetFilters = () => {
+        setSearchTerm('');
+        setSelectedFilterColumn('');
+        setFilterOperator('contains');
+        setFilterValue('');
+        setFilterDateStart('');
+        setFilterDateEnd('');
+    };
+
+    // توابع السحب والإفلات لترتيب الحقول
+    const handleDragStart = (index) => setDraggedColIndex(index);
+    const handleDragOver = (e, index) => {
+        e.preventDefault(); 
+        if (draggedColIndex === null || draggedColIndex === index) return;
+        const updated = [...manageColumns];
+        const draggedItem = updated[draggedColIndex];
+        updated.splice(draggedColIndex, 1);
+        updated.splice(index, 0, draggedItem);
+        setDraggedColIndex(index); 
+        setManageColumns(updated); 
+    };
+    const handleDragEnd = () => setDraggedColIndex(null);
 
     // --- إدارة الصفوف ---
     const openAddRowModal = () => {
@@ -649,18 +737,13 @@ export default function DynamicSectionPage() {
         try {
             if (editingRow) {
                 await dynamicService.updateRow(editingRow.id, rowData);
-                alert("تم تحديث السجل بنجاح!");
             } else {
                 await dynamicService.addRow(activeTable.id, rowData);
-                alert("تم حفظ السجل بنجاح!");
             }
             setIsRowModalOpen(false);
-            if (activeTable?.id) {
-                await loadTableRows(activeTable.id);
-            }
+            if (activeTable?.id) await loadTableRows(activeTable.id);
         } catch (error) {
-            console.error("خطأ أثناء معالجة السجل:", error);
-            alert("حدث خطأ أثناء الحفظ، يرجى التحقق من مطابقة البيانات.");
+            console.error("خطأ أثناء الحفظ:", error);
         }
     };
 
@@ -668,10 +751,7 @@ export default function DynamicSectionPage() {
         if (confirm("هل أنت متأكد من حذف هذا السجل نهائياً؟")) {
             try {
                 await dynamicService.deleteRow(rowId);
-                alert("تم حذف السجل بنجاح.");
-                if (activeTable?.id) {
-                    await loadTableRows(activeTable.id);
-                }
+                if (activeTable?.id) await loadTableRows(activeTable.id);
             } catch (error) {
                 console.error("خطأ في حذف السجل:", error);
             }
@@ -717,29 +797,13 @@ export default function DynamicSectionPage() {
         try {
             await dynamicService.updateTable(activeTable.id, activeTable.name, manageColumns, viewMode);
             setIsSettingsModalOpen(false);
-            alert("تم تحديث هيكل الجدول المتقدم بنجاح!");
+            alert("تم تحديث هيكل الجدول بنجاح!");
             loadSectionContent(); 
         } catch (error) {
             console.error("خطأ أثناء تحديث الهيكل:", error);
         }
     };
 
-    // الترتيب بالسحب والإفلات
-    const [draggedColIndex, setDraggedColIndex] = useState(null);
-    const handleDragStart = (index) => setDraggedColIndex(index);
-    const handleDragOver = (e, index) => {
-        e.preventDefault(); 
-        if (draggedColIndex === null || draggedColIndex === index) return;
-        const updated = [...manageColumns];
-        const draggedItem = updated[draggedColIndex];
-        updated.splice(draggedColIndex, 1);
-        updated.splice(index, 0, draggedItem);
-        setDraggedColIndex(index); 
-        setManageColumns(updated); 
-    };
-    const handleDragEnd = () => setDraggedColIndex(null);
-
-    // التعديل الفوري للخلية للأنواع المتقدمة
     const handleCellBlur = async (rowId, colId, originalValue) => {
         if (editValue === originalValue) {
             setEditingCell(null);
@@ -757,13 +821,7 @@ export default function DynamicSectionPage() {
         }
     };
 
-    const handleRenameColumn = (columnId, newName) => {
-        if (!newName.trim()) { setEditingColumnId(null); return; }
-        const updated = manageColumns.map(col => col.id === columnId ? { ...col, name: newName.trim() } : col);
-        setManageColumns(updated);
-        setActiveTable(prev => ({ ...prev, columns_definition: updated }));
-        setEditingColumnId(null);
-    };
+    const activeFilterColumnObject = activeTable?.columns_definition.find(c => c.id === selectedFilterColumn);
 
     if (tables.length === 0) {
         return (
@@ -790,8 +848,8 @@ export default function DynamicSectionPage() {
 
             {activeTable && (
                 <div>
-                    {/* شريط التحكم */}
-                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6 bg-slate-900/50 p-4 rounded-xl border border-slate-800">
+                    {/* شريط التحكم الرئيسي */}
+                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-4 bg-slate-900/50 p-4 rounded-xl border border-slate-800">
                         <div>
                             <h1 className="text-xl font-black text-slate-200">{activeTable.name}</h1>
                         </div>
@@ -803,6 +861,87 @@ export default function DynamicSectionPage() {
                             </div>
                             <button onClick={openSettingsModal} className="bg-slate-950 border border-slate-800 hover:bg-slate-850 text-slate-400 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5"><Settings className="w-4 h-4" /> هيكلة الحقول المتقدمة</button>
                             <button onClick={openAddRowModal} className="bg-amber-600 hover:bg-amber-500 text-slate-950 text-xs font-black px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-lg"><Plus className="w-4 h-4" /> إضافة سجل جديد</button>
+                        </div>
+                    </div>
+
+                    {/* 🔍 محرك الفلترة والبحث الذكي الديناميكي */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6 bg-slate-950 p-3 rounded-xl border border-slate-800/80">
+                        <div className="relative">
+                            <span className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-500">
+                                <Search className="w-3.5 h-3.5" />
+                            </span>
+                            <input 
+                                type="text" 
+                                placeholder="بحث شامل في كل الحقول والمستندات..." 
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2 pr-9 pl-3 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500/50"
+                            />
+                        </div>
+
+                        <div className="flex gap-2 col-span-1 md:col-span-2 items-center flex-wrap md:flex-nowrap">
+                            <div className="flex items-center gap-1.5 text-slate-400 text-xs shrink-0">
+                                <Filter className="w-3.5 h-3.5 text-amber-500" />
+                                <span>تصفية بحسب:</span>
+                            </div>
+                            
+                            <select 
+                                value={selectedFilterColumn} 
+                                onChange={(e) => { setSelectedFilterColumn(e.target.value); setFilterValue(''); }}
+                                className="bg-slate-900 border border-slate-800 rounded-xl p-2 text-xs text-slate-300 focus:outline-none"
+                            >
+                                <option value="">إختر الحقل...</option>
+                                {activeTable.columns_definition.map(col => (
+                                    <option key={col.id} value={col.id}>{col.name}</option>
+                                ))}
+                            </select>
+
+                            {selectedFilterColumn && activeFilterColumnObject && (
+                                <div className="flex gap-1.5 items-center w-full">
+                                    {activeFilterColumnObject.type === 'number' && (
+                                        <select 
+                                            value={filterOperator} 
+                                            onChange={(e) => setFilterOperator(e.target.value)}
+                                            className="bg-slate-900 border border-slate-800 rounded-xl p-2 text-xs text-amber-500 font-bold focus:outline-none"
+                                        >
+                                            <option value="gt">أكبر من (&gt;)</option>
+                                            <option value="lt">أصغر من (&lt;)</option>
+                                            <option value="eq">يساوي (=)</option>
+                                        </select>
+                                    )}
+
+                                    {activeFilterColumnObject.type === 'date' ? (
+                                        <div className="flex items-center gap-1 w-full">
+                                            <input type="date" value={filterDateStart} onChange={(e) => setFilterDateStart(e.target.value)} className="bg-slate-900 border border-slate-800 rounded-xl p-1.5 text-xs text-slate-300 max-w-[130px]" />
+                                            <span className="text-[10px] text-slate-500">إلى</span>
+                                            <input type="date" value={filterDateEnd} onChange={(e) => setFilterDateEnd(e.target.value)} className="bg-slate-900 border border-slate-800 rounded-xl p-1.5 text-xs text-slate-300 max-w-[130px]" />
+                                        </div>
+                                    ) : activeFilterColumnObject.type === 'dropdown' ? (
+                                        <select 
+                                            value={filterValue} 
+                                            onChange={(e) => setFilterValue(e.target.value)}
+                                            className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2 text-xs text-amber-400"
+                                        >
+                                            <option value="">كل الخيارات...</option>
+                                            {activeFilterColumnObject.options?.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+                                        </select>
+                                    ) : (
+                                        <input 
+                                            type="text" 
+                                            placeholder="اكتب قيمة التصفية..." 
+                                            value={filterValue}
+                                            onChange={(e) => setFilterValue(e.target.value)}
+                                            className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2 text-xs text-slate-200"
+                                        />
+                                    )}
+                                </div>
+                            )}
+
+                            {(searchTerm || selectedFilterColumn) && (
+                                <button onClick={resetFilters} className="p-2 bg-slate-900 hover:bg-slate-800 rounded-xl border border-slate-800 text-slate-400 hover:text-slate-200 transition text-[10px] flex items-center gap-1">
+                                    <RefreshCw className="w-3 h-3" /> مسح
+                                </button>
+                            )}
                         </div>
                     </div>
 
@@ -819,53 +958,59 @@ export default function DynamicSectionPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="text-xs text-slate-300 divide-y divide-slate-800/50">
-                                    {rows.map((row) => (
-                                        <tr key={row.id} className="hover:bg-slate-850/40 transition">
-                                            {activeTable.columns_definition.map((col) => {
-                                                const isEditing = editingCell?.rowId === row.id && editingCell?.colKey === col.id;
-                                                const cellValue = row.cells_data[col.id] || "";
-
-                                                return (
-                                                    <td key={col.id} className="p-4 font-medium min-w-[150px]" onDoubleClick={() => { setEditingCell({ rowId: row.id, colKey: col.id }); setEditValue(cellValue); }}>
-                                                        {isEditing ? (
-                                                            col.type === 'dropdown' ? (
-                                                                <select value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={() => handleCellBlur(row.id, col.id, cellValue)} className="w-full bg-slate-950 border border-amber-500 text-xs text-amber-400 p-1 rounded-xl">
-                                                                    <option value="">إختر...</option>
-                                                                    {col.options?.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
-                                                                </select>
-                                                            ) : (
-                                                                <input
-                                                                    type={col.type === 'number' ? 'number' : col.type === 'date' ? 'date' : 'text'}
-                                                                    value={editValue} autoFocus onChange={(e) => setEditValue(e.target.value)}
-                                                                    onBlur={() => handleCellBlur(row.id, col.id, cellValue)}
-                                                                    className="w-full bg-slate-950 border border-amber-500 rounded-xl p-1.5 text-xs text-amber-400 focus:outline-none"
-                                                                />
-                                                            )
-                                                        ) : (
-                                                            <div className="cursor-pointer hover:bg-slate-800 p-1 rounded min-h-[20px] flex items-center gap-1.5">
-                                                                {col.type === 'relation' && <Link className="w-3 h-3 text-cyan-400" />}
-                                                                {col.type === 'attachment' && <Paperclip className="w-3 h-3 text-emerald-400" />}
-                                                                {col.type === 'dropdown' && <span className="px-2 py-0.5 rounded bg-slate-950 text-amber-400 border border-slate-800 text-[10px]">{cellValue || 'غير محدد'}</span>}
-                                                                {col.type !== 'dropdown' && (cellValue || <span className="text-slate-600 italic">فارغ</span>)}
-                                                            </div>
-                                                        )}
-                                                    </td>
-                                                );
-                                            })}
-                                            <td className="p-4 text-left flex items-center justify-end gap-2">
-                                                <button onClick={() => handleDeleteRow(row.id)} className="p-1.5 bg-slate-950 hover:bg-red-950 rounded-lg text-red-400 transition"><Trash2 className="w-3.5 h-3.5" /></button>
-                                            </td>
+                                    {filteredRows.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={activeTable.columns_definition.length + 1} className="p-8 text-center text-slate-500 italic">لا توجد سجلات مطابقة لخيارات البحث الحالية.</td>
                                         </tr>
-                                    ))}
+                                    ) : (
+                                        filteredRows.map((row) => (
+                                            <tr key={row.id} className="hover:bg-slate-850/40 transition">
+                                                {activeTable.columns_definition.map((col) => {
+                                                    const isEditing = editingCell?.rowId === row.id && editingCell?.colKey === col.id;
+                                                    const cellValue = row.cells_data[col.id] || "";
+
+                                                    return (
+                                                        <td key={col.id} className="p-4 font-medium min-w-[150px]" onDoubleClick={() => { setEditingCell({ rowId: row.id, colKey: col.id }); setEditValue(cellValue); }}>
+                                                            {isEditing ? (
+                                                                col.type === 'dropdown' ? (
+                                                                    <select value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={() => handleCellBlur(row.id, col.id, cellValue)} className="w-full bg-slate-950 border border-amber-500 text-xs text-amber-400 p-1 rounded-xl">
+                                                                        <option value="">إختر...</option>
+                                                                        {col.options?.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+                                                                    </select>
+                                                                ) : (
+                                                                    <input
+                                                                        type={col.type === 'number' ? 'number' : col.type === 'date' ? 'date' : 'text'}
+                                                                        value={editValue} autoFocus onChange={(e) => setEditValue(e.target.value)}
+                                                                        onBlur={() => handleCellBlur(row.id, col.id, cellValue)}
+                                                                        className="w-full bg-slate-950 border border-amber-500 rounded-xl p-1.5 text-xs text-amber-400 focus:outline-none"
+                                                                    />
+                                                                )
+                                                            ) : (
+                                                                <div className="cursor-pointer hover:bg-slate-800 p-1 rounded min-h-[20px] flex items-center gap-1.5">
+                                                                    {col.type === 'relation' && <Link className="w-3 h-3 text-cyan-400" />}
+                                                                    {col.type === 'attachment' && <Paperclip className="w-3 h-3 text-emerald-400" />}
+                                                                    {col.type === 'dropdown' && cellValue && <span className="px-2 py-0.5 rounded bg-slate-950 text-amber-400 border border-slate-800 text-[10px]">{cellValue}</span>}
+                                                                    {col.type !== 'dropdown' && (cellValue || <span className="text-slate-600 italic">فارغ</span>)}
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                    );
+                                                })}
+                                                <td className="p-4 text-left flex items-center justify-end gap-2">
+                                                    <button onClick={() => handleDeleteRow(row.id)} className="p-1.5 bg-slate-950 hover:bg-red-950 rounded-lg text-red-400 transition"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
                                 </tbody>
                             </table>
                         </div>
                     )}
 
-                    {/* نمط البطاقات والقائمة يستعرضون البيانات بنفس الأسلوب المطور */}
+                    {/* 🖥️ 2. نمط البطاقات (Grid View) */}
                     {viewMode === 'grid' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {rows.map((row) => (
+                            {filteredRows.map((row) => (
                                 <div key={row.id} className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl flex flex-col justify-between space-y-4">
                                     <div className="space-y-2.5">
                                         {activeTable.columns_definition.map((col, idx) => (
@@ -887,10 +1032,49 @@ export default function DynamicSectionPage() {
                             ))}
                         </div>
                     )}
+
+                    {/* 🖥️ 3. نمط القائمة المصلح والمطور (List View) */}
+                    {viewMode === 'list' && (
+                        <div className="space-y-3">
+                            {filteredRows.length === 0 ? (
+                                <div className="p-8 text-center text-slate-500 bg-slate-900 rounded-xl border border-slate-800 italic">لا توجد مستندات أو سجلات تطابق البحث الحالي.</div>
+                            ) : (
+                                filteredRows.map((row) => {
+                                    // نعتبر أول حقل في الجدول كعنوان رئيسي لسطر القائمة
+                                    const primaryCol = activeTable.columns_definition[0];
+                                    const primaryValue = row.cells_data[primaryCol?.id] || "سجل غير معنون";
+
+                                    return (
+                                        <div key={row.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-900 hover:bg-slate-850/60 p-4 rounded-xl border border-slate-800 transition-all gap-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-amber-500">
+                                                    <FileText className="w-4 h-4" />
+                                                </div>
+                                                <div>
+                                                    <h3 className="text-xs font-black text-slate-200">{primaryValue}</h3>
+                                                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
+                                                        {activeTable.columns_definition.slice(1, 4).map((col) => (
+                                                            <span key={col.id} className="text-[10px] text-slate-500 font-medium">
+                                                                {col.name}: <strong className="text-slate-400 font-semibold">{row.cells_data[col.id] || '-'}</strong>
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2 w-full sm:w-auto justify-end border-t sm:border-0 border-slate-800/50 pt-2 sm:pt-0">
+                                                <button onClick={() => openEditRowModal(row)} className="px-3 py-1.5 bg-slate-950 hover:bg-slate-800 text-blue-400 rounded-xl text-[11px] font-bold transition">تعديل</button>
+                                                <button onClick={() => handleDeleteRow(row.id)} className="p-1.5 bg-slate-950 hover:bg-red-950 text-red-400 rounded-xl transition"><Trash2 className="w-3.5 h-3.5" /></button>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    )}
                 </div>
             )}
 
-            {/* 📥 المودال: إضافة وتعديل سجل بالأنواع الذكية */}
+            {/* [بقيت النوافذ المنبثقة للـ Row والـ Settings مدمجة بشكل سليم لضمان ثبات المنظومة] */}
             {isRowModalOpen && activeTable && (
                 <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-4">
@@ -902,7 +1086,6 @@ export default function DynamicSectionPage() {
                             {activeTable.columns_definition.map((col) => (
                                 <div key={col.id}>
                                     <label className="block text-xs font-bold text-slate-400 mb-1">{col.name}</label>
-                                    
                                     {col.type === 'dropdown' ? (
                                         <select value={rowData[col.id] || ''} onChange={(e) => setRowData({ ...rowData, [col.id]: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200">
                                             <option value="">إختر خياراً...</option>
@@ -919,7 +1102,6 @@ export default function DynamicSectionPage() {
                                     ) : col.type === 'relation' ? (
                                         <select value={rowData[col.id] || ''} onChange={(e) => setRowData({ ...rowData, [col.id]: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200">
                                             <option value="">ابحث واختر من الجدول المترابط...</option>
-                                            {/* هنا نقوم بعمل Map افتراضي لبيانات الجدول المرتبط بالباك اند مستقبلاً */}
                                             <option value="سجل مرتبط رقم 1">سجل مرتبط تجريبي 1</option>
                                             <option value="سجل مرتبط رقم 2">سجل مرتبط تجريبي 2</option>
                                         </select>
@@ -941,7 +1123,6 @@ export default function DynamicSectionPage() {
                 </div>
             )}
 
-            {/* ⚙️ المودال المطور: بناء الهيكل المتقدم والأعمدة */}
             {isSettingsModalOpen && activeTable && (
                 <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-4">
@@ -965,7 +1146,6 @@ export default function DynamicSectionPage() {
                                 <button onClick={handleAddColumnStructure} className="bg-amber-600 hover:bg-amber-500 text-slate-950 rounded-lg text-xs font-black transition">إضافة الحقل للمخطط</button>
                             </div>
 
-                            {/* شروط إضافية تظهر ديناميكياً حسب نوع الحقل المحدد */}
                             {newColumnType === 'dropdown' && (
                                 <div className="p-3 bg-slate-900 rounded-lg border border-slate-800 space-y-2">
                                     <label className="block text-[10px] text-slate-400 font-bold">خيارات القائمة المنسدلة:</label>
@@ -990,7 +1170,6 @@ export default function DynamicSectionPage() {
                             )}
                         </div>
 
-                        {/* قائمة الأعمدة وهيكلتها */}
                         <div className="space-y-2">
                             <span className="block text-[10px] text-slate-400 font-bold">مخطط الحقول الحالي للجدول:</span>
                             <div className="max-h-[30vh] overflow-y-auto space-y-2">
