@@ -93,7 +93,12 @@ async def add_new_row(row: RowCreate, db: AsyncSession = Depends(get_db)):
 
 @router.get("/tables/{table_id}/rows", response_model=List[RowResponse])
 async def get_table_rows(table_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(CustomRow).filter(CustomRow.table_id == table_id))
+    # 🎯 الإصلاح: فرز الصفوف دائماً حسب المعرف لضمان عدم قفز الصف عند التعديل
+    result = await db.execute(
+        select(CustomRow)
+        .filter(CustomRow.table_id == table_id)
+        .order_by(CustomRow.id.asc()) 
+    )
     return result.scalars().all()
 
 # ✅ المسار الصحيح لتعديل خلايا الصف (حل خطأ 405 Method Not Allowed)
