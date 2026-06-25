@@ -573,6 +573,9 @@ export default function DynamicSectionPage() {
     const [filteredRows, setFilteredRows] = useState([]); 
     const [viewMode, setViewMode] = useState('table');
 
+    // مخزن لبيانات الجداول الأخرى لإدارة العلاقات الذكية
+    const [relationRowsMap, setRelationRowsMap] = useState({});
+
     // حالات النوافذ المنبثقة (Modals)
     const [isRowModalOpen, setIsRowModalOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
@@ -674,6 +677,8 @@ export default function DynamicSectionPage() {
                 setActiveTable(currentActive);
                 setViewMode(currentActive.view_mode || 'table');
                 loadTableRows(currentActive.id);
+                // جلب بيانات العلاقات للجداول المرتبطة بالجدول الحالي
+                loadRequiredRelations(currentActive, tablesData);
             }
         } catch (error) {
             console.error("خطأ في جلب المحتويات:", error);
@@ -690,11 +695,30 @@ export default function DynamicSectionPage() {
         }
     };
 
+    // جلب الصفوف الخاصة بالجداول المرتبطة ديناميكياً لتغذية حقول الـ Relation
+    const loadRequiredRelations = async (currentTable, allTables) => {
+        const relationCols = currentTable.columns_definition.filter(col => col.type === 'relation' && col.relatedTableId);
+        
+        const updatedMap = { ...relationRowsMap };
+        for (const col of relationCols) {
+            if (!updatedMap[col.relatedTableId]) {
+                try {
+                    const rRows = await dynamicService.getRowsByTable(col.relatedTableId);
+                    updatedMap[col.relatedTableId] = rRows;
+                } catch (err) {
+                    console.error(`خطأ في جلب بيانات الجدول المترابط ${col.relatedTableId}:`, err);
+                }
+            }
+        }
+        setRelationRowsMap(updatedMap);
+    };
+
     const handleTableChange = (table) => {
         setActiveTable(table);
         setViewMode(table.view_mode || 'table');
         resetFilters();
         loadTableRows(table.id);
+        loadRequiredRelations(table, tables);
     };
 
     const resetFilters = () => {
@@ -819,6 +843,19 @@ export default function DynamicSectionPage() {
         } finally {
             setEditingCell(null); 
         }
+    };
+
+    // دالة مساعدة لاستخراج اسم السجل المرتبط بناءً على الـ ID الخاص به
+    const getRelationDisplayValue = (relatedTableId, targetRowId) => {
+        if (!relatedTableId || !targetRowId) return "";
+        const targetRows = relationRowsMap[relatedTableId] || [];
+        const foundRow = targetRows.find(r => String(r.id) === String(targetRowId));
+        if (foundRow) {
+            // نأخذ القيمة الأولى الموجودة في أول حقل معرف كعنوان للسجل
+            const firstKey = Object.keys(foundRow.cells_data)[0];
+            return foundRow.cells_data[firstKey] || `سجل #${targetRowId}`;
+        }
+        return `تحميل... (#${targetRowId})`;
     };
 
     const activeFilterColumnObject = activeTable?.columns_definition.find(c => c.id === selectedFilterColumn);
@@ -977,6 +1014,14 @@ export default function DynamicSectionPage() {
                                                                         <option value="">إختر...</option>
                                                                         {col.options?.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
                                                                     </select>
+                                                                ) : col.type === 'relation' ? (
+                                                                    <select value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={() => handleCellBlur(row.id, col.id, cellValue)} className="w-full bg-slate-950 border border-amber-500 text-xs text-cyan-400 p-1 rounded-xl">
+                                                                        <option value="">اختر السجل المرتبط...</option>
+                                                                        {(relationRowsMap[col.relatedTableId] || []).map((rRow) => {
+                                                                            const firstKey = Object.keys(rRow.cells_data)[0];
+                                                                            return <option key={rRow.id} value={rRow.id}>{rRow.cells_data[firstKey]}</option>;
+                                                                        })}
+                                                                    </select>
                                                                 ) : (
                                                                     <input
                                                                         type={col.type === 'number' ? 'number' : col.type === 'date' ? 'date' : 'text'}
@@ -987,10 +1032,17 @@ export default function DynamicSectionPage() {
                                                                 )
                                                             ) : (
                                                                 <div className="cursor-pointer hover:bg-slate-800 p-1 rounded min-h-[20px] flex items-center gap-1.5">
-                                                                    {col.type === 'relation' && <Link className="w-3 h-3 text-cyan-400" />}
+                                                                    {col.type === 'relation' && (
+                                                                        <>
+                                                                            <Link className="w-3 h-3 text-cyan-400" />
+                                                                            <span className="text-cyan-400 font-bold underline">
+                                                                                {getRelationDisplayValue(col.relatedTableId, cellValue) || <span className="text-slate-600 italic">غير مرتبط</span>}
+                                                                            </span>
+                                                                        </>
+                                                                    )}
                                                                     {col.type === 'attachment' && <Paperclip className="w-3 h-3 text-emerald-400" />}
                                                                     {col.type === 'dropdown' && cellValue && <span className="px-2 py-0.5 rounded bg-slate-950 text-amber-400 border border-slate-800 text-[10px]">{cellValue}</span>}
-                                                                    {col.type !== 'dropdown' && (cellValue || <span className="text-slate-600 italic">فارغ</span>)}
+                                                                    {col.type !== 'dropdown' && col.type !== 'relation' && (cellValue || <span className="text-slate-600 italic">فارغ</span>)}
                                                                 </div>
                                                             )}
                                                         </td>
@@ -1017,9 +1069,14 @@ export default function DynamicSectionPage() {
                                             <div key={col.id} className={idx === 0 ? "border-b border-slate-800 pb-2 mb-2" : ""}>
                                                 <span className="block text-[10px] text-slate-500 font-bold">{col.name}</span>
                                                 <span className={`text-xs font-semibold flex items-center gap-1.5 ${idx === 0 ? "text-amber-400 text-sm font-black" : "text-slate-300"}`}>
-                                                    {col.type === 'relation' && <Link className="w-3 h-3 text-cyan-400" />}
+                                                    {col.type === 'relation' && (
+                                                        <>
+                                                            <Link className="w-3 h-3 text-cyan-400" />
+                                                            <span className="text-cyan-400 underline">{getRelationDisplayValue(col.relatedTableId, row.cells_data[col.id]) || '-'}</span>
+                                                        </>
+                                                    )}
                                                     {col.type === 'attachment' && <Paperclip className="w-3 h-3 text-emerald-400" />}
-                                                    {row.cells_data[col.id] || '-'}
+                                                    {col.type !== 'relation' && (row.cells_data[col.id] || '-')}
                                                 </span>
                                             </div>
                                         ))}
@@ -1033,14 +1090,13 @@ export default function DynamicSectionPage() {
                         </div>
                     )}
 
-                    {/* 🖥️ 3. نمط القائمة المصلح والمطور (List View) */}
+                    {/* 🖥️ 3. نمط القائمة المطور (List View) */}
                     {viewMode === 'list' && (
                         <div className="space-y-3">
                             {filteredRows.length === 0 ? (
                                 <div className="p-8 text-center text-slate-500 bg-slate-900 rounded-xl border border-slate-800 italic">لا توجد مستندات أو سجلات تطابق البحث الحالي.</div>
                             ) : (
                                 filteredRows.map((row) => {
-                                    // نعتبر أول حقل في الجدول كعنوان رئيسي لسطر القائمة
                                     const primaryCol = activeTable.columns_definition[0];
                                     const primaryValue = row.cells_data[primaryCol?.id] || "سجل غير معنون";
 
@@ -1055,7 +1111,10 @@ export default function DynamicSectionPage() {
                                                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
                                                         {activeTable.columns_definition.slice(1, 4).map((col) => (
                                                             <span key={col.id} className="text-[10px] text-slate-500 font-medium">
-                                                                {col.name}: <strong className="text-slate-400 font-semibold">{row.cells_data[col.id] || '-'}</strong>
+                                                                {col.name}:{' '}
+                                                                <strong className={col.type === 'relation' ? 'text-cyan-400 underline' : 'text-slate-400 font-semibold'}>
+                                                                    {col.type === 'relation' ? getRelationDisplayValue(col.relatedTableId, row.cells_data[col.id]) || '-' : row.cells_data[col.id] || '-'}
+                                                                </strong>
                                                             </span>
                                                         ))}
                                                     </div>
@@ -1074,7 +1133,7 @@ export default function DynamicSectionPage() {
                 </div>
             )}
 
-            {/* [بقيت النوافذ المنبثقة للـ Row والـ Settings مدمجة بشكل سليم لضمان ثبات المنظومة] */}
+            {/* 📥 المودال: إضافة وتعديل سجل */}
             {isRowModalOpen && activeTable && (
                 <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-4">
@@ -1100,10 +1159,16 @@ export default function DynamicSectionPage() {
                                             </label>
                                         </div>
                                     ) : col.type === 'relation' ? (
-                                        <select value={rowData[col.id] || ''} onChange={(e) => setRowData({ ...rowData, [col.id]: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200">
+                                        <select value={rowData[col.id] || ''} onChange={(e) => setRowData({ ...rowData, [col.id]: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-cyan-400 font-bold">
                                             <option value="">ابحث واختر من الجدول المترابط...</option>
-                                            <option value="سجل مرتبط رقم 1">سجل مرتبط تجريبي 1</option>
-                                            <option value="سجل مرتبط رقم 2">سجل مرتبط تجريبي 2</option>
+                                            {(relationRowsMap[col.relatedTableId] || []).map((rRow) => {
+                                                const firstKey = Object.keys(rRow.cells_data)[0];
+                                                return (
+                                                    <option key={rRow.id} value={rRow.id}>
+                                                        🔗 {rRow.cells_data[firstKey] || `سجل #${rRow.id}`}
+                                                    </option>
+                                                );
+                                            })}
                                         </select>
                                     ) : (
                                         <input
@@ -1117,12 +1182,13 @@ export default function DynamicSectionPage() {
                         </div>
                         <div className="flex justify-end gap-2 border-t border-slate-800 pt-4">
                             <button onClick={() => setIsRowModalOpen(false)} className="bg-slate-950 border border-slate-800 px-4 py-2 rounded-xl text-xs text-slate-400">إلغاء</button>
-                            <button onClick={handleSaveRow} className="bg-amber-600 hover:bg-amber-500 text-slate-950 px-5 py-2 rounded-xl text-xs font-black"><Save className="w-4 h-4" /> حفظ</button>
+                            <button onClick={handleSaveRow} className="bg-amber-600 hover:bg-amber-500 text-slate-950 px-5 py-2 rounded-xl text-xs font-black"><Save className="w-4 h-4" /> حفظ السجل</button>
                         </div>
                     </div>
                 </div>
             )}
 
+            {/* [باني المخطط المتقدم والـ Settings] */}
             {isSettingsModalOpen && activeTable && (
                 <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-4">
