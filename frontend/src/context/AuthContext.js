@@ -1,6 +1,7 @@
 'use client';
 import { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+// استيراد العميل المخصص للمشروع 👈 هو الذي يمتلك الـ Base URL الصحيح بدون تكرار
 import apiClient from '@/services/apiClient';
 
 const AuthContext = createContext(null);
@@ -34,7 +35,8 @@ export function AuthProvider({ children }) {
             formData.append('username', username);
             formData.append('password', password);
 
-            const response = await apiClient.post('/api/v1/auth/login', formData, {
+            // 🎯 التعديل الذهبي هنا: استخدام apiClient بدلاً من axios الخام لمنع تكرار الروابط
+            const response = await apiClient.post('/auth/login', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
 
@@ -50,7 +52,7 @@ export function AuthProvider({ children }) {
             const user_info = {
                 id: decodedPayload.sub,
                 role: decodedPayload.role,
-                full_name: decodedPayload.role === 'admin' ? 'مدير النظام' : 'المحامي المسئول'
+                full_name: decodedPayload.role === 'admin' ? 'مدير النظام' : 'المحامي المسؤول'
             };
 
             // 4. الحفظ الصارم في المتصفح والـ State كـ JSON حقيقي ومكتمل
