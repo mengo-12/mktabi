@@ -80,7 +80,6 @@ async def download_protected_file(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # 1. جلب بيانات الوثيقة والقضية المرتبطة بها
     stmt = select(Attachment).where(Attachment.id == attachment_id)
     res = await db.execute(stmt)
     attachment = res.scalar_one_or_none()
@@ -88,23 +87,25 @@ async def download_protected_file(
     if not attachment:
         raise HTTPException(status_code=404, detail="المستند غير موجود في النظام.")
 
-    # 2. جلب القضية للتحقق من أمان عزل البيانات (Data Isolation Guard)
-    case_res = await db.execute(select(Case).where(Case.id == attachment.case_id))
-    case = case_res.scalar_one_or_none()
+    # 💡 فحص ما إذا كان الملف مرفقاً عاماً لا يتبع قضية محددة
+    if attachment.case_id is not None:
+        # 2. جلب القضية للتحقق من أمان عزل البيانات إذا كانت مرتبطة بقضية
+        case_res = await db.execute(select(Case).where(Case.id == attachment.case_id))
+        case = case_res.scalar_one_or_none()
 
-    # 🧠 الحماية الصارمة: إذا لم يكن المستخدم Admin أو Partner، يجب أن تكون القضية مسندة إليه شخصياً
-    if current_user.role not in [UserRole.ADMIN, UserRole.PARTNER]:
-        if case.lawyer_id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, 
-                detail="عذراً، لا تمتلك صلاحية قانونية لاستعراض أو تحميل مستندات هذه القضية."
-            )
+        # الحماية الصارمة للقضايا
+        if current_user.role not in [UserRole.ADMIN, UserRole.PARTNER]:
+            if case and case.lawyer_id != current_user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, 
+                    detail="عذراً، لا تمتلك صلاحية قانونية لاستعراض أو تحميل مستندات هذه القضية."
+                )
+    # إذا كانت تابعة لـ None (ملف عام بالمكتب) يتجاوز الفحص طالما الموظف معتمد بالمنظومة
 
     # 3. التحقق من وجود الملف في السيرفر مادياً فعلاً
     if not os.path.exists(attachment.file_path):
         raise HTTPException(status_code=404, detail="الملف المادي مفقود من السيرفر.")
 
-    # 4. بث وقراءة الملف للمستخدم باسمه الأصلي التاريخي
     return FileResponse(
         path=attachment.file_path,
         media_type=attachment.file_type,
@@ -148,5 +149,56 @@ async def delete_case_attachment(
     # 4. الحذف البرمجي من قاعدة البيانات
     await db.delete(attachment)
     await db.commit()
+
+    # 📌 [4] مسار رفع عام ومستقل مخصص للحقول والجداول الديناميكية
+@router.post("/upload-general", status_code=status.HTTP_201_CREATED)
+async def upload_general_file(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # 1. فحص الصيغة والامتداد
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    if file_ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"صيغة الملف غير مدعومة. الصيغ المسموحة هي: {', '.join(ALLOWED_EXTENSIONS)}"
+        )
+
+    # 2. فحص الحجم
+    file_content = await file.read()
+    if len(file_content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="حجم الملف يتجاوز 15 ميجابايت.")
+    await file.seek(0)
+
+    # 3. توليد اسم فريد وحفظ الملف
+    unique_filename = f"{uuid.uuid4()}{file_ext}"
+    dest_path = os.path.join(STORAGE_DIR, unique_filename)
+
+    with open(dest_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # 4. تسجيل المياداتا في قاعدة البيانات (بدون case_id)
+    db_attachment = Attachment(
+        case_id=None,  # حقل عام غير مرتبط بقضية معينة
+        original_name=file.filename,
+        file_path=dest_path,
+        file_type=file.content_type,
+        file_size=len(file_content),
+        uploaded_by=current_user.id
+    )
+    db.add(db_attachment)
+    await db.commit()
+    await db.refresh(db_attachment)
+
+    # 5. بناء رابط التحميل المباشر الآمن الذي سيتعامل معه الـ Frontend
+    # سيتوجه الطلب إلى مسار التنزيل المحمي بناءً على ID المرفق
+    download_url = f"http://localhost:8000/api/v1/attachments/download/{db_attachment.id}"
+
+    return {
+        "url": download_url,
+        "name": file.filename,
+        "id": db_attachment.id
+    }
     
     return None

@@ -28,9 +28,7 @@ export const dynamicService = {
         return response.data;
     },
 
-    // 🎯 دالة موحدة لتحديث هيكل الجدول بالكامل (الاسم، الأعمدة، النمط)
     async updateTable(tableId, name, columnsDefinition, viewMode = 'table') {
-        // نرسل الـ table_id داخل الـ Body مع البيانات الأخرى لضمان عدم حدوث 404
         const response = await apiClient.put(`/dynamic/tables/${tableId}`, {
             name: name,
             columns_definition: columnsDefinition,
@@ -39,7 +37,6 @@ export const dynamicService = {
         return response.data;
     },
 
-    // 🎯 دالة موحدة لحذف الجدول بالكامل
     async deleteTable(tableId) {
         const response = await apiClient.delete(`/dynamic/tables/${tableId}`);
         return response.data;
@@ -59,7 +56,6 @@ export const dynamicService = {
         return response.data;
     },
 
-    // 🎯 دالة موحدة لتعديل بيانات صف بالكامل
     async updateRow(rowId, cellsData) {
         const response = await apiClient.put(`/dynamic/rows/${rowId}`, {
             cells_data: cellsData
@@ -67,9 +63,24 @@ export const dynamicService = {
         return response.data;
     },
 
-    // 🎯 دالة موحدة لحذف صف بيانات
     async deleteRow(rowId) {
         const response = await apiClient.delete(`/dynamic/rows/${rowId}`);
+        return response.data;
+    },
+
+    // 🎯 دالة رفع المرفقات الجديدة المحدثة والمتوافقة مع الراوتر المحمي
+    async uploadAttachment(file) {
+        const formData = new FormData();
+        formData.append('file', file); // السيرفر يتوقع مفتاح 'file'
+
+        // تم تعديل المسار هنا إلى /documents/upload-general بناءً على الـ API Doc الخاص بك
+        const response = await apiClient.post('/documents/upload-general', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+
+        // يعيد الكائن المحتوي على { url, name, id }
         return response.data;
     }
 };

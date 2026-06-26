@@ -563,7 +563,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { dynamicService } from '@/services/dynamicService';
-import { Plus, Table, LayoutGrid, FileText, Save, Trash2, Settings, X, Link, Paperclip, ChevronDown, ListPlus, Search, Filter, RefreshCw } from 'lucide-react';
+import { Plus, Table, LayoutGrid, FileText, Save, Trash2, Settings, X, Link, Paperclip, ChevronDown, ListPlus, Search, Filter, RefreshCw, ExternalLink, Loader2 } from 'lucide-react';
 
 export default function DynamicSectionPage() {
     const { id: sectionId } = useParams();
@@ -575,6 +575,9 @@ export default function DynamicSectionPage() {
 
     // مخزن لبيانات الجداول الأخرى لإدارة العلاقات الذكية
     const [relationRowsMap, setRelationRowsMap] = useState({});
+
+    // حالة تتبع رفع الملفات (الحقل الحالي الذي يتم رفعه ونسبة التحميل أو الحالة)
+    const [uploadingField, setUploadingField] = useState(null);
 
     // حالات النوافذ المنبثقة (Modals)
     const [isRowModalOpen, setIsRowModalOpen] = useState(false);
@@ -677,7 +680,6 @@ export default function DynamicSectionPage() {
                 setActiveTable(currentActive);
                 setViewMode(currentActive.view_mode || 'table');
                 loadTableRows(currentActive.id);
-                // جلب بيانات العلاقات للجداول المرتبطة بالجدول الحالي
                 loadRequiredRelations(currentActive, tablesData);
             }
         } catch (error) {
@@ -695,7 +697,6 @@ export default function DynamicSectionPage() {
         }
     };
 
-    // جلب الصفوف الخاصة بالجداول المرتبطة ديناميكياً لتغذية حقول الـ Relation
     const loadRequiredRelations = async (currentTable, allTables) => {
         const relationCols = currentTable.columns_definition.filter(col => col.type === 'relation' && col.relatedTableId);
         
@@ -728,6 +729,33 @@ export default function DynamicSectionPage() {
         setFilterValue('');
         setFilterDateStart('');
         setFilterDateEnd('');
+    };
+
+    // معالج رفع الملفات الفعلي وإرساله كـ FormData للـ Backend
+    const handleFileUpload = async (e, colId) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setUploadingField(colId);
+        try {
+            // نتحقق من وجود الخدمة المخصصة للرفع في دالة الـ service لديك
+            // إذا لم تكن موجودة، يمكنك استخدام axios أو fetch مباشرة هنا لإرسال الـ FormData
+            const response = await dynamicService.uploadAttachment(file); 
+            
+            // نفترض أن السيرفر يعيد كائن يحتوي على رابط الملف واسمه الأصلي كالتالي:
+            // response = { url: "https://api.lawfirm.os/uploads/file.pdf", name: "الملف.pdf" }
+            
+            // سنخزن كائن مشفر نصياً أو مجرد الرابط المباشر في خلايا السجل
+            setRowData(prev => ({
+                ...prev,
+                [colId]: response.url // أو response.file_path حسب معايير الـ API الخاصة بك
+            }));
+        } catch (error) {
+            console.error("خطأ أثناء رفع المستند:", error);
+            alert("فشل رفع المستند، يرجى التحقق من حجم الملف أو اتصال الشبكة.");
+        } finally {
+            setUploadingField(null);
+        }
     };
 
     // توابع السحب والإفلات لترتيب الحقول
@@ -845,17 +873,21 @@ export default function DynamicSectionPage() {
         }
     };
 
-    // دالة مساعدة لاستخراج اسم السجل المرتبط بناءً على الـ ID الخاص به
     const getRelationDisplayValue = (relatedTableId, targetRowId) => {
         if (!relatedTableId || !targetRowId) return "";
         const targetRows = relationRowsMap[relatedTableId] || [];
         const foundRow = targetRows.find(r => String(r.id) === String(targetRowId));
         if (foundRow) {
-            // نأخذ القيمة الأولى الموجودة في أول حقل معرف كعنوان للسجل
             const firstKey = Object.keys(foundRow.cells_data)[0];
             return foundRow.cells_data[firstKey] || `سجل #${targetRowId}`;
         }
         return `تحميل... (#${targetRowId})`;
+    };
+
+    // دالة مساعدة لاستخراج اسم الملف النظيف من رابط الـ URL المخزن
+    const getFileNameFromUrl = (url) => {
+        if (!url) return "";
+        return url.substring(url.lastIndexOf('/') + 1);
     };
 
     const activeFilterColumnObject = activeTable?.columns_definition.find(c => c.id === selectedFilterColumn);
@@ -1007,7 +1039,7 @@ export default function DynamicSectionPage() {
                                                     const cellValue = row.cells_data[col.id] || "";
 
                                                     return (
-                                                        <td key={col.id} className="p-4 font-medium min-w-[150px]" onDoubleClick={() => { setEditingCell({ rowId: row.id, colKey: col.id }); setEditValue(cellValue); }}>
+                                                        <td key={col.id} className="p-4 font-medium min-w-[150px]" onDoubleClick={() => { if(col.type !== 'attachment') { setEditingCell({ rowId: row.id, colKey: col.id }); setEditValue(cellValue); } }}>
                                                             {isEditing ? (
                                                                 col.type === 'dropdown' ? (
                                                                     <select value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={() => handleCellBlur(row.id, col.id, cellValue)} className="w-full bg-slate-950 border border-amber-500 text-xs text-amber-400 p-1 rounded-xl">
@@ -1040,15 +1072,24 @@ export default function DynamicSectionPage() {
                                                                             </span>
                                                                         </>
                                                                     )}
-                                                                    {col.type === 'attachment' && <Paperclip className="w-3 h-3 text-emerald-400" />}
+                                                                    {col.type === 'attachment' && (
+                                                                        cellValue ? (
+                                                                            <a href={cellValue} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-emerald-400 font-bold underline hover:text-emerald-300">
+                                                                                <Paperclip className="w-3 h-3" />
+                                                                                <span className="max-w-[120px] truncate">{getFileNameFromUrl(cellValue)}</span>
+                                                                                <ExternalLink className="w-2.5 h-2.5" />
+                                                                            </a>
+                                                                        ) : <span className="text-slate-650 italic text-[11px]">لا يوجد ملف</span>
+                                                                    )}
                                                                     {col.type === 'dropdown' && cellValue && <span className="px-2 py-0.5 rounded bg-slate-950 text-amber-400 border border-slate-800 text-[10px]">{cellValue}</span>}
-                                                                    {col.type !== 'dropdown' && col.type !== 'relation' && (cellValue || <span className="text-slate-600 italic">فارغ</span>)}
+                                                                    {col.type !== 'dropdown' && col.type !== 'relation' && col.type !== 'attachment' && (cellValue || <span className="text-slate-600 italic">فارغ</span>)}
                                                                 </div>
                                                             )}
                                                         </td>
                                                     );
                                                 })}
                                                 <td className="p-4 text-left flex items-center justify-end gap-2">
+                                                    <button onClick={() => openEditRowModal(row)} className="p-1.5 bg-slate-950 hover:bg-slate-800 rounded-lg text-blue-400 transition">تعديل</button>
                                                     <button onClick={() => handleDeleteRow(row.id)} className="p-1.5 bg-slate-950 hover:bg-red-950 rounded-lg text-red-400 transition"><Trash2 className="w-3.5 h-3.5" /></button>
                                                 </td>
                                             </tr>
@@ -1075,8 +1116,14 @@ export default function DynamicSectionPage() {
                                                             <span className="text-cyan-400 underline">{getRelationDisplayValue(col.relatedTableId, row.cells_data[col.id]) || '-'}</span>
                                                         </>
                                                     )}
-                                                    {col.type === 'attachment' && <Paperclip className="w-3 h-3 text-emerald-400" />}
-                                                    {col.type !== 'relation' && (row.cells_data[col.id] || '-')}
+                                                    {col.type === 'attachment' && (
+                                                        row.cells_data[col.id] ? (
+                                                            <a href={row.cells_data[col.id]} target="_blank" rel="noreferrer" className="text-emerald-400 underline flex items-center gap-1">
+                                                                <Paperclip className="w-3 h-3" /> {getFileNameFromUrl(row.cells_data[col.id])}
+                                                            </a>
+                                                        ) : '-'
+                                                    )}
+                                                    {col.type !== 'relation' && col.type !== 'attachment' && (row.cells_data[col.id] || '-')}
                                                 </span>
                                             </div>
                                         ))}
@@ -1112,9 +1159,15 @@ export default function DynamicSectionPage() {
                                                         {activeTable.columns_definition.slice(1, 4).map((col) => (
                                                             <span key={col.id} className="text-[10px] text-slate-500 font-medium">
                                                                 {col.name}:{' '}
-                                                                <strong className={col.type === 'relation' ? 'text-cyan-400 underline' : 'text-slate-400 font-semibold'}>
-                                                                    {col.type === 'relation' ? getRelationDisplayValue(col.relatedTableId, row.cells_data[col.id]) || '-' : row.cells_data[col.id] || '-'}
-                                                                </strong>
+                                                                {col.type === 'attachment' ? (
+                                                                    row.cells_data[col.id] ? (
+                                                                        <a href={row.cells_data[col.id]} target="_blank" rel="noreferrer" className="text-emerald-400 underline font-semibold">{getFileNameFromUrl(row.cells_data[col.id])}</a>
+                                                                    ) : '-'
+                                                                ) : (
+                                                                    <strong className={col.type === 'relation' ? 'text-cyan-400 underline' : 'text-slate-400 font-semibold'}>
+                                                                        {col.type === 'relation' ? getRelationDisplayValue(col.relatedTableId, row.cells_data[col.id]) || '-' : row.cells_data[col.id] || '-'}
+                                                                    </strong>
+                                                                )}
                                                             </span>
                                                         ))}
                                                     </div>
@@ -1151,12 +1204,24 @@ export default function DynamicSectionPage() {
                                             {col.options?.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
                                         </select>
                                     ) : col.type === 'attachment' ? (
-                                        <div className="w-full bg-slate-950 border border-dashed border-slate-800 rounded-xl p-4 text-center cursor-pointer hover:border-emerald-500/50 transition">
-                                            <input type="file" className="hidden" id={`file_${col.id}`} onChange={(e) => setRowData({ ...rowData, [col.id]: e.target.files[0]?.name })} />
-                                            <label htmlFor={`file_${col.id}`} className="cursor-pointer text-xs text-slate-500 flex flex-col items-center gap-1.5">
-                                                <Paperclip className="w-5 h-5 text-slate-400" />
-                                                {rowData[col.id] || "اضغط لرفع ملف أو مستند للمكتب (PDF, DOCX)"}
-                                            </label>
+                                        <div className="w-full bg-slate-950 border border-dashed border-slate-800 rounded-xl p-4 text-center relative hover:border-emerald-500/50 transition">
+                                            <input type="file" className="hidden" id={`file_${col.id}`} onChange={(e) => handleFileUpload(e, col.id)} disabled={uploadingField === col.id} />
+                                            
+                                            {uploadingField === col.id ? (
+                                                <div className="flex flex-col items-center justify-center gap-2 py-2">
+                                                    <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
+                                                    <span className="text-xs text-slate-400">جاري رفع المستند القانوني وتشفيره بأمان...</span>
+                                                </div>
+                                            ) : (
+                                                <label htmlFor={`file_${col.id}`} className="cursor-pointer text-xs text-slate-500 flex flex-col items-center gap-1.5">
+                                                    <Paperclip className="w-5 h-5 text-slate-400" />
+                                                    {rowData[col.id] ? (
+                                                        <span className="text-emerald-400 font-bold max-w-full truncate block px-4">
+                                                            ✓ تم الرفع: {getFileNameFromUrl(rowData[col.id])}
+                                                        </span>
+                                                    ) : "اضغط لرفع ملف أو مستند للمكتب (PDF, DOCX)"}
+                                                </label>
+                                            )}
                                         </div>
                                     ) : col.type === 'relation' ? (
                                         <select value={rowData[col.id] || ''} onChange={(e) => setRowData({ ...rowData, [col.id]: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-cyan-400 font-bold">
@@ -1182,7 +1247,7 @@ export default function DynamicSectionPage() {
                         </div>
                         <div className="flex justify-end gap-2 border-t border-slate-800 pt-4">
                             <button onClick={() => setIsRowModalOpen(false)} className="bg-slate-950 border border-slate-800 px-4 py-2 rounded-xl text-xs text-slate-400">إلغاء</button>
-                            <button onClick={handleSaveRow} className="bg-amber-600 hover:bg-amber-500 text-slate-950 px-5 py-2 rounded-xl text-xs font-black"><Save className="w-4 h-4" /> حفظ السجل</button>
+                            <button onClick={handleSaveRow} className="bg-amber-600 hover:bg-amber-500 text-slate-950 px-5 py-2 rounded-xl text-xs font-black" disabled={uploadingField !== null}><Save className="w-4 h-4" /> حفظ السجل</button>
                         </div>
                     </div>
                 </div>
