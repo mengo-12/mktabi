@@ -563,7 +563,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { dynamicService } from '@/services/dynamicService';
-import { Plus, Table, LayoutGrid, FileText, Save, Trash2, Settings, X, Link, Paperclip, ChevronDown, ListPlus, Search, Filter, RefreshCw, ExternalLink, Loader2, Calendar } from 'lucide-react';
+import GlobalDocumentGenerator from '@/components/GlobalDocumentGenerator';
+import { Plus, Table, Edit, LayoutGrid, Save, Trash2, Settings, X, FileText, Link, Paperclip, ChevronDown, ListPlus, Search, Filter, RefreshCw, ExternalLink, Loader2, Calendar, Wand2 } from 'lucide-react';
 
 export default function DynamicSectionPage() {
     const { id: sectionId } = useParams();
@@ -1175,6 +1176,18 @@ export default function DynamicSectionPage() {
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2 w-full sm:w-auto justify-end border-t sm:border-0 border-slate-800/50 pt-2 sm:pt-0">
+                                                {/* 📄 إضافة زر توليد مستند ذكي لهذا السجل المحدد */}
+                                                <GlobalDocumentGenerator
+                                                    activeTable={activeTable}
+                                                    selectedRow={row}
+                                                    triggerButton={
+                                                        <button className="px-2.5 py-1.5 bg-amber-600/10 hover:bg-amber-600 text-amber-400 hover:text-slate-950 rounded-xl text-[11px] font-bold transition flex items-center gap-1 border border-amber-500/20">
+                                                            <Wand2 className="w-3 h-3" />
+                                                            توليد مستند
+                                                        </button>
+                                                    }
+                                                />
+
                                                 <button onClick={() => openEditRowModal(row)} className="px-3 py-1.5 bg-slate-950 hover:bg-slate-800 text-blue-400 rounded-xl text-[11px] font-bold transition">تعديل</button>
                                                 <button onClick={() => handleDeleteRow(row.id)} className="p-1.5 bg-slate-950 hover:bg-red-950 text-red-400 rounded-xl transition"><Trash2 className="w-3.5 h-3.5" /></button>
                                             </div>
@@ -1389,6 +1402,17 @@ export default function DynamicSectionPage() {
                         </div>
 
                         <div className="flex justify-end gap-2 border-t border-slate-800 pt-4">
+                            {/* 🤖 إضافة زر توليد مستند ذكي لكامل الجدول */}
+                            <GlobalDocumentGenerator
+                                activeTable={activeTable}
+                                filteredRows={filteredRows}
+                                triggerButton={
+                                    <button className="bg-slate-950 text-amber-500 border border-amber-500/30 hover:bg-amber-600 hover:text-slate-950 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg">
+                                        <Wand2 className="w-4 h-4" />
+                                        توليد مستند شامل للجدول
+                                    </button>
+                                }
+                            />
                             <button onClick={() => setIsSettingsModalOpen(false)} className="bg-slate-950 border border-slate-800 px-4 py-2 rounded-xl text-xs text-slate-400">إلغاء</button>
                             <button onClick={handleSaveChangesStructure} className="bg-amber-600 hover:bg-amber-500 text-slate-950 px-5 py-2 rounded-xl text-xs font-black"><Save className="w-4 h-4" /> حفظ التغييرات الهيكلية</button>
                         </div>
