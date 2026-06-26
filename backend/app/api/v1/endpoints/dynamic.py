@@ -60,6 +60,9 @@ async def update_table_structure(table_id: int, updated_data: Dict[str, Any], db
         db_table.columns_definition = updated_data["columns_definition"]
     if "view_mode" in updated_data:
         db_table.view_mode = updated_data["view_mode"]
+
+    if "calendar_mapping" in updated_data:
+        db_table.calendar_mapping = updated_data["calendar_mapping"]
     
     await db.commit()
     await db.refresh(db_table)

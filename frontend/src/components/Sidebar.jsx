@@ -161,7 +161,7 @@ import {
     ClipboardList, 
     Hourglass,
     Crown,
-    FolderOpen
+    FolderOpen,
 } from 'lucide-react';
 
 export default function Sidebar() {

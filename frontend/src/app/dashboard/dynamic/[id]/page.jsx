@@ -563,14 +563,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { dynamicService } from '@/services/dynamicService';
-import { Plus, Table, LayoutGrid, FileText, Save, Trash2, Settings, X, Link, Paperclip, ChevronDown, ListPlus, Search, Filter, RefreshCw, ExternalLink, Loader2 } from 'lucide-react';
+import { Plus, Table, LayoutGrid, FileText, Save, Trash2, Settings, X, Link, Paperclip, ChevronDown, ListPlus, Search, Filter, RefreshCw, ExternalLink, Loader2, Calendar } from 'lucide-react';
 
 export default function DynamicSectionPage() {
     const { id: sectionId } = useParams();
     const [tables, setTables] = useState([]);
     const [activeTable, setActiveTable] = useState(null);
     const [rows, setRows] = useState([]);
-    const [filteredRows, setFilteredRows] = useState([]); 
+    const [filteredRows, setFilteredRows] = useState([]);
     const [viewMode, setViewMode] = useState('table');
 
     // مخزن لبيانات الجداول الأخرى لإدارة العلاقات الذكية
@@ -583,14 +583,14 @@ export default function DynamicSectionPage() {
     const [isRowModalOpen, setIsRowModalOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
-    const [editingRow, setEditingRow] = useState(null); 
+    const [editingRow, setEditingRow] = useState(null);
     const [rowData, setRowData] = useState({});
 
     // إدارة الأعمدة وهيكل الجدول
     const [manageColumns, setManageColumns] = useState([]);
     const [newColumnName, setNewColumnName] = useState('');
     const [newColumnType, setNewColumnType] = useState('text');
-    
+
     // إعدادات الحقول المتقدمة
     const [dropdownOptions, setDropdownOptions] = useState([]);
     const [newOptionInput, setNewOptionInput] = useState('');
@@ -603,7 +603,7 @@ export default function DynamicSectionPage() {
     // حالات محرك البحث والفلترة الذكي
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedFilterColumn, setSelectedFilterColumn] = useState('');
-    const [filterOperator, setFilterOperator] = useState('contains'); 
+    const [filterOperator, setFilterOperator] = useState('contains');
     const [filterValue, setFilterValue] = useState('');
     const [filterDateStart, setFilterDateStart] = useState('');
     const [filterDateEnd, setFilterDateEnd] = useState('');
@@ -624,7 +624,7 @@ export default function DynamicSectionPage() {
         if (searchTerm.trim() !== '') {
             const term = searchTerm.toLowerCase();
             result = result.filter(row => {
-                return Object.values(row.cells_data).some(val => 
+                return Object.values(row.cells_data).some(val =>
                     String(val).toLowerCase().includes(term)
                 );
             });
@@ -632,16 +632,16 @@ export default function DynamicSectionPage() {
 
         if (selectedFilterColumn) {
             const column = activeTable?.columns_definition.find(c => c.id === selectedFilterColumn);
-            
+
             if (column) {
                 result = result.filter(row => {
                     const cellValue = row.cells_data[selectedFilterColumn];
-                    
+
                     if (column.type === 'text' || column.type === 'dropdown' || column.type === 'relation' || column.type === 'attachment') {
                         if (!filterValue) return true;
                         return String(cellValue || '').toLowerCase().includes(String(filterValue).toLowerCase());
                     }
-                    
+
                     if (column.type === 'number') {
                         if (!filterValue) return true;
                         const numCell = Number(cellValue || 0);
@@ -654,8 +654,8 @@ export default function DynamicSectionPage() {
                     if (column.type === 'date') {
                         if (!filterDateStart && !filterDateEnd) return true;
                         const cellDate = new Date(cellValue);
-                        if (isNaN(cellDate.getTime())) return false; 
-                        
+                        if (isNaN(cellDate.getTime())) return false;
+
                         if (filterDateStart && filterDateEnd) {
                             return cellDate >= new Date(filterDateStart) && cellDate <= new Date(filterDateEnd);
                         }
@@ -699,7 +699,7 @@ export default function DynamicSectionPage() {
 
     const loadRequiredRelations = async (currentTable, allTables) => {
         const relationCols = currentTable.columns_definition.filter(col => col.type === 'relation' && col.relatedTableId);
-        
+
         const updatedMap = { ...relationRowsMap };
         for (const col of relationCols) {
             if (!updatedMap[col.relatedTableId]) {
@@ -740,11 +740,11 @@ export default function DynamicSectionPage() {
         try {
             // نتحقق من وجود الخدمة المخصصة للرفع في دالة الـ service لديك
             // إذا لم تكن موجودة، يمكنك استخدام axios أو fetch مباشرة هنا لإرسال الـ FormData
-            const response = await dynamicService.uploadAttachment(file); 
-            
+            const response = await dynamicService.uploadAttachment(file);
+
             // نفترض أن السيرفر يعيد كائن يحتوي على رابط الملف واسمه الأصلي كالتالي:
             // response = { url: "https://api.lawfirm.os/uploads/file.pdf", name: "الملف.pdf" }
-            
+
             // سنخزن كائن مشفر نصياً أو مجرد الرابط المباشر في خلايا السجل
             setRowData(prev => ({
                 ...prev,
@@ -761,14 +761,14 @@ export default function DynamicSectionPage() {
     // توابع السحب والإفلات لترتيب الحقول
     const handleDragStart = (index) => setDraggedColIndex(index);
     const handleDragOver = (e, index) => {
-        e.preventDefault(); 
+        e.preventDefault();
         if (draggedColIndex === null || draggedColIndex === index) return;
         const updated = [...manageColumns];
         const draggedItem = updated[draggedColIndex];
         updated.splice(draggedColIndex, 1);
         updated.splice(index, 0, draggedItem);
-        setDraggedColIndex(index); 
-        setManageColumns(updated); 
+        setDraggedColIndex(index);
+        setManageColumns(updated);
     };
     const handleDragEnd = () => setDraggedColIndex(null);
 
@@ -826,7 +826,7 @@ export default function DynamicSectionPage() {
 
     const handleAddColumnStructure = () => {
         if (!newColumnName.trim()) return;
-        
+
         const newCol = {
             id: `col_${Date.now()}`,
             name: newColumnName.trim(),
@@ -834,7 +834,7 @@ export default function DynamicSectionPage() {
             options: newColumnType === 'dropdown' ? dropdownOptions : undefined,
             relatedTableId: newColumnType === 'relation' ? selectedRelationTableId : undefined
         };
-        
+
         setManageColumns([...manageColumns, newCol]);
         setNewColumnName('');
         setDropdownOptions([]);
@@ -850,7 +850,7 @@ export default function DynamicSectionPage() {
             await dynamicService.updateTable(activeTable.id, activeTable.name, manageColumns, viewMode);
             setIsSettingsModalOpen(false);
             alert("تم تحديث هيكل الجدول بنجاح!");
-            loadSectionContent(); 
+            loadSectionContent();
         } catch (error) {
             console.error("خطأ أثناء تحديث الهيكل:", error);
         }
@@ -869,7 +869,7 @@ export default function DynamicSectionPage() {
         } catch (error) {
             console.error("خطأ التعديل الفوري:", error);
         } finally {
-            setEditingCell(null); 
+            setEditingCell(null);
         }
     };
 
@@ -927,6 +927,7 @@ export default function DynamicSectionPage() {
                                 <button onClick={() => setViewMode('table')} className={`p-1.5 rounded-md ${viewMode === 'table' ? 'bg-slate-800 text-amber-500' : 'text-slate-500'}`}><Table className="w-4 h-4" /></button>
                                 <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-md ${viewMode === 'grid' ? 'bg-slate-800 text-amber-500' : 'text-slate-500'}`}><LayoutGrid className="w-4 h-4" /></button>
                                 <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-md ${viewMode === 'list' ? 'bg-slate-800 text-amber-500' : 'text-slate-500'}`}><FileText className="w-4 h-4" /></button>
+                                <button onClick={() => setViewMode('calendar')} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${viewMode === 'calendar' ? 'bg-amber-600 text-slate-950 shadow-lg font-black' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'}`}><Calendar className="w-3.5 h-3.5" /></button>
                             </div>
                             <button onClick={openSettingsModal} className="bg-slate-950 border border-slate-800 hover:bg-slate-850 text-slate-400 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5"><Settings className="w-4 h-4" /> هيكلة الحقول المتقدمة</button>
                             <button onClick={openAddRowModal} className="bg-amber-600 hover:bg-amber-500 text-slate-950 text-xs font-black px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-lg"><Plus className="w-4 h-4" /> إضافة سجل جديد</button>
@@ -939,9 +940,9 @@ export default function DynamicSectionPage() {
                             <span className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-500">
                                 <Search className="w-3.5 h-3.5" />
                             </span>
-                            <input 
-                                type="text" 
-                                placeholder="بحث شامل في كل الحقول والمستندات..." 
+                            <input
+                                type="text"
+                                placeholder="بحث شامل في كل الحقول والمستندات..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2 pr-9 pl-3 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500/50"
@@ -953,9 +954,9 @@ export default function DynamicSectionPage() {
                                 <Filter className="w-3.5 h-3.5 text-amber-500" />
                                 <span>تصفية بحسب:</span>
                             </div>
-                            
-                            <select 
-                                value={selectedFilterColumn} 
+
+                            <select
+                                value={selectedFilterColumn}
                                 onChange={(e) => { setSelectedFilterColumn(e.target.value); setFilterValue(''); }}
                                 className="bg-slate-900 border border-slate-800 rounded-xl p-2 text-xs text-slate-300 focus:outline-none"
                             >
@@ -968,8 +969,8 @@ export default function DynamicSectionPage() {
                             {selectedFilterColumn && activeFilterColumnObject && (
                                 <div className="flex gap-1.5 items-center w-full">
                                     {activeFilterColumnObject.type === 'number' && (
-                                        <select 
-                                            value={filterOperator} 
+                                        <select
+                                            value={filterOperator}
                                             onChange={(e) => setFilterOperator(e.target.value)}
                                             className="bg-slate-900 border border-slate-800 rounded-xl p-2 text-xs text-amber-500 font-bold focus:outline-none"
                                         >
@@ -986,8 +987,8 @@ export default function DynamicSectionPage() {
                                             <input type="date" value={filterDateEnd} onChange={(e) => setFilterDateEnd(e.target.value)} className="bg-slate-900 border border-slate-800 rounded-xl p-1.5 text-xs text-slate-300 max-w-[130px]" />
                                         </div>
                                     ) : activeFilterColumnObject.type === 'dropdown' ? (
-                                        <select 
-                                            value={filterValue} 
+                                        <select
+                                            value={filterValue}
                                             onChange={(e) => setFilterValue(e.target.value)}
                                             className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2 text-xs text-amber-400"
                                         >
@@ -995,9 +996,9 @@ export default function DynamicSectionPage() {
                                             {activeFilterColumnObject.options?.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
                                         </select>
                                     ) : (
-                                        <input 
-                                            type="text" 
-                                            placeholder="اكتب قيمة التصفية..." 
+                                        <input
+                                            type="text"
+                                            placeholder="اكتب قيمة التصفية..."
                                             value={filterValue}
                                             onChange={(e) => setFilterValue(e.target.value)}
                                             className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2 text-xs text-slate-200"
@@ -1039,7 +1040,7 @@ export default function DynamicSectionPage() {
                                                     const cellValue = row.cells_data[col.id] || "";
 
                                                     return (
-                                                        <td key={col.id} className="p-4 font-medium min-w-[150px]" onDoubleClick={() => { if(col.type !== 'attachment') { setEditingCell({ rowId: row.id, colKey: col.id }); setEditValue(cellValue); } }}>
+                                                        <td key={col.id} className="p-4 font-medium min-w-[150px]" onDoubleClick={() => { if (col.type !== 'attachment') { setEditingCell({ rowId: row.id, colKey: col.id }); setEditValue(cellValue); } }}>
                                                             {isEditing ? (
                                                                 col.type === 'dropdown' ? (
                                                                     <select value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={() => handleCellBlur(row.id, col.id, cellValue)} className="w-full bg-slate-950 border border-amber-500 text-xs text-amber-400 p-1 rounded-xl">
@@ -1186,6 +1187,72 @@ export default function DynamicSectionPage() {
                 </div>
             )}
 
+            {/* 📅 4. نمط التقويم القانوني الديناميكي (Calendar View) */}
+            {viewMode === 'calendar' && (
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
+
+                    {/* أيام الأسبوع الثابتة كـ Header للتقويم */}
+                    <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-500 mb-2">
+                        <div>الأحد</div><div>الإثنين</div><div>الثلاثاء</div><div>الأربعاء</div><div>الخميس</div><div>الجمعة</div><div>السبت</div>
+                    </div>
+
+                    {/* عرض المواعيد والجلسات مرتبة زمنياً بناءً على اختيار المحامي */}
+                    <div className="space-y-2 mt-4">
+                        {(() => {
+                            {/* 🔗 استخراج معرفات الحقول المربوطة من الـ Backend */ }
+                            const dateFieldId = activeTable?.calendar_mapping?.date_field;
+                            const titleFieldId = activeTable?.calendar_mapping?.title_field;
+                            const statusFieldId = activeTable?.calendar_mapping?.status_field; // اختياري في حال أضفت ربط للحالة لاحقاً
+
+                            {/* لو لم يقم المحامي بربط الحقول بعد، نضع حقول افتراضية كـ Fallback لحماية الكود */ }
+                            const finalDateFieldId = dateFieldId || activeTable.columns_definition.find(c => c.type === 'date')?.id;
+                            const finalTitleFieldId = titleFieldId || activeTable.columns_definition[0]?.id;
+                            const finalStatusFieldId = statusFieldId || activeTable.columns_definition.find(c => c.type === 'dropdown')?.id;
+
+                            return filteredRows
+                                .filter(row => {
+                                    // التحقق من وجود قيمة داخل حقل التاريخ المربوط
+                                    return finalDateFieldId && !!row.cells_data[finalDateFieldId];
+                                })
+                                .sort((a, b) => {
+                                    // ترتيب المواعيد من الأقدم إلى الأحدث أو العكس
+                                    return new Date(a.cells_data[finalDateFieldId]) - new Date(b.cells_data[finalDateFieldId]);
+                                })
+                                .map(row => {
+                                    return (
+                                        <div key={row.id} className="flex justify-between items-center bg-slate-950 p-3 rounded-lg border border-slate-850 hover:border-amber-500/40 transition">
+                                            <div className="flex items-center gap-3">
+                                                {/* عرض التاريخ الديناميكي المربوط */}
+                                                <div className="text-amber-500 font-mono text-xs bg-slate-900 px-2.5 py-1 rounded border border-slate-800">
+                                                    {row.cells_data[finalDateFieldId]}
+                                                </div>
+                                                {/* عرض العنوان الديناميكي المربوط (مثل اسم الدعوى) */}
+                                                <span className="text-xs font-bold text-slate-200">
+                                                    {row.cells_data[finalTitleFieldId] || 'بدون عنوان'}
+                                                </span>
+                                            </div>
+
+                                            <div className="flex items-center gap-2">
+                                                {/* عرض حالة الموعد إذا كانت موجودة ومربوطة */}
+                                                {finalStatusFieldId && row.cells_data[finalStatusFieldId] && (
+                                                    <span className="text-[10px] bg-slate-900 text-slate-400 px-2 py-0.5 rounded border border-slate-800">
+                                                        {row.cells_data[finalStatusFieldId]}
+                                                    </span>
+                                                )}
+                                                <button
+                                                    onClick={() => openEditRowModal(row)}
+                                                    className="text-[11px] text-blue-400 hover:underline px-2 py-1 rounded hover:bg-blue-500/10 transition"
+                                                >
+                                                    تعديل
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                });
+                        })()}
+                    </div>
+                </div>
+            )}
             {/* 📥 المودال: إضافة وتعديل سجل */}
             {isRowModalOpen && activeTable && (
                 <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -1206,7 +1273,7 @@ export default function DynamicSectionPage() {
                                     ) : col.type === 'attachment' ? (
                                         <div className="w-full bg-slate-950 border border-dashed border-slate-800 rounded-xl p-4 text-center relative hover:border-emerald-500/50 transition">
                                             <input type="file" className="hidden" id={`file_${col.id}`} onChange={(e) => handleFileUpload(e, col.id)} disabled={uploadingField === col.id} />
-                                            
+
                                             {uploadingField === col.id ? (
                                                 <div className="flex flex-col items-center justify-center gap-2 py-2">
                                                     <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />

@@ -27,6 +27,8 @@ class CustomTable(Base):
     # مثال: [{"id": "c1", "name": "اسم الموكل", "type": "text"}, {"id": "c2", "name": "المبلغ", "type": "number"}]
     columns_definition = Column(JSON, nullable=False, default=list)
 
+    calendar_mapping = Column(JSON, nullable=True, default=dict)
+
     section = relationship("CustomSection", back_populates="tables")
     rows = relationship("CustomRow", back_populates="table", cascade="all, delete-orphan")
 
