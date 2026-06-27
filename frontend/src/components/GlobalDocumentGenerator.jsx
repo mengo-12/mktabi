@@ -12,15 +12,11 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
     const [isSaving, setIsSaving] = useState(false);
     const [officeSettings, setOfficeSettings] = useState(null);
 
-    // استخراج المعطيات بناءً على الهيكل الممرر من جدولك الديناميكي
     const tableId = activeTable?.id;
     const columnsDefinition = activeTable?.columns_definition || [];
-
-    // إذا تم تمرير سجل محدد (زر السجل)، نأخذ بياناته. إذا تم تمرير جدول كامل (زر المودال الشامل)، نأخذ أول سجل أو نهيئ الهيكل
     const activeRowData = selectedRow?.cells_data || filteredRows?.[0]?.cells_data || {};
     const rowId = selectedRow?.id || 0;
 
-    // 1. جلب القوالب وإعدادات الهوية البصرية للمكتب فور فتح المودال
     useEffect(() => {
         if (isOpen) {
             fetchTemplates();
@@ -30,7 +26,6 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
 
     const fetchTemplates = async () => {
         try {
-            // 👈 كتابة رابط الباكيند كاملاً هنا
             const res = await fetch('http://127.0.0.1:8000/api/v1/office-settings/templates');
             const data = await res.json();
             if (Array.isArray(data)) setTemplates(data);
@@ -41,7 +36,6 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
 
     const fetchOfficeSettings = async () => {
         try {
-            // 👈 كتابة رابط الباكيند كاملاً هنا
             const res = await fetch('http://127.0.0.1:8000/api/v1/office-settings/');
             const data = await res.json();
             setOfficeSettings(data);
@@ -49,45 +43,59 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
             console.error("خطأ في جلب إعدادات المكتب:", error);
         }
     };
-    // 2. محرك الدمج الذكي الخارق: يستبدل المتغيرات ببيانات الصفحة الحالية أياً كانت
+
+    // 🔥 دالة سحرية جديدة: تحول عناصر Canva المحفوظة في الإعدادات إلى HTML مرئي ومطابق تماماً للتصميم
+    const renderCanvaToHTML = () => {
+        const elements = officeSettings?.header_data?.canvas_elements || [];
+        if (elements.length === 0) return '';
+
+        return `
+            <div style="position: relative; width: 100%; height: 140px; font-family: 'Cairo', sans-serif; direction: rtl; margin-bottom: 20px;">
+                ${elements.map(el => {
+                    const widthStr = typeof el.width === 'number' ? `${el.width}px` : (el.type === 'line' ? `${el.width}%` : el.width);
+                    const style = `position: absolute; right: ${el.x}%; top: ${el.y}%; width: ${widthStr};`;
+
+                    if (el.type === 'text') {
+                        return `<div style="${style} font-size: ${el.fontSize}px; font-weight: ${el.fontWeight}; color: ${el.color || '#000'}; text-align: right; white-space: pre-wrap;">${el.content}</div>`;
+                    }
+                    if (el.type === 'image') {
+                        return `<div style="${style}"><img src="${el.content}" style="width: 100%; height: auto; object-fit: contain;"/></div>`;
+                    }
+                    if (el.type === 'line') {
+                        return `<div style="${style} background-color: ${el.color || '#f59e0b'}; height: ${el.height || 2}px; border-radius: 2px;"></div>`;
+                    }
+                    return '';
+                }).join('')}
+            </div>
+        `;
+    };
+
     const handleSelectTemplate = (template) => {
         setSelectedTemplate(template);
-
-        // جلب حقل العنونة الأساسي (مثل الاسم أو العنوان) لتمييز الملف
         const primaryColumnId = columnsDefinition[0]?.id;
         const primaryValue = activeRowData[primaryColumnId] || 'سجل';
         setDocumentTitle(`${template.title} - ${primaryValue}`);
 
         let content = template.content_body;
-
-        // المرور على كافة حقول الجدول الديناميكي واستبدال الرموز في القالب بالقيم الحقيقية
         columnsDefinition.forEach(col => {
-            const placeholder = `{{${col.name}}}`; // يبحث عن {{اسم_الموكل}} أو {{رقم_القضية}} إلخ
+            const placeholder = `{{${col.name}}}`;
             const actualValue = activeRowData[col.id] || `[لم يحدد ${col.name}]`;
-
-            // استبدال شامل لكل التكرارات داخل المتن
             content = content.replaceAll(placeholder, actualValue);
         });
-
         setMergedContent(content);
     };
 
-    // 3. حفظ المستند النهائي في أرشيف هذه الصفحة بالتحديد
     const handleSaveToArchive = async () => {
         if (!documentTitle || !mergedContent) return;
         setIsSaving(true);
 
+        // 👑 التعديل الجوهري هنا: قمنا بحقن ترويسة Canva الديناميكية الممررة من دالتنا بدلاً من النصوص القديمة الثابتة
         const finalHTMLStructure = `
-            <div style="font-family: 'Cairo', sans-serif; direction: rtl; text-align: right; padding: 20px; color: #1e293b;">
-                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid ${officeSettings?.primary_color || '#f59e0b'}; padding-bottom: 15px; margin-bottom: 30px;">
-                    <div>
-                        <h1 style="margin: 0; font-size: 20px; color: #0f172a;">${officeSettings?.header_data?.office_name_ar || 'مكتب المحاماة الرقمي'}</h1>
-                        <p style="margin: 5px 0 0 0; font-size: 12px; color: #64748b;">الرقم الضريبي: ${officeSettings?.header_data?.tax_number || '---'}</p>
-                    </div>
-                    ${officeSettings?.logo_url ? `<img src="${officeSettings.logo_url}" alt="Logo" style="max-height: 65px;"/>` : ''}
-                </div>
+            <div style="font-family: 'Cairo', sans-serif; direction: rtl; text-align: right; padding: 40px; color: #1e293b; background: white;">
                 
-                <div style="font-size: 14px; line-height: 1.8; white-space: pre-line; min-height: 400px;">
+                ${renderCanvaToHTML()}
+                
+                <div style="font-size: 14px; line-height: 1.8; white-space: pre-line; min-height: 450px; margin-top: 10px;">
                     ${mergedContent}
                 </div>
 
@@ -115,7 +123,7 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
             });
 
             if (res.ok) {
-                alert("تم توليد المستند وحفظه في أرشيف هذا السجل بنجاح! 💾📂");
+                alert("تم توليد المستند وحفظه في أرشيف هذا السجل بنجاح مدمجاً بهوية Canva! 💾📂");
                 setIsOpen(false);
             }
         } catch (error) {
@@ -127,20 +135,18 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
 
     return (
         <>
-            {/* 1. حقن حدث الـ Click داخل الزر الممرر لكي يقوم بفتح المودال عند الضغط عليه */}
             {triggerButton && React.cloneElement(triggerButton, {
                 onClick: (e) => {
-                    e.stopPropagation(); // منع انتشار الحدث
+                    e.stopPropagation();
                     setIsOpen(true);
                 }
             })}
 
-            {/* 2. المودال التوليدي (لا يظهر إلا عند تحول الحالة إلى true) */}
             {isOpen && (
                 <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" dir="rtl">
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-6xl h-[85vh] flex flex-col shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-6xl h-[85vh] flex flex-col shadow-2xl">
 
-                        {/* الرأس (Header) */}
+                        {/* الرأس */}
                         <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950/40 rounded-t-2xl">
                             <div className="flex items-center gap-2">
                                 <Sparkles className="w-5 h-5 text-amber-500 animate-pulse" />
@@ -154,10 +160,10 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
                             </button>
                         </div>
 
-                        {/* الجسد (Body) */}
+                        {/* الجسد */}
                         <div className="flex-1 grid grid-cols-1 md:grid-cols-4 overflow-hidden">
 
-                            {/* القائمة اليمنى: اختيار القوالب */}
+                            {/* القائمة اليمنى */}
                             <div className="md:col-span-1 border-l border-slate-800 p-4 overflow-y-auto bg-slate-950/20">
                                 <span className="text-[11px] font-bold text-slate-400 block mb-3 uppercase tracking-wider">اختر قالب التصميم</span>
                                 <div className="space-y-2">
@@ -168,7 +174,7 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
                                             className={`w-full text-right p-3 rounded-xl border text-xs flex flex-col gap-1 transition ${selectedTemplate?.id === template.id
                                                 ? 'bg-amber-500/10 border-amber-500 text-amber-500'
                                                 : 'bg-slate-950 border-slate-850 text-slate-300 hover:border-slate-700'
-                                                }`}
+                                            }`}
                                         >
                                             <span className="font-bold flex items-center gap-1.5">
                                                 <FileText className="w-3.5 h-3.5" />
@@ -180,7 +186,7 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
                                 </div>
                             </div>
 
-                            {/* منطقة المعاينة والتحكم الأيسر */}
+                            {/* منطقة المعاينة */}
                             <div className="md:col-span-3 flex flex-col overflow-hidden p-6 bg-slate-950/40">
                                 {selectedTemplate ? (
                                     <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
@@ -194,21 +200,16 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
                                             />
                                         </div>
 
-                                        <div className="flex-1 bg-white rounded-xl p-6 overflow-y-auto shadow-inner text-slate-900 border border-slate-200">
-                                            {/* ترويسة محاكاة الورقة الرسمية للمعاينة */}
-                                            <div className="flex justify-between items-center border-b-2 pb-3 mb-6" style={{ borderColor: officeSettings?.primary_color || '#f59e0b' }}>
-                                                <div>
-                                                    <h4 className="font-bold text-md m-0">{officeSettings?.header_data?.office_name_ar || 'مكتب المحاماة المتميز'}</h4>
-                                                    <p className="text-[11px] text-slate-500 m-0 mt-1">الرقم الضريبي: {officeSettings?.header_data?.tax_number || '---'}</p>
-                                                </div>
-                                                {officeSettings?.logo_url && <img src={officeSettings.logo_url} alt="شعار" className="max-h-12" />}
-                                            </div>
+                                        <div className="flex-1 bg-white rounded-xl p-8 overflow-y-auto shadow-inner text-slate-900 border border-slate-200">
+                                            
+                                            {/* 👑 ترويسة محاكاة الورقة الرسمية للمعاينة الحية المبنية على تصميم Canva المحفوظ */}
+                                            <div dangerouslySetInnerHTML={{ __html: renderCanvaToHTML() }} />
 
                                             {/* محتوى الورقة */}
                                             <textarea
                                                 value={mergedContent}
                                                 onChange={(e) => setMergedContent(e.target.value)}
-                                                className="w-full h-[32vh] border-0 text-slate-800 text-xs font-sans leading-relaxed focus:ring-0 outline-none resize-none p-0 bg-transparent"
+                                                className="w-full h-[32vh] border-0 text-slate-800 text-sm font-sans leading-relaxed focus:ring-0 outline-none resize-none p-0 bg-transparent mt-4"
                                                 style={{ whiteSpace: 'pre-line' }}
                                             />
 
