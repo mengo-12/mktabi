@@ -15,7 +15,7 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
     // استخراج المعطيات بناءً على الهيكل الممرر من جدولك الديناميكي
     const tableId = activeTable?.id;
     const columnsDefinition = activeTable?.columns_definition || [];
-    
+
     // إذا تم تمرير سجل محدد (زر السجل)، نأخذ بياناته. إذا تم تمرير جدول كامل (زر المودال الشامل)، نأخذ أول سجل أو نهيئ الهيكل
     const activeRowData = selectedRow?.cells_data || filteredRows?.[0]?.cells_data || {};
     const rowId = selectedRow?.id || 0;
@@ -30,7 +30,8 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
 
     const fetchTemplates = async () => {
         try {
-            const res = await fetch('/api/v1/office-settings/templates');
+            // 👈 كتابة رابط الباكيند كاملاً هنا
+            const res = await fetch('http://127.0.0.1:8000/api/v1/office-settings/templates');
             const data = await res.json();
             if (Array.isArray(data)) setTemplates(data);
         } catch (error) {
@@ -40,30 +41,30 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
 
     const fetchOfficeSettings = async () => {
         try {
-            const res = await fetch('/api/v1/office-settings/');
+            // 👈 كتابة رابط الباكيند كاملاً هنا
+            const res = await fetch('http://127.0.0.1:8000/api/v1/office-settings/');
             const data = await res.json();
             setOfficeSettings(data);
         } catch (error) {
             console.error("خطأ في جلب إعدادات المكتب:", error);
         }
     };
-
     // 2. محرك الدمج الذكي الخارق: يستبدل المتغيرات ببيانات الصفحة الحالية أياً كانت
     const handleSelectTemplate = (template) => {
         setSelectedTemplate(template);
-        
+
         // جلب حقل العنونة الأساسي (مثل الاسم أو العنوان) لتمييز الملف
         const primaryColumnId = columnsDefinition[0]?.id;
         const primaryValue = activeRowData[primaryColumnId] || 'سجل';
         setDocumentTitle(`${template.title} - ${primaryValue}`);
-        
+
         let content = template.content_body;
 
         // المرور على كافة حقول الجدول الديناميكي واستبدال الرموز في القالب بالقيم الحقيقية
         columnsDefinition.forEach(col => {
             const placeholder = `{{${col.name}}}`; // يبحث عن {{اسم_الموكل}} أو {{رقم_القضية}} إلخ
             const actualValue = activeRowData[col.id] || `[لم يحدد ${col.name}]`;
-            
+
             // استبدال شامل لكل التكرارات داخل المتن
             content = content.replaceAll(placeholder, actualValue);
         });
@@ -138,7 +139,7 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
             {isOpen && (
                 <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" dir="rtl">
                     <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-6xl h-[85vh] flex flex-col shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-                        
+
                         {/* الرأس (Header) */}
                         <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950/40 rounded-t-2xl">
                             <div className="flex items-center gap-2">
@@ -155,7 +156,7 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
 
                         {/* الجسد (Body) */}
                         <div className="flex-1 grid grid-cols-1 md:grid-cols-4 overflow-hidden">
-                            
+
                             {/* القائمة اليمنى: اختيار القوالب */}
                             <div className="md:col-span-1 border-l border-slate-800 p-4 overflow-y-auto bg-slate-950/20">
                                 <span className="text-[11px] font-bold text-slate-400 block mb-3 uppercase tracking-wider">اختر قالب التصميم</span>
@@ -164,11 +165,10 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
                                         <button
                                             key={template.id}
                                             onClick={() => handleSelectTemplate(template)}
-                                            className={`w-full text-right p-3 rounded-xl border text-xs flex flex-col gap-1 transition ${
-                                                selectedTemplate?.id === template.id
-                                                    ? 'bg-amber-500/10 border-amber-500 text-amber-500'
-                                                    : 'bg-slate-950 border-slate-850 text-slate-300 hover:border-slate-700'
-                                            }`}
+                                            className={`w-full text-right p-3 rounded-xl border text-xs flex flex-col gap-1 transition ${selectedTemplate?.id === template.id
+                                                ? 'bg-amber-500/10 border-amber-500 text-amber-500'
+                                                : 'bg-slate-950 border-slate-850 text-slate-300 hover:border-slate-700'
+                                                }`}
                                         >
                                             <span className="font-bold flex items-center gap-1.5">
                                                 <FileText className="w-3.5 h-3.5" />
@@ -186,7 +186,7 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
                                     <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
                                         <div className="flex flex-col gap-2">
                                             <label className="text-xs font-bold text-slate-400">اسم المستند النهائي المؤرشف</label>
-                                            <input 
+                                            <input
                                                 type="text"
                                                 value={documentTitle}
                                                 onChange={(e) => setDocumentTitle(e.target.value)}
@@ -205,7 +205,7 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
                                             </div>
 
                                             {/* محتوى الورقة */}
-                                            <textarea 
+                                            <textarea
                                                 value={mergedContent}
                                                 onChange={(e) => setMergedContent(e.target.value)}
                                                 className="w-full h-[32vh] border-0 text-slate-800 text-xs font-sans leading-relaxed focus:ring-0 outline-none resize-none p-0 bg-transparent"

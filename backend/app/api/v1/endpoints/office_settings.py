@@ -88,3 +88,19 @@ async def delete_generated_document(document_id: int, db: AsyncSession = Depends
     await db.delete(db_doc)
     await db.commit()
     return {"status": "success", "message": "تم حذف المستند من الأرشيف بنجاح"}
+
+# أضف هذا المسار في نهاية ملف office_settings.py ليلبي طلب الـ /api/v1/office-settings/
+@router.get("/")
+async def get_default_office_settings():
+    return {
+        "primary_color": "#f59e0b",
+        "logo_url": "",
+        "header_data": {
+            "office_name_ar": "مكتب المحاماة الرقمي",
+            "tax_number": "300123456700003"
+        },
+        "footer_data": {
+            "address": "المملكة العربية السعودية",
+            "phone": "0500000000"
+        }
+    }
