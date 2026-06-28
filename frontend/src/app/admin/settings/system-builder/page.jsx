@@ -542,6 +542,7 @@ export default function SystemBuilderPage() {
     const [tableName, setTableName] = useState('');
     const [viewMode, setViewMode] = useState('table'); // table, grid, list
     const [columns, setColumns] = useState([{ id: 'c1', name: '', type: 'text' }]);
+    const [editingTemplateId, setEditingTemplateId] = useState(null);
 
     const [templates, setTemplates] = useState([]);
     const [templateTitle, setTemplateTitle] = useState('');
@@ -549,6 +550,7 @@ export default function SystemBuilderPage() {
     const [contentBody, setContentBody] = useState('');
     const [variables, setVariables] = useState([]);
     const [newVar, setNewVar] = useState({ id: '', name: '', type: 'text' });
+    const [editingTableId, setEditingTableId] = useState(null);
 
     // --- حالات التبويب الثاني (نظام تصميم Canva المرئي الحر للتروئيسة) ---
     const [canvasElements, setCanvasElements] = useState([
@@ -674,13 +676,54 @@ export default function SystemBuilderPage() {
     };
 
     const handleSaveTable = async () => {
-        if (!selectedSectionId || !tableName.trim()) return alert("اختر قسماً واسماً للجدول أولاً من القائمة الجانبية");
-        if (dynamicService && typeof dynamicService.createTable === 'function') {
-            await dynamicService.createTable(selectedSectionId, tableName, columns, viewMode);
+        if (!selectedSectionId || !tableName.trim()) {
+            return alert("يرجى اختيار القسم وتحديد اسم الجدول أولاً");
         }
-        alert("تم حفظ وهندسة الهيكل والروابط بنجاح داخل القسم! 🚀");
-        setTableName('');
-        setColumns([{ id: 'c1', name: '', type: 'text' }]);
+
+        try {
+            if (editingTableId) {
+                // 🔄 عملية التحديث (تعديل الهيكل لحل خطأ 422 ديناميكياً)
+                const updatedData = {
+                    name: tableName,
+                    columns_definition: columns,
+                    view_mode: viewMode
+                };
+                await dynamicService.updateTable(editingTableId, tableName, columns, viewMode);
+                alert("تم تحديث هيكل الجدول بنجاح! 🔄");
+            } else {
+                // ➕ عملية إنشاء جدول جديد تماماً
+                await dynamicService.createTable(selectedSectionId, tableName, columns, viewMode);
+                alert("تم إنشاء وتثبيت الجدول الجديد بنجاح! 🚀");
+            }
+
+            // إعادة تهيئة الحقول وتحديث القائمة
+            setTableName('');
+            setColumns([{ id: 'c1', name: '', type: 'text' }]);
+            setEditingTableId(null);
+            loadSections(); // لتحديث الشجرة الجانبية بالأقسام والجداول الجديدة
+        } catch (error) {
+            console.error("خطأ أثناء معالجة الجدول:", error);
+            alert("فشل في حفظ الجدول بالنظام");
+        }
+    };
+
+    const handleDeleteTable = async (tableId) => {
+        if (!confirm('هل أنت متأكد من حذف هذا الجدول وكل الصفوف والبيانات التابعة له نهائياً؟')) return;
+        try {
+            await dynamicService.deleteTable(tableId);
+            alert("تم حذف الجدول من النظام بنجاح! 🗑️");
+
+            // إذا كان الجدول المحذوف هو الذي يتم تعديله حالياً، قم بتصفير الحقول
+            if (editingTableId === tableId) {
+                setTableName('');
+                setColumns([{ id: 'c1', name: '', type: 'text' }]);
+                setEditingTableId(null);
+            }
+            loadSections(); // تحديث القائمة الجانبية
+        } catch (error) {
+            console.error("خطأ أثناء حذف الجدول:", error);
+            alert("فشل في حذف الجدول من السيرفر");
+        }
     };
 
     const handleAddVariable = () => {
@@ -690,13 +733,50 @@ export default function SystemBuilderPage() {
         setNewVar({ id: '', name: '', type: 'text' });
     };
 
-    const handleDeleteTemplate = (id) => {
-        if (!confirm('هل تريد حذف هذا القالب القانوني؟')) return;
-        setTemplates(templates.filter(tmpl => tmpl.id !== id));
+    const handleSelectTableForEdit = (table) => {
+        setEditingTableId(table.id);
+        setTableName(table.name);
+        setColumns(table.columns_definition || [{ id: 'c1', name: '', type: 'text' }]);
+        setViewMode(table.view_mode || 'table');
+    };
+
+    const handleDeleteTemplate = async (id) => {
+        if (!confirm('هل تريد حذف هذا القالب القانوني نهائياً من النظام؟')) return;
+        try {
+            const res = await fetch(`http://127.0.0.1:8000/api/v1/office-settings/templates/${id}`, {
+                method: 'DELETE'
+            });
+            if (res.ok) {
+                alert("تم حذف القالب القانوني بنجاح! 🗑️");
+                if (editingTemplateId === id) {
+                    setTemplateTitle('');
+                    setContentBody('');
+                    setVariables([]);
+                    setEditingTemplateId(null);
+                }
+                loadTemplates(); // تحديث القائمة فوراً
+            } else {
+                alert("فشل حذف القالب من السيرفر");
+            }
+        } catch (error) {
+            console.error("خطأ أثناء حذف القالب:", error);
+        }
+    };
+
+    // عند الضغط على قالب من القائمة لتحميل بياناته للتعديل
+    const handleSelectTemplateForEdit = (tmpl) => {
+        setEditingTemplateId(tmpl.id);
+        setTemplateTitle(tmpl.title);
+        setTemplateType(tmpl.template_type);
+        setContentBody(tmpl.content_body);
+        setVariables(tmpl.variables_meta || []);
     };
 
     const handleSaveTemplate = async () => {
-        if (!templateTitle.trim() || !contentBody.trim()) return alert("اكمل بيانات وعنوان القالب أولاً");
+        if (!templateTitle.trim() || !contentBody.trim()) {
+            return alert("برجاء إدخال عنوان القالب ومحتواه الأساسي أولاً");
+        }
+
         const payload = {
             title: templateTitle,
             template_type: templateType,
@@ -704,21 +784,38 @@ export default function SystemBuilderPage() {
             content_body: contentBody,
             variables_meta: variables
         };
-        const res = await fetch('http://127.0.0.1:8000/api/v1/office-settings/templates', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        if (res.ok) {
-            alert("تم حفظ القالب القانوني بنجاح في النظام! 🎉");
-            setTemplateTitle('');
-            setContentBody('');
-            setVariables([]);
-            loadTemplates();
-        } else {
-            setTemplates([...templates, { id: `tmpl-${Date.now()}`, title: templateTitle, template_type: templateType }]);
-            setTemplateTitle('');
-            setContentBody('');
+
+        try {
+            let res;
+            if (editingTemplateId) {
+                // 🔄 تحديث قالب موجود (المسار 5 في ملف الباك إند لديك)
+                res = await fetch(`http://127.0.0.1:8000/api/v1/office-settings/templates/${editingTemplateId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            } else {
+                // ➕ إنشاء قالب جديد (المسار 2 في ملف الباك إند لديك)
+                res = await fetch('http://127.0.0.1:8000/api/v1/office-settings/templates', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            }
+
+            if (res.ok) {
+                alert(editingTemplateId ? "تم تحديث القالب القانوني بنجاح! 🔄" : "تم حفظ القالب القانوني الجديد وتثبيته! 🎉");
+                // تصفير الاستمارات
+                setTemplateTitle('');
+                setContentBody('');
+                setVariables([]);
+                setEditingTemplateId(null);
+                loadTemplates(); // دالة إعادة جلب القوالب لتحديث واجهة العرض فوراً
+            } else {
+                alert("حدث خطأ أثناء محاولة الحفظ في السيرفر");
+            }
+        } catch (error) {
+            console.error("خطأ أثناء حفظ القالب:", error);
         }
     };
 
@@ -877,11 +974,13 @@ export default function SystemBuilderPage() {
                             <h2 className="text-sm font-semibold mb-3 text-amber-500">📋 القوالب القانونية النشطة بالنظام ({templates.length})</h2>
                             <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                                 {templates.map((tmpl) => (
-                                    <div key={tmpl.id} className="p-2.5 bg-zinc-950 rounded-lg border border-zinc-800 text-xs flex justify-between items-center">
-                                        <span className="text-zinc-300">📄 {tmpl.title}</span>
-                                        <div className="flex gap-2 items-center">
-                                            <span className="bg-zinc-900 text-zinc-500 px-2 py-0.5 rounded text-[10px]">{tmpl.template_type}</span>
-                                            <button onClick={() => handleDeleteTemplate(tmpl.id)} className="text-zinc-500 hover:text-red-500">🗑️</button>
+                                    <div key={tmpl.id} className="flex justify-between items-center p-2 bg-zinc-900 rounded border border-zinc-800">
+                                        <span className="text-zinc-200 text-xs">{tmpl.title}</span>
+                                        <div className="flex gap-2">
+                                            {/* زر اختيار القالب للتعديل */}
+                                            <button onClick={() => handleSelectTemplateForEdit(tmpl)} className="text-zinc-400 hover:text-amber-500 text-xs">✏️</button>
+                                            {/* زر حذف القالب */}
+                                            <button onClick={() => handleDeleteTemplate(tmpl.id)} className="text-zinc-400 hover:text-red-500 text-xs">🗑️</button>
                                         </div>
                                     </div>
                                 ))}
