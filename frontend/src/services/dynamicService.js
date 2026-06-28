@@ -12,6 +12,18 @@ export const dynamicService = {
         return response.data;
     },
 
+    // 🎯 الإضافة الجديدة لتعديل القسم
+    async updateSection(sectionId, title, icon = 'Folder', order = 0) {
+        const response = await apiClient.put(`/dynamic/sections/${sectionId}`, { title, icon, order });
+        return response.data;
+    },
+
+    // 🎯 الإضافة الجديدة لحذف القسم
+    async deleteSection(sectionId) {
+        const response = await apiClient.delete(`/dynamic/sections/${sectionId}`);
+        return response.data;
+    },
+
     // --- خدمات الجداول والأعمدة ---
     async getTablesBySection(sectionId) {
         const response = await apiClient.get(`/dynamic/sections/${sectionId}/tables`);

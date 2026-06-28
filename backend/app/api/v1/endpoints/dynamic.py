@@ -27,6 +27,26 @@ async def get_sections(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(CustomSection).order_by(CustomSection.order))
     return result.scalars().all()
 
+# ✅ مسار تعديل اسم القسم
+@router.put("/sections/{section_id}", response_model=SectionResponse)
+async def update_section(section_id: int, section_data: SectionCreate, db: AsyncSession = Depends(get_db)):
+    db_section = await db.get(CustomSection, section_id)
+    if not db_section:
+        raise HTTPException(status_code=404, detail="القسم المطلوب تعديله غير موجود")
+    db_section.title = section_data.title
+    await db.commit()
+    await db.refresh(db_section)
+    return db_section
+
+@router.delete("/sections/{section_id}", status_code=status.HTTP_200_OK)
+async def delete_section(section_id: int, db: AsyncSession = Depends(get_db)):
+    db_section = await db.get(CustomSection, section_id)
+    if not db_section:
+        raise HTTPException(status_code=404, detail="القسم المطلوب حذفه غير موجود")
+    await db.delete(db_section)
+    await db.commit()
+    return {"status": "success", "message": "تم حذف القسم بنجاح"}
+
 
 # ==================== 2. إدارة الجداول وهيكلة الأعمدة ====================
 
