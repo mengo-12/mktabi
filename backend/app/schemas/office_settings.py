@@ -22,9 +22,10 @@ class CustomTemplateResponse(CustomTemplateBase):
 
 class GeneratedDocumentCreate(BaseModel):
     title: str
-    template_id: Optional[int] = None
+    template_id: int | None = None
     table_id: int
     row_id: int
+    content_body: Optional[str] = ""  # 🎯 أضفنا هذا الحقل لحل مشكلة الـ AttributeError
     final_content: str
     created_by: Optional[str] = None
 

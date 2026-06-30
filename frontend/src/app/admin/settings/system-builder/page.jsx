@@ -770,6 +770,16 @@ export default function SystemBuilderPage() {
         setTemplateType(tmpl.template_type);
         setContentBody(tmpl.content_body);
         setVariables(tmpl.variables_meta || []);
+
+        // 🎯 الحل الجذري: تحديث ورقة الـ Canva لتعكس تصميم القالب المحدد فوراً
+        if (tmpl.visual_design && tmpl.visual_design.canvas_elements) {
+            setCanvasElements(tmpl.visual_design.canvas_elements);
+        } else if (tmpl.visual_design && tmpl.visual_design.header_data?.canvas_elements) {
+            setCanvasElements(tmpl.visual_design.header_data.canvas_elements);
+        } else {
+            // إذا كان القالب يفتقر لتصميم خاص، يرجع للهوية الافتراضية للمكتب
+            loadOfficeSettings();
+        }
     };
 
     const handleSaveTemplate = async () => {
@@ -777,25 +787,28 @@ export default function SystemBuilderPage() {
             return alert("برجاء إدخال عنوان القالب ومحتواه الأساسي أولاً");
         }
 
+        // 🎯 هنا نقوم بحقن عناصر الكانفاس الحالية داخل تصميم القالب
         const payload = {
             title: templateTitle,
             template_type: templateType,
-            visual_design: { font_family: 'Cairo' },
+            visual_design: {
+                font_family: 'Cairo',
+                // نرسل المصفوفة الحالية كاملة ليفهمها الباك إند ويعتمدها لهذا القالب
+                canvas_elements: canvasElements
+            },
             content_body: contentBody,
-            variables_meta: variables
+            variables_meta: Array.isArray(variables) ? variables : []
         };
 
         try {
             let res;
             if (editingTemplateId) {
-                // 🔄 تحديث قالب موجود (المسار 5 في ملف الباك إند لديك)
                 res = await fetch(`http://127.0.0.1:8000/api/v1/office-settings/templates/${editingTemplateId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
             } else {
-                // ➕ إنشاء قالب جديد (المسار 2 في ملف الباك إند لديك)
                 res = await fetch('http://127.0.0.1:8000/api/v1/office-settings/templates', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -804,13 +817,17 @@ export default function SystemBuilderPage() {
             }
 
             if (res.ok) {
-                alert(editingTemplateId ? "تم تحديث القالب القانوني بنجاح! 🔄" : "تم حفظ القالب القانوني الجديد وتثبيته! 🎉");
-                // تصفير الاستمارات
+                alert(editingTemplateId ? "تم تحديث القالب وتصميمه الخاص بنجاح! 🔄" : "تم حفظ القالب وتصميمه الخاص بنجاح! 🎉");
+
+                // تصفير الحقول للوضع الافتراضي
                 setTemplateTitle('');
                 setContentBody('');
                 setVariables([]);
                 setEditingTemplateId(null);
-                loadTemplates(); // دالة إعادة جلب القوالب لتحديث واجهة العرض فوراً
+
+                // العودة لتصميم المكتب الافتراضي بعد الحفظ
+                loadOfficeSettings();
+                loadTemplates();
             } else {
                 alert("حدث خطأ أثناء محاولة الحفظ في السيرفر");
             }
@@ -818,7 +835,6 @@ export default function SystemBuilderPage() {
             console.error("خطأ أثناء حفظ القالب:", error);
         }
     };
-
     // --- دوال تحريك وبناء عناصر لوحة الـ Canva ---
     const addTextElement = () => {
         const newEl = { id: `el-${Date.now()}`, type: 'text', content: 'كتلة نصية جديدة (اضغط لتعديلها)', x: 10, y: 20, fontSize: 13, fontWeight: 'normal', color: '#27272a', width: 220 };
@@ -858,6 +874,8 @@ export default function SystemBuilderPage() {
         setSelectedElementId(el.id);
         setDraggingId(el.id);
         const rect = canvasRef.current.getBoundingClientRect();
+
+        // العودة للحساب من اليسار ليتطابق مع ستايل left الحالي في الكانفاس
         const mouseXPercent = ((e.clientX - rect.left) / rect.width) * 100;
         const mouseYPercent = ((e.clientY - rect.top) / rect.height) * 100;
         setDragOffset({ x: mouseXPercent - el.x, y: mouseYPercent - el.y });
@@ -866,11 +884,14 @@ export default function SystemBuilderPage() {
     const handleCanvasMouseMove = (e) => {
         if (!draggingId) return;
         const rect = canvasRef.current.getBoundingClientRect();
+
+        // الحساب من اليسار بطريقة طبيعية ومباشرة
         let newX = ((e.clientX - rect.left) / rect.width) * 100 - dragOffset.x;
         let newY = ((e.clientY - rect.top) / rect.height) * 100 - dragOffset.y;
 
-        newX = Math.max(0, Math.min(newX, 95));
-        newY = Math.max(0, Math.min(newY, 95));
+        // قيود الحدود
+        newX = Math.max(0, Math.min(newX, 90));
+        newY = Math.max(0, Math.min(newY, 90));
         setCanvasElements(canvasElements.map(el => el.id === draggingId ? { ...el, x: newX, y: newY } : el));
     };
 
@@ -914,6 +935,58 @@ export default function SystemBuilderPage() {
     };
 
     const selectedElement = canvasElements.find(el => el.id === selectedElementId);
+
+    const handleSaveTemplateWithCanvas = async () => {
+        // التأكد من وجود عنوان ومحتوى للقالب أولاً (حتى لا يتم حفظ قالب فارغ)
+        if (!templateTitle || !templateTitle.trim()) {
+            return alert("برجاء إدخال اسم أو عنوان القالب في تبويب البيانات أولاً 📝");
+        }
+
+        // بناء الهيكل (Payload) المرسل للباك إند
+        const payload = {
+            title: templateTitle,
+            template_type: templateType || 'general',
+            content_body: contentBody || '', // نص القالب الأساسي
+            variables_meta: Array.isArray(variables) ? variables : [],
+
+            // 🎯 السحر هنا: نأخذ مصفوفة الـ canvasElements الحالية في الصفحة ونضعها داخل القالب
+            visual_design: {
+                font_family: 'Cairo',
+                canvas_elements: canvasElements // العناصر التي صممتها وحركتها بالماوس
+            }
+        };
+
+        try {
+            let response;
+            // إذا كنا نقوم بتعديل قالب موجود مسبقاً
+            if (editingTemplateId) {
+                response = await fetch(`http://127.0.0.1:8000/api/v1/office-settings/templates/${editingTemplateId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            } else {
+                // إذا كان قالباً جديداً كلياً
+                response = await fetch('http://127.0.0.1:8000/api/v1/office-settings/templates', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            }
+
+            if (response.ok) {
+                alert("🎯 تم حفظ القالب وتصميم الـ Canva الخاص به بنظام التوليد الموحد بنجاح!");
+
+                // تحديث القوائم في الصفحة لإظهار القالب الجديد أو المحدث
+                if (typeof loadTemplates === 'function') loadTemplates();
+            } else {
+                alert("فشل حفظ القالب، تأكد من اتصال السيرفر.");
+            }
+        } catch (error) {
+            console.error("خطأ أثناء حفظ تصميم القالب:", error);
+            alert("حدث خطأ غير متوقع أثناء الحفظ.");
+        }
+    };
 
     return (
         <div className="p-8 bg-zinc-950 text-zinc-100 min-h-screen font-sans text-right select-none" dir="rtl">
@@ -1022,7 +1095,14 @@ export default function SystemBuilderPage() {
 
                         <div className="flex justify-between items-center border-t border-zinc-800 pt-4">
                             <button onClick={handleAddColumnField} className="text-amber-500 hover:text-amber-400 text-xs font-semibold">+ إضافة حقل عمود</button>
-                            <button onClick={handleSaveTable} className="bg-amber-600 hover:bg-amber-500 text-zinc-950 font-bold px-4 py-2 rounded-lg text-xs transition">🚀 تثبيت الهيكل</button>
+                            <div className="flex gap-2">
+                                {editingTableId && (
+                                    <button onClick={() => { setEditingTableId(null); setTableName(''); setColumns([{ id: 'c1', name: '', type: 'text' }]); }} className="bg-zinc-800 text-zinc-300 px-3 py-2 rounded-lg text-xs hover:bg-zinc-700">إلغاء التعديل</button>
+                                )}
+                                <button onClick={handleSaveTable} className="bg-amber-600 hover:bg-amber-500 text-zinc-950 font-bold px-4 py-2 rounded-lg text-xs transition">
+                                    {editingTableId ? "🔄 تحديث الهيكل" : "🚀 تثبيت الهيكل الجديد"}
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -1150,8 +1230,11 @@ export default function SystemBuilderPage() {
                             </div>
                         </div>
 
-                        <button onClick={handleSaveOfficeIdentity} className="w-full bg-amber-600 hover:bg-amber-500 text-zinc-950 font-bold py-3 rounded-xl text-xs shadow-lg transition">
-                            💾 حفظ وتثبيت هيكل تصميم Canva
+                        <button
+                            onClick={handleSaveTemplateWithCanvas}
+                            className="w-full bg-amber-600 hover:bg-amber-500 text-zinc-950 font-bold py-3 rounded-xl text-xs shadow-lg transition"
+                        >
+                            💾 حفظ وتثبيت هيكل تصميم القالب الحالي
                         </button>
                     </div>
 

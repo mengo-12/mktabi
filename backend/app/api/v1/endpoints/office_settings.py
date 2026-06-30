@@ -12,14 +12,11 @@ router = APIRouter()
 
 # 💡 1. الدالة المساعدة لتحويل عناصر Canva إلى HTML (تم وضعها هنا)
 def render_canva_header_to_html(canvas_elements: list) -> str:
-    """
-    تحول مصفوفة عناصر Canva القادمة من الفرونت إند إلى ترويسة HTML متطابقة
-    بالإحداثيات المطلقة (Absolute Positioning) لطباعتها داخل المستند المولد.
-    """
     if not canvas_elements:
         return ""
         
-    html_output = '<div style="position: relative; width: 100%; height: 160px; font-family: \'Cairo\', sans-serif; direction: rtl;">'
+    # وضع حاوية مطلقة العرض لضمان ثبات مواقع العناصر عند الطباعة
+    html_output = '<div style="position: relative; width: 100%; height: 160px; font-family: \'Cairo\', sans-serif; direction: rtl; box-sizing: border-box;">'
     
     for el in canvas_elements:
         el_type = el.get('type')
@@ -27,13 +24,12 @@ def render_canva_header_to_html(canvas_elements: list) -> str:
         y = el.get('y', 0)
         width = el.get('width', 'auto')
         
-        # تحويل العرض إلى بكسل إذا كان رقماً
         if isinstance(width, (int, float)):
             width_str = f"{width}px"
         else:
             width_str = f"{width}%" if el_type == 'line' else f"{width}"
 
-        # بناء الستايل المشترك لكل عنصر عائم بناءً على إحداثيات كانفا
+        # استخدام right لتطابق تام مع إحداثيات الفرونت إند المحدثة
         style = f"position: absolute; right: {x}%; top: {y}%; width: {width_str};"
 
         if el_type == 'text':
@@ -49,7 +45,7 @@ def render_canva_header_to_html(canvas_elements: list) -> str:
             """
             
         elif el_type == 'image':
-            content = el.get('content', '') # Base64 Data URL
+            content = el.get('content', '')
             html_output += f"""
             <div style="{style}">
                 <img src="{content}" style="width: 100%; height: auto; object-fit: contain;" />
@@ -118,27 +114,46 @@ async def delete_template(template_id: int, db: AsyncSession = Depends(get_db)):
     return {"status": "success", "message": "تم حذف القالب بنجاح"}
 
 
-# 💾 7. حفظ وتوليد مستند جديد في الأرشيف (مدمج بتصميم Canva تلقائياً)
+# 💾 7. حفظ وتوليد مستند جديد في الأرشيف (مدمج بتصميم Canva الديناميكي الخاص بالقالب المختار)
 @router.post("/generated", response_model=GeneratedDocumentResponse, status_code=status.HTTP_201_CREATED)
 async def save_generated_document(payload: GeneratedDocumentCreate, db: AsyncSession = Depends(get_db)):
-    # أ) استخراج نص المستند أو العقد المرسل من الفرونت إند
-    document_content_body = payload.content_body # أو الحقل المقابل له في الـ Schema لديك
+    # أ) استخراج نص المستند المكتوب من الفرونت إند بأمان
+    document_content_body = payload.content_body or "" 
     
-    # ب) جلب عناصر الـ Canva الافتراضية أو المخزنة (يمكنك ربطها مستقبلاً بقاعدة البيانات)
-    # مؤقتاً نأخذ العناصر الافتراضية التي قمت بتصميمها في الكانفاس لتطبيقها فوراً
-    canvas_elements = [
-        {'id': 'el-1', 'type': 'text', 'content': 'مكتب المستشار القانوني للمحاماة', 'x': 5, 'y': 15, 'fontSize': 16, 'fontWeight': 'bold', 'color': '#18181b', 'width': 250},
-        {'id': 'el-2', 'type': 'text', 'content': 'الرقم الضريبي: 300012345', 'x': 5, 'y': 40, 'fontSize': 12, 'fontWeight': 'normal', 'color': '#71717a', 'width': 200},
-        {'id': 'el-3', 'type': 'line', 'x': 3, 'y': 85, 'color': '#f59e0b', 'height': 3, 'width': 94}
-    ]
+    # ب) جلب عناصر الـ Canva ديناميكياً من القالب المختار
+    canvas_elements = []
+    template_id = payload.template_id
     
-    # ج) توليد كود الـ HTML المتناسق للكانفاس عبر الدالة المساعدة
+    if template_id:
+        db_template = await db.get(CustomTemplate, template_id)
+        if db_template and db_template.visual_design:
+            vd = db_template.visual_design
+            if isinstance(vd, dict):
+                if 'canvas_elements' in vd:
+                    canvas_elements = vd.get('canvas_elements', [])
+                elif 'header_data' in vd and 'canvas_elements' in vd['header_data']:
+                    canvas_elements = vd['header_data'].get('canvas_elements', [])
+                elif 'elements' in vd:
+                    canvas_elements = vd.get('elements', [])
+            elif isinstance(vd, list):
+                canvas_elements = vd
+
+    # ج) إذا فشل النظام في العثور على التصميم المخصص، نستخدم الترويسة الافتراضية كإجراء احتياطي
+    if not canvas_elements:
+        canvas_elements = [
+            {'id': 'el-1', 'type': 'text', 'content': 'مكتب المستشار القانوني للمحاماة (افتراضي)', 'x': 5, 'y': 15, 'fontSize': 16, 'fontWeight': 'bold', 'color': '#18181b', 'width': 250},
+            {'id': 'el-2', 'type': 'text', 'content': 'الرجاء التأكد من حفظ عناصر الكانفاس داخل القالب', 'x': 5, 'y': 40, 'fontSize': 12, 'fontWeight': 'normal', 'color': '#71717a', 'width': 300},
+            {'id': 'el-3', 'type': 'line', 'x': 3, 'y': 85, 'color': '#f59e0b', 'height': 3, 'width': 94}
+        ]
+    
+    # د) توليد كود الـ HTML المتناسق للكانفاس عبر الدالة المساعدة
     canva_header_html = render_canva_header_to_html(canvas_elements)
     
-    # د) دمج الترويسة مع نص العقد وتغليفه بستايل الطباعة الورقية A4
+    # هـ) دمج الترويسة المخصصة مع نص العقد وتغليفه بستايل الطباعة الورقية A4
     full_document_html = f"""
     <html>
     <head>
+        <meta charset="utf-8">
         <style>
             @page {{ size: A4; margin: 20mm; }}
             body {{ font-family: 'Cairo', sans-serif; direction: rtl; }}
@@ -154,12 +169,15 @@ async def save_generated_document(payload: GeneratedDocumentCreate, db: AsyncSes
     </html>
     """
     
-    # هـ) تحديث الـ Payload لحفظ النص الكامل المدمج بالترويسة بداخل قاعدة البيانات
-    # سنقوم بإسناد الـ HTML المولد بالكامل إلى الحقل المخصص لحفظ النص (مثال: content_body)
+    # و) تحويل الـ Payload إلى dict وتجهيزه لقاعدة البيانات
     dumped_data = payload.model_dump()
-    dumped_data["content_body"] = full_document_html # حقن البنية الكاملة للطباعة
+    dumped_data["final_content"] = full_document_html
     
-    # و) الحفظ النهائي في قاعدة البيانات
+    # 🔥 الحل الجذري هنا: نقوم بحذف حقل content_body من الـ dict حتى لا يرسل إلى موديل SQLAlchemy ويسبب خطأ
+    if "content_body" in dumped_data:
+        del dumped_data["content_body"]
+    
+    # ز) الحفظ النهائي المضمون في قاعدة البيانات بدون حقول غريبة عن الجدول
     db_doc = GeneratedDocument(**dumped_data)
     db.add(db_doc)
     await db.commit()
