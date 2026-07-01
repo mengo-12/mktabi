@@ -156,3 +156,9 @@ async def delete_row(row_id: int, db: AsyncSession = Depends(get_db)):
     await db.delete(db_row)
     await db.commit()
     return {"status": "success", "message": "تم حذف السجل بنجاح"}
+
+# ✅ مسار جديد لجلب جميع الجداول من كافة الأقسام (لحقول العلاقات)
+@router.get("/tables/all", response_model=List[TableResponse])
+async def get_all_tables(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(CustomTable))
+    return result.scalars().all()

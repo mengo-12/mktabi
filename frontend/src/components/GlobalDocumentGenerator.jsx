@@ -94,9 +94,9 @@
 //         // 1. بناء الهيكل المرئي المدمج بتصميم Canva للطباعة والمعاينة
 //         const finalHTMLStructure = `
 //             <div style="font-family: 'Cairo', sans-serif; direction: rtl; text-align: right; padding: 40px; color: #1e293b; background: white;">
-                
+
 //                 ${renderCanvaToHTML()}
-                
+
 //                 <div style="font-size: 14px; line-height: 1.8; white-space: pre-line; min-height: 450px; margin-top: 10px;">
 //                     ${mergedContent}
 //                 </div>
@@ -272,7 +272,7 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
     const [isOpen, setIsOpen] = useState(false);
     const [templates, setTemplates] = useState([]);
     const [selectedTemplate, setSelectedTemplate] = useState(null);
-    
+
     // عناصر الكانفاس التفاعلية
     const [canvasElements, setCanvasElements] = useState([]);
     const [mergedContent, setMergedContent] = useState('');
@@ -322,15 +322,18 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
         );
     };
 
-    // تجميع الـ HTML النهائي الصافي مع كامل التنسيقات المحدثة (حجم، لون، وزن) وحفظه
+    // 🛠️ التعديل الجذري: تجميع الـ HTML النهائي ليتطابق 100% مع حسابات الشاشة الحالية
     const generateFinalHTMLStructure = () => {
         const canvaHTML = `
-            <div style="position: relative; width: 100%; min-height: 160px; font-family: 'Cairo', sans-serif; direction: rtl; margin-bottom: 30px;">
+            <div style="position: relative; width: 100%; height: 140px; font-family: 'Cairo', sans-serif; direction: rtl; margin-bottom: 20px; box-sizing: border-box;">
                 ${canvasElements.map(el => {
                     const widthStr = typeof el.width === 'number' ? `${el.width}px` : (el.type === 'line' ? `${el.width}%` : el.width);
-                    const style = `position: absolute; right: ${el.x}%; top: ${el.y}%; width: ${widthStr};`;
-                    if (el.type === 'text') return `<div style="${style} font-size: ${el.fontSize}px; font-weight: ${el.fontWeight}; color: ${el.color || '#000'}; text-align: right; white-space: pre-wrap;">${el.content}</div>`;
-                    if (el.type === 'image') return `<div style="${style}"><img src="${el.content}" style="width: 100%; height: auto; object-fit: contain Pap;"/></div>`;
+
+                    // 🎯 مطابقة تامة للشاشة: الاعتماد على left المباشرة مع إلغاء عمليات العكس المعقدة التي تربك المتصفح أثناء الطباعة
+                    const style = `position: absolute; left: ${el.x}%; top: ${el.y}%; width: widthStr; box-sizing: border-box; text-align: right; transform: translate(0, 0);`;
+
+                    if (el.type === 'text') return `<div style="${style} font-size: ${el.fontSize}px; font-weight: ${el.fontWeight}; color: ${el.color || '#000000'}; white-space: pre-wrap; line-height: 1.3; font-family: 'Cairo', sans-serif;">${el.content}</div>`;
+                    if (el.type === 'image') return `<div style="${style}"><img src="${el.content}" style="width: 100%; height: auto; object-fit: contain;"/></div>`;
                     if (el.type === 'line') return `<div style="${style} background-color: ${el.color || '#f59e0b'}; height: ${el.height || 2}px; border-radius: 2px;"></div>`;
                     return '';
                 }).join('')}
@@ -338,12 +341,12 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
         `;
 
         return `
-            <div style="font-family: 'Cairo', sans-serif; direction: rtl; text-align: right; padding: 40px; color: #1e293b; background: white;">
+            <div style="font-family: 'Cairo', sans-serif; direction: rtl; text-align: right; padding: 20mm; color: #1e293b; background: white; width: 210mm; min-height: 297mm; box-sizing: border-box; position: relative; margin: 0 auto;">
                 ${canvaHTML}
-                <div style="font-size: 14px; line-height: 1.8; white-space: pre-line; min-height: 450px; margin-top: 10px;">
+                <div style="font-size: 14px; line-height: 1.8; white-space: pre-line; min-height: 500px; margin-top: 15px; color: #1e293b; font-family: 'Cairo', sans-serif;">
                     ${mergedContent}
                 </div>
-                <div style="margin-top: 50px; border-top: 1px solid #e2e8f0; padding-top: 15px; font-size: 11px; color: #64748b; text-align: center;">
+                <div style="margin-top: 50px; border-top: 1px solid #e2e8f0; padding-top: 15px; font-size: 11px; color: #64748b; text-align: center; width: 100%; font-family: 'Cairo', sans-serif;">
                     <p>${officeSettings?.footer_data?.address || ''} | جوال: ${officeSettings?.footer_data?.phone || ''}</p>
                 </div>
             </div>
@@ -356,11 +359,11 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
         const primaryValue = activeRowData[primaryColumnId] || 'سجل';
         setDocumentTitle(`${template.title} - ${primaryValue}`);
 
-        const rawElements = 
-            template?.visual_design?.canvas_elements || 
-            template?.canvas_elements || 
-            template?.header_data?.canvas_elements || 
-            officeSettings?.header_data?.canvas_elements || 
+        const rawElements =
+            template?.visual_design?.canvas_elements ||
+            template?.canvas_elements ||
+            template?.header_data?.canvas_elements ||
+            officeSettings?.header_data?.canvas_elements ||
             [];
 
         const processedElements = rawElements.map(el => {
@@ -371,8 +374,8 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
                     const actualValue = activeRowData[col.id] || `[${col.name}]`;
                     textContent = textContent.replaceAll(placeholder, actualValue);
                 });
-                return { 
-                    ...el, 
+                return {
+                    ...el,
                     content: textContent,
                     fontSize: el.fontSize || 14,
                     fontWeight: el.fontWeight || 'normal',
@@ -399,11 +402,11 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
 
         const payload = {
             title: documentTitle,
-            template_id: selectedTemplate?.id,      
-            table_id: parseInt(tableId),              
-            row_id: parseInt(rowId),                  
+            template_id: selectedTemplate?.id,
+            table_id: parseInt(tableId),
+            row_id: parseInt(rowId),
             content_body: mergedContent,
-            final_content: generateFinalHTMLStructure(),        
+            final_content: generateFinalHTMLStructure(),
             created_by: "المحامي الحالي"
         };
 
@@ -475,7 +478,7 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
                                 {selectedTemplate && (
                                     <div className="space-y-3 pt-2 border-t border-zinc-800">
                                         <div>
-                                            <label className="text-[11px] font-bold text-zinc-400 block mb-1">2. اسم الملف المؤرشف:</label>
+                                            <label className="text-[11px] font-bold text-zinc-400 block mb-1">2. اسم الملف الملف الأرشفة:</label>
                                             <input
                                                 type="text"
                                                 value={documentTitle}
@@ -485,18 +488,65 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
                                         </div>
 
                                         <div className="pt-4 space-y-2">
-                                            <button onClick={() => window.print()} className="w-full flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 text-xs font-bold py-2.5 rounded-xl transition"><Printer className="w-4 h-4" /> طباعة المستند فوراً</button>
+                                            <button
+                                                onClick={() => {
+                                                    const printContent = generateFinalHTMLStructure();
+                                                    const printWindow = window.open('', '_blank');
+
+                                                    printWindow.document.write(`
+                                                        <html>
+                                                        <head>
+                                                            <title>${documentTitle || 'مستند قانوني'}</title>
+                                                            <meta charset="utf-8">
+                                                            <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+                                                            <style>
+                                                                @page { 
+                                                                    size: A4; 
+                                                                    margin: 0mm !important; 
+                                                                }
+                                                                body { 
+                                                                    margin: 0; 
+                                                                    padding: 0; 
+                                                                    background: #ffffff;
+                                                                    direction: rtl;
+                                                                    -webkit-print-color-adjust: exact; 
+                                                                    print-color-adjust: exact;
+                                                                }
+                                                                * {
+                                                                    font-family: 'Cairo', sans-serif !important;
+                                                                }
+                                                            </style>
+                                                        </head>
+                                                        <body>
+                                                            ${printContent}
+                                                            <script>
+                                                                window.onload = function() {
+                                                                    setTimeout(() => {
+                                                                        window.print();
+                                                                        window.close();
+                                                                    }, 350);
+                                                                };
+                                                            </script>
+                                                        </body>
+                                                        </html>
+                                                    `);
+                                                    printWindow.document.close();
+                                                }}
+                                                className="w-full flex items-center justify-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold py-2.5 rounded-xl transition shadow-lg"
+                                            >
+                                                <Printer className="w-4 h-4" /> طباعة المستند فوراً
+                                            </button>
                                             <button onClick={handleSaveToArchive} disabled={isSaving} className="w-full flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-black text-xs py-2.5 rounded-xl transition shadow-lg disabled:opacity-50"><Save className="w-4 h-4" /> {isSaving ? 'جاري الحفظ...' : 'حفظ واعتماد بالأرشيف'}</button>
                                         </div>
                                     </div>
                                 )}
                             </div>
 
-                            {/* الجانب الأيسر: ورقة الكانفاس الحرة المحدثة ببار الأدوات العائم */}
+                            {/* الجانب الأيسر: ورقة الكانفاس الحرة */}
                             <div className="xl:col-span-3 flex items-start justify-center p-6 bg-zinc-950/60 overflow-y-auto" onClick={() => setActiveElementId(null)}>
                                 {selectedTemplate ? (
                                     <div className="w-full max-w-[640px] aspect-[1/1.414] bg-white text-zinc-900 shadow-2xl p-10 relative border border-zinc-300 rounded-sm flex flex-col justify-between" onClick={(e) => e.stopPropagation()}>
-                                        
+
                                         {/* طبقة عناصر التصميم */}
                                         <div className="absolute inset-0 p-10 overflow-hidden">
                                             <div className="relative w-full h-full">
@@ -519,27 +569,24 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
                                                                 if (el.type === 'text') setActiveElementId(el.id);
                                                             }}
                                                         >
-                                                            {/* 🛠️ شريط أدوات التنسيق العائم المخصص لكل نص (مثل Canva تماماً) */}
+                                                            {/* شريط أدوات التنسيق العائم */}
                                                             {el.type === 'text' && isSelected && (
                                                                 <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-zinc-900 border border-zinc-700 text-white rounded-lg shadow-xl px-2 py-1 flex items-center gap-2 pointer-events-auto z-50 animate-in fade-in zoom-in-95 duration-100">
-                                                                    {/* تعديل الحجم */}
                                                                     <div className="flex items-center gap-1 border-l border-zinc-700 pl-1">
                                                                         <button onClick={() => updateElementProperty(el.id, 'fontSize', Math.max(8, (el.fontSize || 14) - 1))} className="p-1 hover:bg-zinc-800 rounded text-[10px] font-bold">A-</button>
                                                                         <span className="text-[10px] font-mono px-1 min-w-[18px] text-center">{el.fontSize || 14}</span>
                                                                         <button onClick={() => updateElementProperty(el.id, 'fontSize', (el.fontSize || 14) + 1)} className="p-1 hover:bg-zinc-800 rounded text-[10px] font-bold">A+</button>
                                                                     </div>
-                                                                    {/* عريض / عادي */}
-                                                                    <button 
-                                                                        onClick={() => updateElementProperty(el.id, 'fontWeight', el.fontWeight === 'bold' ? 'normal' : 'bold')} 
+                                                                    <button
+                                                                        onClick={() => updateElementProperty(el.id, 'fontWeight', el.fontWeight === 'bold' ? 'normal' : 'bold')}
                                                                         className={`p-1 rounded hover:bg-zinc-800 ${el.fontWeight === 'bold' ? 'text-amber-400 bg-zinc-800' : ''}`}
                                                                     >
                                                                         <Bold className="w-3 h-3" />
                                                                     </button>
-                                                                    {/* تغيير اللون السريع */}
                                                                     <div className="flex gap-1 items-center border-r border-zinc-700 pr-1">
                                                                         {['#000000', '#2563eb', '#dc2626', '#16a34a'].map(c => (
-                                                                            <button 
-                                                                                key={c} 
+                                                                            <button
+                                                                                key={c}
                                                                                 onClick={() => updateElementProperty(el.id, 'color', c)}
                                                                                 className={`w-3 h-3 rounded-full border border-white/20 ${el.color === c ? 'ring-2 ring-amber-400' : ''}`}
                                                                                 style={{ backgroundColor: c }}
@@ -555,11 +602,11 @@ export default function GlobalDocumentGenerator({ triggerButton, activeTable, se
                                                                     contentEditable
                                                                     suppressContentEditableWarning
                                                                     onBlur={(e) => updateElementProperty(el.id, 'content', e.target.innerText)}
-                                                                    style={{ 
-                                                                        fontSize: `${el.fontSize || 14}px`, 
-                                                                        fontWeight: el.fontWeight || 'normal', 
+                                                                    style={{
+                                                                        fontSize: `${el.fontSize || 14}px`,
+                                                                        fontWeight: el.fontWeight || 'normal',
                                                                         color: el.color || '#000000'
-                                                                    }} 
+                                                                    }}
                                                                     className={`text-right whitespace-pre-wrap font-sans leading-tight outline-none border transition-all ${isSelected ? 'border-amber-500 ring-1 ring-amber-500 bg-amber-50/30' : 'border-transparent hover:border-zinc-300 hover:border-dashed'} p-0.5 rounded cursor-text`}
                                                                 >
                                                                     {el.content}

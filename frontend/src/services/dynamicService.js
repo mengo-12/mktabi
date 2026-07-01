@@ -30,6 +30,11 @@ export const dynamicService = {
         return response.data;
     },
 
+    async getAllTables() {
+        const response = await apiClient.get('/dynamic/tables/all');
+        return response.data;
+    },
+
     async createTable(sectionId, name, columnsDefinition, viewMode = 'table') {
         const response = await apiClient.post('/dynamic/tables', {
             section_id: sectionId,

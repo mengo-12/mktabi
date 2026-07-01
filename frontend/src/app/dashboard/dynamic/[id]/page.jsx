@@ -812,13 +812,21 @@ export default function DynamicSectionPage() {
     };
 
     // --- إدارة الأعمدة المتقدمة ---
-    const openSettingsModal = () => {
+    const openSettingsModal = async () => {
         setManageColumns([...activeTable.columns_definition]);
         setDropdownOptions([]);
         setSelectedRelationTableId('');
+
+        try {
+            // جلب جميع جداول النظام من كافة الأقسام دون قيد
+            const allSystemTables = await dynamicService.getAllTables();
+            setTables(allSystemTables);
+        } catch (error) {
+            console.error("خطأ أثناء جلب جداول النظام الشاملة للعلاقات:", error);
+        }
+
         setIsSettingsModalOpen(true);
     };
-
     const handleAddDropdownOption = () => {
         if (!newOptionInput.trim()) return;
         setDropdownOptions([...dropdownOptions, newOptionInput.trim()]);
@@ -1371,11 +1379,21 @@ export default function DynamicSectionPage() {
                             )}
 
                             {newColumnType === 'relation' && (
-                                <div className="p-3 bg-slate-900 rounded-lg border border-slate-800 space-y-2">
-                                    <label className="block text-[10px] text-cyan-400 font-bold">ربط علاقة مع جدول آخر بالمنظومة:</label>
-                                    <select value={selectedRelationTableId} onChange={(e) => setSelectedRelationTableId(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-300">
-                                        <option value="">إختر الجدول المستهدف بالربط التلقائي...</option>
-                                        {tables.filter(t => t.id !== activeTable.id).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                <div className="mt-3 animate-in fade-in duration-200">
+                                    <label className="block text-xs font-bold text-cyan-450 mb-1.5">
+                                        🔗 اختر الجدول المرتبط المستهدف:
+                                    </label>
+                                    <select
+                                        value={selectedRelationTableId}
+                                        onChange={(e) => setSelectedRelationTableId(e.target.value)}
+                                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-cyan-400 focus:outline-none focus:border-cyan-500"
+                                    >
+                                        <option value="">-- اختر جدولاً من القائمة --</option>
+                                        {tables && tables.map((t) => (
+                                            <option key={t.id} value={t.id}>
+                                                📊 {t.name}
+                                            </option>
+                                        ))}
                                     </select>
                                 </div>
                             )}
