@@ -1,11 +1,14 @@
 import os
 import uuid
 import shutil
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, Cookie, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List
+from jose import jwt, JWTError
+from fastapi.security import OAuth2PasswordBearer
+from urllib.parse import quote
 
 from app.core.database import get_db
 from app.models.auth import User, UserRole
@@ -14,11 +17,14 @@ from app.models.attachment import Attachment
 from app.schemas.attachment import AttachmentResponse
 from app.api.deps import get_current_user
 
+
 router = APIRouter()
 
 # 📂 تحديد المجلد المحلي لحفظ الملفات وتأسيسه تلقائياً
 STORAGE_DIR = "storage/uploads"
 os.makedirs(STORAGE_DIR, exist_ok=True)
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login", auto_error=False)
 
 # 🛡️ تحديد الصيغ القانونية والمكتبية المسموح بها وحجم الملف الأقصى (مثلاً: 15 ميجابايت)
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc", ".png", ".jpg", ".jpeg"}
@@ -77,9 +83,41 @@ async def upload_case_file(
 @router.get("/download/{attachment_id}")
 async def download_protected_file(
     attachment_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    request: Request,
+    token: str = Query(None), 
+    access_token: str = Cookie(None), 
+    header_token: str = Depends(oauth2_scheme), 
+    db: AsyncSession = Depends(get_db)
 ):
+    # 🔍 جلب التوكن من الرابط كـ Query Parameter بأكثر من طريقة لضمان التقاطه
+    url_token = token or request.query_params.get("token")
+    
+    # 🛡️ الفحص بالترتيب: الرابط أولاً، ثم الهيدر (إن وجد)، ثم الكوكيز
+    active_token = url_token or header_token or access_token
+    
+    if not active_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="لم يتم توفير رمز التحقق الأمني (Token). تأكد من إرساله في الرابط أو الكوكيز."
+        )
+
+    # 🛡️ فك تشفير التوكن والتحقق من هوية المستخدم
+    try:
+        from app.core.config import settings 
+        payload = jwt.decode(active_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="رمز التحقق غير صالح.")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="انتهت صلاحية الجلسة أو الرمز غير صالح.")
+
+    # 👤 جلب المستخدم من قاعدة البيانات
+    user_res = await db.execute(select(User).where(User.id == int(user_id)))
+    current_user = user_res.scalar_one_or_none()
+    if not current_user:
+        raise HTTPException(status_code=401, detail="المستخدم غير موجود.")
+
+    # 📂 جلب بيانات الوثيقة القانونية
     stmt = select(Attachment).where(Attachment.id == attachment_id)
     res = await db.execute(stmt)
     attachment = res.scalar_one_or_none()
@@ -87,29 +125,20 @@ async def download_protected_file(
     if not attachment:
         raise HTTPException(status_code=404, detail="المستند غير موجود في النظام.")
 
-    # 💡 فحص ما إذا كان الملف مرفقاً عاماً لا يتبع قضية محددة
-    if attachment.case_id is not None:
-        # 2. جلب القضية للتحقق من أمان عزل البيانات إذا كانت مرتبطة بقضية
-        case_res = await db.execute(select(Case).where(Case.id == attachment.case_id))
-        case = case_res.scalar_one_or_none()
-
-        # الحماية الصارمة للقضايا
-        if current_user.role not in [UserRole.ADMIN, UserRole.PARTNER]:
-            if case and case.lawyer_id != current_user.id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN, 
-                    detail="عذراً، لا تمتلك صلاحية قانونية لاستعراض أو تحميل مستندات هذه القضية."
-                )
-    # إذا كانت تابعة لـ None (ملف عام بالمكتب) يتجاوز الفحص طالما الموظف معتمد بالمنظومة
-
-    # 3. التحقق من وجود الملف في السيرفر مادياً فعلاً
+    # 💾 التحقق من وجود الملف ماديًا على السيرفر
     if not os.path.exists(attachment.file_path):
         raise HTTPException(status_code=404, detail="الملف المادي مفقود من السيرفر.")
+
+    # تشفير الاسم العربي لضمان سلامة الهيدرز
+    encoded_filename = quote(attachment.original_name)
 
     return FileResponse(
         path=attachment.file_path,
         media_type=attachment.file_type,
-        filename=attachment.original_name
+        content_disposition_type="inline", 
+        headers={
+            "Content-Disposition": f"inline; filename*=UTF-8''{encoded_filename}" 
+        }
     )
 
 # 🗑️ [3] مسار حذف المستند وقفل الملف المادي من السيرفر
@@ -193,12 +222,10 @@ async def upload_general_file(
 
     # 5. بناء رابط التحميل المباشر الآمن الذي سيتعامل معه الـ Frontend
     # سيتوجه الطلب إلى مسار التنزيل المحمي بناءً على ID المرفق
-    download_url = f"http://localhost:8000/api/v1/attachments/download/{db_attachment.id}"
+    download_url = f"http://localhost:8000/api/v1/documents/download/{db_attachment.id}"
 
     return {
         "url": download_url,
         "name": file.filename,
         "id": db_attachment.id
     }
-    
-    return None

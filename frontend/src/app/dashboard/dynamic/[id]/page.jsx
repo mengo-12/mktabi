@@ -884,8 +884,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { dynamicService } from '@/services/dynamicService';
+import apiClient from '@/services/apiClient';
 import GlobalDocumentGenerator from '@/components/GlobalDocumentGenerator';
-import { Plus, Table, Edit, LayoutGrid, Save, Trash2, Settings, X, FileText, Link, Paperclip, ChevronDown, ListPlus, Search, Filter, RefreshCw, ExternalLink, Loader2, Calendar, Wand2 } from 'lucide-react';
+import { Plus, Table, Edit, LayoutGrid, Save, Trash2, Settings, X, FileText, Link, Paperclip, ChevronDown, ListPlus, Search, Filter, RefreshCw, ExternalLink, Loader2, Calendar, Wand2, FolderOpen } from 'lucide-react';
 
 export default function DynamicSectionPage() {
     const { id: sectionId } = useParams();
@@ -1072,20 +1073,38 @@ export default function DynamicSectionPage() {
         setFilterDateEnd('');
     };
 
-    const handleFileUpload = async (e, colId) => {
+    const handleFileUpload = async (e, columnId) => {
         const file = e.target.files[0];
         if (!file) return;
 
-        setUploadingField(colId);
+        const formData = new FormData();
+        formData.append('file', file);
+
         try {
-            const response = await dynamicService.uploadAttachment(file);
-            setRowData(prev => ({
-                ...prev,
-                [colId]: response.url
-            }));
+            setUploadingField(columnId);
+
+            // الطلب يرسل مباشرة إلى /documents/upload-general بدون تكرار البادئة
+            const response = await apiClient.post('/documents/upload-general', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
+
+            // افترضنا أن السيرفر يعيد الرابط كاملاً أو نسبياً، نقوم بتنظيفه قبل الحفظ في قاعدة البيانات
+            let savedPath = response.data.url;
+            if (savedPath.includes('http://127.0.0.1:8000/api/v1')) {
+                savedPath = savedPath.replace('http://127.0.0.1:8000/api/v1', '');
+            }
+
+            setRowData({
+                ...rowData,
+                [columnId]: savedPath // سيُخزن كـ: /documents/download/15
+            });
+
+            alert("تم رفع المستند وحفظه بالنظام بنجاح.");
         } catch (error) {
-            console.error("خطأ أثناء رفع المستند:", error);
-            alert("فشل رفع المستند.");
+            console.error("خطأ أثناء رفع الملف:", error);
+            alert("فشل رفع الملف، يرجى التحقق من حجم الملف وصلاحية الاتصال.");
         } finally {
             setUploadingField(null);
         }
@@ -1110,7 +1129,7 @@ export default function DynamicSectionPage() {
         const initialData = {};
         activeTable.columns_definition.forEach((col) => {
             if (col.type === 'relation') {
-                initialData[col.id] = []; 
+                initialData[col.id] = [];
             } else {
                 initialData[col.id] = '';
             }
@@ -1142,7 +1161,7 @@ export default function DynamicSectionPage() {
             } else {
                 await dynamicService.addRow(activeTable.id, rowData);
             }
-            
+
             await loadTableRows(activeTable.id);
 
             const clearedData = {};
@@ -1264,6 +1283,102 @@ export default function DynamicSectionPage() {
             </div>
         );
     }
+
+    // دالة لجلب جميع الملفات المرفقة المرتبطة بسجل معين (الموكل مثلاً) عبر الجداول الأخرى
+    const getAllAssociatedDocuments = (clientId) => {
+        let associatedDocs = [];
+
+        tables.forEach((table) => {
+            const relationCols = table.columns_definition.filter(col => col.type === 'relation');
+            const attachmentCols = table.columns_definition.filter(col => col.type === 'attachment');
+
+            if (attachmentCols.length > 0) {
+                table.rows?.forEach((row) => {
+                    let isRelatedToClient = false;
+
+                    relationCols.forEach((col) => {
+                        const relatedIds = row.cells_data[col.id];
+                        if (Array.isArray(relatedIds) && relatedIds.includes(clientId)) {
+                            isRelatedToClient = true;
+                        }
+                    });
+
+                    if (isRelatedToClient) {
+                        attachmentCols.forEach((attCol) => {
+                            let rawData = row.cells_data[attCol.id];
+                            if (!rawData) return;
+
+                            // 💡 معالجة إذا كانت البيانات المحفوظة عبارة عن Object أو String
+                            let fileUrl = typeof rawData === 'object' ? rawData.url : rawData;
+
+                            if (fileUrl) {
+                                // 🎯 التعديل الذهبي: نريد المسار النسبي الخالص فقط ليتعامل معه apiClient بشكل صحيح
+                                // إذا كان الرابط كاملاً، سننزع منه الـ domain والـ api/v1
+                                let relativeUrl = fileUrl;
+                                if (relativeUrl.includes('/api/v1')) {
+                                    relativeUrl = relativeUrl.split('/api/v1')[1]; // سيصبح: /documents/download/12
+                                } else if (relativeUrl.startsWith('http')) {
+                                    // إذا كان هناك رابط خارجي آخر، استخرج المسار بعد الـ port
+                                    const urlObj = new URL(relativeUrl);
+                                    relativeUrl = urlObj.pathname.replace('/api/v1', '');
+                                }
+
+                                // تأكد من أنه يبدأ بشرطة واحدة
+                                if (!relativeUrl.startsWith('/')) {
+                                    relativeUrl = `/${relativeUrl}`;
+                                }
+
+                                associatedDocs.push({
+                                    id: `${row.id}_${attCol.id}`,
+                                    fileName: getFileNameFromUrl(fileUrl) || (typeof rawData === 'object' ? rawData.name : `مستند_${row.id}`),
+                                    fileUrl: relativeUrl, // 👈 أصبح الآن مساراً نسبياً نظيفاً (مثال: /documents/download/12)
+                                    originTable: table.name,
+                                    recordTitle: row.cells_data[table.columns_definition[0]?.id] || `سجل #${row.id}`
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+        });
+
+        return associatedDocs;
+    };
+
+    // تأكد من إضافة الدالة داخل المكون وقبل الـ return
+    const handleViewDocument = (fileUrl) => {
+        if (!fileUrl) return alert("خطأ: رابط المستند غير موجود.");
+
+        // 1. جلب التوكن الحالي من المتصفح
+        const token = localStorage.getItem('token');
+
+        let fullUrl = '';
+
+        // 2. حل مشكلة تكرار الرابط: فحص هل الرابط القادم من السيرفر كامل أم جزئي
+        if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
+            // إذا كان الرابط كاملاً مثل http://localhost:8000/... نستخدمه مباشرة
+            fullUrl = fileUrl;
+        } else {
+            // إذا كان الرابط جزئياً مثل /documents/download/23 نركبه مع السيرفر
+            fullUrl = `http://127.0.0.1:8000/api/v1${fileUrl}`;
+        }
+
+        // 3. حقن التوكن في الرابط كـ Query Parameter (تأكد من عدم تكرار علامة الاستفهام)
+        if (token) {
+            const separator = fullUrl.includes('?') ? '&' : '?';
+            fullUrl = `${fullUrl}${separator}token=${token}`;
+        }
+
+        // 4. تحميل أو عرض المستند عبر الرابط الصحيح النظيف
+        const link = document.createElement('a');
+        link.href = fullUrl;
+        link.target = '_blank'; // لفتحه في تبويب جديد وعرضه inline
+        link.setAttribute('download', fileUrl.split('/').pop() || 'document');
+
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+    };
 
     return (
         <div className="md:mr-64 p-6 bg-[#0B0F19] min-h-screen text-slate-100 font-sans min-w-0" dir="rtl">
@@ -1621,17 +1736,22 @@ export default function DynamicSectionPage() {
             )}
 
             {/* 📥 المودال: إضافة وتعديل سجل المطور والداعم للاختيار المتعدد الشامل */}
+            {/* 📥 المودال: إضافة وتعديل سجل المطور والداعم للاختيار المتعدد الشامل */}
             {isRowModalOpen && activeTable && (
                 <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-4">
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-4">
                         <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                            <h3 className="text-sm font-black text-amber-500">{editingRow ? `📝 تعديل سجل` : `📥 إضافة سجل جديد`}</h3>
+                            <h3 className="text-sm font-black text-amber-500">
+                                {editingRow ? '📝 تعديل بيانات السجل القانوني الحالي' : '➕ إضافة سجل قانوني جديد للمكتب'}
+                            </h3>
                             <button onClick={() => setIsRowModalOpen(false)} className="text-slate-500"><X className="w-4 h-4" /></button>
                         </div>
-                        <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+
+                        <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
                             {activeTable.columns_definition.map((col) => (
                                 <div key={col.id}>
                                     <label className="block text-xs font-bold text-slate-400 mb-1">{col.name}</label>
+
                                     {col.type === 'dropdown' ? (
                                         <select value={rowData[col.id] || ''} onChange={(e) => setRowData({ ...rowData, [col.id]: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200">
                                             <option value="">إختر خياراً...</option>
@@ -1646,14 +1766,27 @@ export default function DynamicSectionPage() {
                                                     <span className="text-xs text-slate-400">جاري رفع المستند القانوني وتشفيره بأمان...</span>
                                                 </div>
                                             ) : (
-                                                <label htmlFor={`file_${col.id}`} className="cursor-pointer text-xs text-slate-500 flex flex-col items-center gap-1.5">
-                                                    <Paperclip className="w-5 h-5 text-slate-400" />
-                                                    {rowData[col.id] ? (
-                                                        <span className="text-emerald-400 font-bold max-w-full truncate block px-4">
-                                                            ✓ تم الرفع: {getFileNameFromUrl(rowData[col.id])}
-                                                        </span>
-                                                    ) : "اضغط لرفع ملف أو مستند للمكتب (PDF, DOCX)"}
-                                                </label>
+                                                <div className="flex flex-col items-center gap-1.5">
+                                                    <label htmlFor={`file_${col.id}`} className="cursor-pointer text-xs text-slate-500 flex flex-col items-center gap-1.5">
+                                                        <Paperclip className="w-5 h-5 text-slate-400" />
+                                                        {rowData[col.id] ? (
+                                                            <span className="text-emerald-400 font-bold max-w-full truncate block px-4">
+                                                                ✓ تم الرفع: {getFileNameFromUrl(rowData[col.id])}
+                                                            </span>
+                                                        ) : "اضغط لرفع ملف أو مستند للمكتب (PDF, DOCX)"}
+                                                    </label>
+
+                                                    {/* زر معاينة الملف المرفوع حالياً في السجل عبر الدالة الموحدة */}
+                                                    {rowData[col.id] && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleViewDocument(rowData[col.id])}
+                                                            className="mt-2 text-[11px] text-amber-500 underline hover:text-amber-400 cursor-pointer"
+                                                        >
+                                                            معاينة المستند الحالي ↗
+                                                        </button>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
                                     ) : col.type === 'relation' ? (
@@ -1685,10 +1818,57 @@ export default function DynamicSectionPage() {
                                     {col.type === 'relation' && <span className="block text-[10px] text-slate-500 mt-1">اضغط مع الاستمرار على Ctrl (أو Cmd في Mac) لاختيار أكثر من سجل.</span>}
                                 </div>
                             ))}
+
+                            {/* 📂 قسم المستندات المرتبطة الديناميكي المستدعى عبر الدالة الموحدة */}
+                            {editingRow && (
+                                <div className="mt-6 pt-4 border-t border-slate-800 space-y-3 text-right" dir="rtl">
+                                    <div className="flex items-center gap-2 text-xs font-black text-emerald-400">
+                                        <FolderOpen className="w-4 h-4" />
+                                        <span>ملف الموكل الشامل: المستندات المرتبطة به في النظام</span>
+                                    </div>
+
+                                    <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
+                                        {getAllAssociatedDocuments(editingRow.id).length === 0 ? (
+                                            <div className="text-[11px] text-slate-500 italic p-3 bg-slate-950 rounded-xl border border-slate-850 text-center">
+                                                لا توجد مستندات أو عقود مرفوعة مرتبطة بهذا الموكل في الجداول الأخرى حالياً.
+                                            </div>
+                                        ) : (
+                                            getAllAssociatedDocuments(editingRow.id).map((doc) => (
+                                                <div key={doc.id} className="flex justify-between items-center bg-slate-950 p-2.5 rounded-xl border border-slate-850 hover:border-emerald-500/30 transition text-xs gap-4">
+                                                    <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleViewDocument(doc.fileUrl)}
+                                                            className="text-slate-200 hover:text-emerald-400 font-bold underline flex items-center gap-1.5 truncate text-right bg-transparent border-none cursor-pointer p-0"
+                                                        >
+                                                            <Paperclip className="w-3 h-3 text-emerald-500 shrink-0" />
+                                                            <span className="truncate">{doc.fileName}</span>
+                                                        </button>
+                                                        <span className="text-[10px] text-slate-500 truncate">
+                                                            مصدره: <strong className="text-slate-400">{doc.originTable}</strong> ({doc.recordTitle})
+                                                        </span>
+                                                    </div>
+
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleViewDocument(doc.fileUrl)}
+                                                        className="px-2.5 py-1 bg-slate-900 border border-slate-800 text-emerald-400 hover:bg-emerald-500 hover:text-slate-950 rounded-lg text-[10px] font-bold transition shrink-0 cursor-pointer"
+                                                    >
+                                                        فتح المستند ↗
+                                                    </button>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
+
                         <div className="flex justify-end gap-2 border-t border-slate-800 pt-4">
                             <button onClick={() => setIsRowModalOpen(false)} className="bg-slate-950 border border-slate-800 px-4 py-2 rounded-xl text-xs text-slate-400">إلغاء</button>
-                            <button onClick={handleSaveRow} className="bg-amber-600 hover:bg-amber-500 text-slate-950 px-5 py-2 rounded-xl text-xs font-black" disabled={uploadingField !== null}><Save className="w-4 h-4" /> حفظ السجل</button>
+                            <button onClick={handleSaveRow} className="bg-amber-600 hover:bg-amber-500 text-slate-950 px-5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5" disabled={uploadingField !== null}>
+                                <Save className="w-4 h-4" /> حفظ السجل
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1784,7 +1964,9 @@ export default function DynamicSectionPage() {
                                 }
                             />
                             <button onClick={() => setIsSettingsModalOpen(false)} className="bg-slate-950 border border-slate-800 px-4 py-2 rounded-xl text-xs text-slate-400">إلغاء</button>
-                            <button onClick={handleSaveChangesStructure} className="bg-amber-600 hover:bg-amber-500 text-slate-950 px-5 py-2 rounded-xl text-xs font-black"><Save className="w-4 h-4" /> حفظ التغييرات الهيكلية</button>
+                            <button onClick={handleSaveChangesStructure} className="bg-amber-600 hover:bg-amber-500 text-slate-950 px-5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5">
+                                <Save className="w-4 h-4" /> حفظ التغييرات الهيكلية
+                            </button>
                         </div>
                     </div>
                 </div>
