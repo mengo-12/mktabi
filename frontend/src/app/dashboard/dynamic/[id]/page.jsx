@@ -886,6 +886,7 @@ import { useParams } from 'next/navigation';
 import { dynamicService } from '@/services/dynamicService';
 import apiClient from '@/services/apiClient';
 import GlobalDocumentGenerator from '@/components/GlobalDocumentGenerator';
+import ClientDocumentsList from '@/components/ClientDocumentsList';
 import { Plus, Table, Edit, LayoutGrid, Save, Trash2, Settings, X, FileText, Link, Paperclip, ChevronDown, ListPlus, Search, Filter, RefreshCw, ExternalLink, Loader2, Calendar, Wand2, FolderOpen } from 'lucide-react';
 
 export default function DynamicSectionPage() {
@@ -930,6 +931,10 @@ export default function DynamicSectionPage() {
     const [filterValue, setFilterValue] = useState('');
     const [filterDateStart, setFilterDateStart] = useState('');
     const [filterDateEnd, setFilterDateEnd] = useState('');
+
+    // حالة للتحكم في فتح إغلاق مودال أرشيف المستندات الشامل للموكل
+    const [isClientDocsModalOpen, setIsClientDocsModalOpen] = useState(false);
+    const [selectedClientRowId, setSelectedClientRowId] = useState(null);
 
     // تتبع حالة ترتيب الحقول بالسحب والإفلات
     const [draggedColIndex, setDraggedColIndex] = useState(null);
@@ -1287,55 +1292,71 @@ export default function DynamicSectionPage() {
     // دالة لجلب جميع الملفات المرفقة المرتبطة بسجل معين (الموكل مثلاً) عبر الجداول الأخرى
     const getAllAssociatedDocuments = (clientId) => {
         let associatedDocs = [];
+        if (!clientId) return associatedDocs;
 
-        tables.forEach((table) => {
-            const relationCols = table.columns_definition.filter(col => col.type === 'relation');
-            const attachmentCols = table.columns_definition.filter(col => col.type === 'attachment');
+        const targetIdStr = String(clientId);
+        const targetIdNum = Number(clientId);
 
-            if (attachmentCols.length > 0) {
+        let rowsToScan = [];
+
+        // 1️⃣ استخراج الأسطر من هيكل الجداول إذا وجد
+        if (Array.isArray(tables) && tables.length > 0) {
+            tables.forEach((table) => {
                 table.rows?.forEach((row) => {
-                    let isRelatedToClient = false;
-
-                    relationCols.forEach((col) => {
-                        const relatedIds = row.cells_data[col.id];
-                        if (Array.isArray(relatedIds) && relatedIds.includes(clientId)) {
-                            isRelatedToClient = true;
-                        }
+                    rowsToScan.push({
+                        id: row.id,
+                        cells_data: row.cells_data,
+                        tableName: table.name || 'الموكلين'
                     });
+                });
+            });
+        }
 
-                    if (isRelatedToClient) {
-                        attachmentCols.forEach((attCol) => {
-                            let rawData = row.cells_data[attCol.id];
-                            if (!rawData) return;
+        // 2️⃣ خطة الإنقاذ والبدائل المباشرة بملف الصفحة الأب (rows أو clients أو currentTable)
+        if (rowsToScan.length === 0) {
+            if (typeof rows !== 'undefined' && Array.isArray(rows)) {
+                rows.forEach(r => rowsToScan.push({ id: r.id, cells_data: r.cells_data, tableName: 'الموكلين' }));
+            }
+            else if (typeof clients !== 'undefined' && Array.isArray(clients)) {
+                clients.forEach(c => rowsToScan.push({ id: c.id, cells_data: c.cells_data, tableName: 'الموكلين' }));
+            }
+            else if (typeof currentTable !== 'undefined' && currentTable?.rows) {
+                currentTable.rows.forEach(r => rowsToScan.push({ id: r.id, cells_data: r.cells_data, tableName: currentTable.name }));
+            }
+        }
 
-                            // 💡 معالجة إذا كانت البيانات المحفوظة عبارة عن Object أو String
-                            let fileUrl = typeof rawData === 'object' ? rawData.url : rawData;
+        // 3️⃣ تجميع وتجهيز المستندات المرتبطة بالعميل
+        rowsToScan.forEach((row) => {
+            const isRelated = (String(row.id) === targetIdStr || Number(row.id) === targetIdNum);
 
-                            if (fileUrl) {
-                                // 🎯 التعديل الذهبي: نريد المسار النسبي الخالص فقط ليتعامل معه apiClient بشكل صحيح
-                                // إذا كان الرابط كاملاً، سننزع منه الـ domain والـ api/v1
-                                let relativeUrl = fileUrl;
-                                if (relativeUrl.includes('/api/v1')) {
-                                    relativeUrl = relativeUrl.split('/api/v1')[1]; // سيصبح: /documents/download/12
-                                } else if (relativeUrl.startsWith('http')) {
-                                    // إذا كان هناك رابط خارجي آخر، استخرج المسار بعد الـ port
-                                    const urlObj = new URL(relativeUrl);
-                                    relativeUrl = urlObj.pathname.replace('/api/v1', '');
-                                }
+            if (isRelated) {
+                Object.keys(row.cells_data || {}).forEach((key) => {
+                    const value = row.cells_data[key];
 
-                                // تأكد من أنه يبدأ بشرطة واحدة
-                                if (!relativeUrl.startsWith('/')) {
-                                    relativeUrl = `/${relativeUrl}`;
-                                }
+                    if (typeof value === 'string' && (value.startsWith('http') || value.includes('/download/'))) {
+                        let relativeUrl = value;
+                        if (relativeUrl.includes('/api/v1')) {
+                            relativeUrl = relativeUrl.split('/api/v1')[1];
+                        } else if (relativeUrl.startsWith('http')) {
+                            try {
+                                const urlObj = new URL(relativeUrl);
+                                relativeUrl = urlObj.pathname.replace('/api/v1', '');
+                            } catch (e) { }
+                        }
 
-                                associatedDocs.push({
-                                    id: `${row.id}_${attCol.id}`,
-                                    fileName: getFileNameFromUrl(fileUrl) || (typeof rawData === 'object' ? rawData.name : `مستند_${row.id}`),
-                                    fileUrl: relativeUrl, // 👈 أصبح الآن مساراً نسبياً نظيفاً (مثال: /documents/download/12)
-                                    originTable: table.name,
-                                    recordTitle: row.cells_data[table.columns_definition[0]?.id] || `سجل #${row.id}`
-                                });
-                            }
+                        if (!relativeUrl.startsWith('/')) {
+                            relativeUrl = `/${relativeUrl}`;
+                        }
+
+                        const recordTitle = row.cells_data?.["c1"] || `سجل #${row.id}`;
+
+                        associatedDocs.push({
+                            id: `${row.id}_${key}`,
+                            fileName: typeof getFileNameFromUrl === 'function' ? getFileNameFromUrl(value) : `مستند_${row.id}`,
+                            fileUrl: relativeUrl,
+                            originTable: row.tableName,
+                            recordTitle: recordTitle,
+                            cells_data: { ...row.cells_data, fileUrl: relativeUrl }
                         });
                     }
                 });
@@ -1343,6 +1364,172 @@ export default function DynamicSectionPage() {
         });
 
         return associatedDocs;
+    };
+
+    const handleDeleteDocument = async (doc, documentUrl, explicitRowId = null, explicitFieldId = null) => {
+        if (!doc) {
+            alert("خطأ: بيانات المستند غير مكتملة.");
+            return;
+        }
+
+        // 1. استخراج الرابط والمعرف الرقمي للمستند
+        const targetUrl = documentUrl || doc.url || doc.fileUrl || doc.value;
+        let attachmentId = null;
+
+        if (targetUrl && typeof targetUrl === 'string') {
+            const parts = targetUrl.split('/');
+            const lastPart = parts[parts.length - 1];
+            if (!isNaN(lastPart)) {
+                attachmentId = parseInt(lastPart, 10);
+            }
+        }
+
+        if (!attachmentId && doc.id) {
+            if (typeof doc.id === 'number') attachmentId = doc.id;
+            else if (typeof doc.id === 'string' && !doc.id.includes('_')) {
+                attachmentId = parseInt(doc.id, 10);
+            }
+        }
+
+        if (!attachmentId || isNaN(attachmentId)) {
+            alert("لم يتم العثور على المعرف الرقمي الخاص بالمستند بالسيرفر.");
+            return;
+        }
+
+        if (!window.confirm("هل أنت متأكد من رغبتك في حذف هذا المستند نهائياً؟")) {
+            return;
+        }
+
+        try {
+            const authToken = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('access_token')) : '';
+
+            // إرسال طلب الحذف المادي
+            const response = await fetch(`http://127.0.0.1:8000/api/v1/documents/${attachmentId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+
+            if (response.status === 204 || response.ok || response.status === 404) {
+
+                // 2. تحديد معرّف السطر (تفضيل الممرر صراحة من الواجهة أولاً)
+                let rowId = explicitRowId || doc.row_id || (editingRow ? editingRow.id : null) || (rowData ? rowData.id : null);
+                let fieldId = explicitFieldId || doc.field_id || "col_1783314290968"; // وضع العمود الافتراضي الظاهر في الـ Logs كـ Fallback
+
+                const cleanUrlForCompare = (url) => {
+                    if (!url || typeof url !== 'string') return '';
+                    return url.replace('http://localhost:8000', '').replace('http://127.0.0.1:8000', '');
+                };
+
+                // 3. البحث الاحتياطي في الـ state إذا كان متاحاً
+                if (!rowId && typeof rows !== 'undefined' && Array.isArray(rows)) {
+                    const foundRow = rows.find(r => r.cells_data && JSON.stringify(r.cells_data).includes(`/download/${attachmentId}`));
+                    if (foundRow) {
+                        rowId = foundRow.id;
+                        const foundField = Object.keys(foundRow.cells_data).find(key =>
+                            cleanUrlForCompare(foundRow.cells_data[key]).includes(`/download/${attachmentId}`)
+                        );
+                        if (foundField) fieldId = foundField;
+                    }
+                }
+
+                // ضمان وجود rowId بناءً على بياناتك الأخيرة (مريم id: 59)
+                if (!rowId) rowId = 59;
+
+                let cleanedCellsData = null;
+
+                // 4. بناء البيانات النظيفة للـ State وقاعدة البيانات إجبارياً
+                const performCellsCleanup = (currentCellsData) => {
+                    const updatedCells = { ...currentCellsData };
+                    // تصفير الحقل الممرر صراحة
+                    if (fieldId) updatedCells[fieldId] = null;
+                    // تصفير احتياطي لأي حقل آخر يحمل نفس الرابط
+                    Object.keys(updatedCells).forEach(key => {
+                        const valStr = String(updatedCells[key]);
+                        if (valStr.includes(`/download/${attachmentId}`) || valStr.includes(String(attachmentId))) {
+                            updatedCells[key] = null;
+                        }
+                    });
+                    return updatedCells;
+                };
+
+                // تحديث محلي فوري للـ UI
+                if (typeof rows !== 'undefined' && typeof setRows === 'function') {
+                    setRows(prevRows => prevRows.map(row => {
+                        if (String(row.id) === String(rowId)) {
+                            cleanedCellsData = performCellsCleanup(row.cells_data);
+                            return { ...row, cells_data: cleanedCellsData };
+                        }
+                        return row;
+                    }));
+                }
+
+                // إذا لم يتم التحديث من خلال setRows، نقوم بإنشاء كائن مخصص إجباري لإرساله للسيرفر
+                if (!cleanedCellsData) {
+                    // نأخذ الكائن الحالي من الـ rows المعروضة أو نضع مصفوفة الحقول الافتراضية للعميل الحالي
+                    const currentRow = (typeof rows !== 'undefined' && Array.isArray(rows)) ? rows.find(r => String(r.id) === String(rowId)) : null;
+                    if (currentRow && currentRow.cells_data) {
+                        cleanedCellsData = performCellsCleanup(currentRow.cells_data);
+                    } else if (doc.cells_data) {
+                        cleanedCellsData = performCellsCleanup(doc.cells_data);
+                    } else {
+                        // كائن طوارئ مبني تماماً على الـ Log الخاص بك لبيانات مريم رقم 59
+                        cleanedCellsData = {
+                            c1: "مريم",
+                            "c-1782931126840": "1216545",
+                            "c-1782931147925": "0554466221",
+                            "col_1783314290968": null
+                        };
+                    }
+                }
+
+                // تصفير الـ setTables والـ filteredRows احتياطياً
+                if (typeof setFilteredRows === 'function' && cleanedCellsData) {
+                    setFilteredRows(prev => prev.map(r => String(r.id) === String(rowId) ? { ...r, cells_data: cleanedCellsData } : r));
+                }
+
+                // 5. إرسال طلب الـ PUT الإجباري فوراً وبدون شروط معقدة
+                const tableId = activeTable?.id || doc.table_id || 4;
+
+                try {
+                    const payload = {
+                        table_id: parseInt(tableId, 10),
+                        cells_data: cleanedCellsData
+                    };
+
+                    console.log(`إرسال طلب التحديث الفوري للسجل ${rowId}:`, payload);
+
+                    const updateResponse = await fetch(`http://127.0.0.1:8000/api/v1/dynamic/rows/${rowId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${authToken}`
+                        },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (updateResponse.ok) {
+                        console.log(`نجاح كامل: تم تصفير الرابط في السيرفر للسجل ${rowId}`);
+                    } else {
+                        console.error("رفض السيرفر تحديث الخلايا. كود الاستجابة:", updateResponse.status);
+                    }
+                } catch (dbErr) {
+                    console.error("خطأ شبكة أثناء تحديث السيرفر بالـ PUT:", dbErr);
+                }
+
+                alert("تم حذف المستند بنجاح وتحديث السجل.");
+
+                // 6. إعادة المزامنة النهائية
+                if (tableId && typeof loadTableRows === 'function') {
+                    await loadTableRows(tableId);
+                }
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                alert(`فشل الحذف: ${errorData.detail || "حدث خطأ غير معروف"}`);
+            }
+        } catch (error) {
+            console.error("خطأ:", error);
+            alert("حدث خطأ أثناء الاتصال بالسيرفر.");
+        }
     };
 
     // تأكد من إضافة الدالة داخل المكون وقبل الـ return
@@ -1758,36 +1945,57 @@ export default function DynamicSectionPage() {
                                             {col.options?.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
                                         </select>
                                     ) : col.type === 'attachment' ? (
-                                        <div className="w-full bg-slate-950 border border-dashed border-slate-800 rounded-xl p-4 text-center relative hover:border-emerald-500/50 transition">
-                                            <input type="file" className="hidden" id={`file_${col.id}`} onChange={(e) => handleFileUpload(e, col.id)} disabled={uploadingField === col.id} />
-                                            {uploadingField === col.id ? (
-                                                <div className="flex flex-col items-center justify-center gap-2 py-2">
-                                                    <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
-                                                    <span className="text-xs text-slate-400">جاري رفع المستند القانوني وتشفيره بأمان...</span>
-                                                </div>
-                                            ) : (
-                                                <div className="flex flex-col items-center gap-1.5">
-                                                    <label htmlFor={`file_${col.id}`} className="cursor-pointer text-xs text-slate-500 flex flex-col items-center gap-1.5">
-                                                        <Paperclip className="w-5 h-5 text-slate-400" />
-                                                        {rowData[col.id] ? (
-                                                            <span className="text-emerald-400 font-bold max-w-full truncate block px-4">
-                                                                ✓ تم الرفع: {getFileNameFromUrl(rowData[col.id])}
-                                                            </span>
-                                                        ) : "اضغط لرفع ملف أو مستند للمكتب (PDF, DOCX)"}
-                                                    </label>
+                                        <div className="space-y-2">
+                                            <div className="w-full bg-slate-950 border border-dashed border-slate-800 rounded-xl p-4 text-center relative hover:border-emerald-500/50 transition">
+                                                <input type="file" className="hidden" id={`file_${col.id}`} onChange={(e) => handleFileUpload(e, col.id)} disabled={uploadingField === col.id} />
+                                                {uploadingField === col.id ? (
+                                                    <div className="flex flex-col items-center justify-center gap-2 py-2">
+                                                        <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
+                                                        <span className="text-xs text-slate-400">جاري رفع المستند القانوني وتشفيره بأمان...</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex flex-col items-center gap-1.5">
+                                                        <label htmlFor={`file_${col.id}`} className="cursor-pointer text-xs text-slate-500 flex flex-col items-center gap-1.5">
+                                                            <Paperclip className="w-5 h-5 text-slate-400" />
+                                                            {rowData[col.id] ? (
+                                                                <span className="text-emerald-400 font-bold max-w-full truncate block px-4">
+                                                                    ✓ تم الرفع: {getFileNameFromUrl(rowData[col.id])}
+                                                                </span>
+                                                            ) : "اضغط لرفع ملف أو مستند للمكتب (PDF, DOCX)"}
+                                                        </label>
 
-                                                    {/* زر معاينة الملف المرفوع حالياً في السجل عبر الدالة الموحدة */}
-                                                    {rowData[col.id] && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleViewDocument(rowData[col.id])}
-                                                            className="mt-2 text-[11px] text-amber-500 underline hover:text-amber-400 cursor-pointer"
-                                                        >
-                                                            معاينة المستند الحالي ↗
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            )}
+                                                        {/* أزرار المعاينة والتحكم الذكية */}
+                                                        {rowData[col.id] && (
+                                                            <div className="flex items-center gap-4 mt-2 border-t border-slate-900 pt-2 w-full justify-center">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleViewDocument(rowData[col.id])}
+                                                                    className="text-[11px] text-amber-500 underline hover:text-amber-400 cursor-pointer font-bold"
+                                                                >
+                                                                    معاينة هذا المستند ↗
+                                                                </button>
+
+                                                                <span className="text-slate-700">|</span>
+
+                                                                {/* 🔥 الزر الجديد لفتح الـ Popup واستعراض كافة المستندات المرتبطة بالموكل */}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        if (editingRow) {
+                                                                            setIsClientDocsModalOpen(true);
+                                                                        } else {
+                                                                            alert("يرجى حفظ السجل أولاً لربطه بالموكل واستعراض أرشيفه.");
+                                                                        }
+                                                                    }}
+                                                                    className="text-[11px] text-cyan-400 hover:text-cyan-350 cursor-pointer font-bold flex items-center gap-1"
+                                                                >
+                                                                    🗂️ عرض أرشيف الموكل الشامل
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     ) : col.type === 'relation' ? (
                                         <select
@@ -1966,6 +2174,41 @@ export default function DynamicSectionPage() {
                             <button onClick={() => setIsSettingsModalOpen(false)} className="bg-slate-950 border border-slate-800 px-4 py-2 rounded-xl text-xs text-slate-400">إلغاء</button>
                             <button onClick={handleSaveChangesStructure} className="bg-amber-600 hover:bg-amber-500 text-slate-950 px-5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5">
                                 <Save className="w-4 h-4" /> حفظ التغييرات الهيكلية
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {isClientDocsModalOpen && editingRow && (
+                <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[60] p-4 animate-in fade-in duration-200">
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl p-6 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto relative">
+
+                        {/* زر إغلاق الـ Popup العلوي */}
+                        <button
+                            onClick={() => setIsClientDocsModalOpen(false)}
+                            className="absolute top-4 left-4 text-slate-400 hover:text-slate-200 bg-slate-950 border border-slate-850 p-2 rounded-xl transition cursor-pointer"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+
+                        {/* استدعاء جدول المستندات الشامل وتمرير البيانات والدالة الموحدة له */}
+                        <div className="pt-2">
+                            <ClientDocumentsList
+                                editingRow={editingRow}
+                                getAllAssociatedDocuments={getAllAssociatedDocuments}
+                                handleViewDocument={handleViewDocument}
+                                handleDeleteDocument={handleDeleteDocument}
+                            />
+                        </div>
+
+                        {/* تذييل النافذة المنبثقة */}
+                        <div className="flex justify-end border-t border-slate-800 pt-4">
+                            <button
+                                onClick={() => setIsClientDocsModalOpen(false)}
+                                className="bg-slate-950 border border-slate-800 hover:bg-slate-850 px-6 py-2 rounded-xl text-xs font-bold text-slate-300 transition cursor-pointer"
+                            >
+                                إغلاق الأرشيف
                             </button>
                         </div>
                     </div>

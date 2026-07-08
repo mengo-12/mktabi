@@ -156,28 +156,39 @@ async def delete_case_attachment(
     if not attachment:
         raise HTTPException(status_code=404, detail="المستند غير موجود أو تم حذفه مسبقاً.")
 
-    # 2. جلب القضية للتحقق من الصلاحيات الأمنية
-    case_res = await db.execute(select(Case).where(Case.id == attachment.case_id))
-    case = case_res.scalar_one_or_none()
+    # 🛡️ حماية الحذف المعدلة: التحقق من وجود قضية أولاً
+    if attachment.case_id is not None:
+        # إذا كان الملف مرتبطاً بقضية، نتحقق من الصلاحيات كالمعتاد
+        case_res = await db.execute(select(Case).where(Case.id == attachment.case_id))
+        case = case_res.scalar_one_or_none()
 
-    # 🛡️ حماية الحذف: الأدمن، الشركاء، أو المحامي المسؤول عن القضية فقط
-    if current_user.role not in [UserRole.ADMIN, UserRole.PARTNER]:
-        if case.lawyer_id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, 
-                detail="عذراً، لا تمتلك الصلاحية القانونية لحذف مستندات هذه القضية."
-            )
+        if case and current_user.role not in [UserRole.ADMIN, UserRole.PARTNER]:
+            if case.lawyer_id != current_user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, 
+                    detail="عذراً، لا تمتلك الصلاحية القانونية لحذف مستندات هذه القضية."
+                )
+    else:
+        # 💡 ملف عام (الديناميكي): نسمح بحذفه إذا كان المستخدم هو من رفعه أو كان (Admin/Partner)
+        if current_user.role not in [UserRole.ADMIN, UserRole.PARTNER]:
+            if attachment.uploaded_by != current_user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="لا يمكنك حذف ملف قام برفعه مستخدم آخر."
+                )
 
-    # 3. الحذف المادي (Physical Delete) للملف من الهاردوير إذا كان موجوداً
-    if os.path.exists(attachment.file_path):
+    # 3. الحذف المادي (Physical Delete) للملف من الهاردوير
+    if attachment.file_path and os.path.exists(attachment.file_path):
         try:
             os.remove(attachment.file_path)
         except Exception as e:
-            print(f"فشل حذف الملف من القرص: {e}") # تسجيل التحذير دون تعطيل حذف قاعدة البيانات
+            print(f"فشل حذف الملف من القرص: {e}")
 
     # 4. الحذف البرمجي من قاعدة البيانات
     await db.delete(attachment)
     await db.commit()
+    
+    return None
 
     # 📌 [4] مسار رفع عام ومستقل مخصص للحقول والجداول الديناميكية
 @router.post("/upload-general", status_code=status.HTTP_201_CREATED)
