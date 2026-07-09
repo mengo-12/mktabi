@@ -11,7 +11,7 @@ api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 api_router.include_router(clients.router, prefix="/clients", tags=["Clients Management"]) # 👈 ربط مسار الموكلين
 api_router.include_router(cases.router, prefix="/cases", tags=["Cases Management"]) # 👈 ربط مسار إدارة القضايا
-api_router.include_router(attachments.router, prefix="/documents", tags=["Documents Management"]) # 👈 ربط مسار المستندات
+api_router.include_router(attachments.router, prefix="/attachments", tags=["Documents Management"]) # 💡 التعديل هنا: تم تغيير الـ prefix إلى /attachments ليتطابق مع الروابط في قاعدة البيانات والـ download
 api_router.include_router(hearings.router, prefix="/hearings", tags=["Hearings Management"]) # 👈 ربط مسار إدارة الجلسات
 api_router.include_router(lawyers.router, prefix="/lawyers", tags=["Lawyers & Team Management"]) # 👇 ربط مسار إدارة المحامين وطاقم العمل الجديد وحمايته بصلاحيات الإدارة
 api_router.include_router(visits.router, prefix="/visits", tags=["Office Visits & Appointments"]) # 👇 ربط مسار إدارة مواعيد وزيارات المكتب الجديد

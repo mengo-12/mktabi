@@ -1079,7 +1079,7 @@ export default function DynamicSectionPage() {
     };
 
     const handleFileUpload = async (e, columnId) => {
-        const file = e.target.files[0];
+        const file = e.target.files[0]; // التقاط الملف الحالي
         if (!file) return;
 
         const formData = new FormData();
@@ -1088,27 +1088,55 @@ export default function DynamicSectionPage() {
         try {
             setUploadingField(columnId);
 
-            // الطلب يرسل مباشرة إلى /documents/upload-general بدون تكرار البادئة
-            const response = await apiClient.post('/documents/upload-general', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data'
-                }
+            // 💡 تم التعديل هنا: توجيه الطلب إلى /attachments ليتطابق مع الـ prefix بالسيرفر
+            const response = await apiClient.post('/attachments/upload-general', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
             });
 
-            // افترضنا أن السيرفر يعيد الرابط كاملاً أو نسبياً، نقوم بتنظيفه قبل الحفظ في قاعدة البيانات
+            // تنظيف الرابط المستلم من السيرفر
             let savedPath = response.data.url;
-            if (savedPath.includes('http://127.0.0.1:8000/api/v1')) {
-                savedPath = savedPath.replace('http://127.0.0.1:8000/api/v1', '');
+
+            // 💡 تنظيف مرن: لحذف النطاق سواء كان localhost أو 127.0.0.1 لضمان سلامة الرابط في النظام
+            if (savedPath.includes('/api/v1')) {
+                const parts = savedPath.split('/api/v1');
+                savedPath = '/api/v1' + parts[1];
             }
 
+            // الكائن الجديد الذي يمثل الملف المرفوع حالياً
+            const newAttachment = {
+                name: file.name,
+                url: savedPath
+            };
+
+            // ⭐️ المنطق التراكمي: جلب المرفقات القديمة من الـ State الحالي لمنع مسحها
+            let existingAttachments = [];
+            const currentFieldValue = rowData[columnId];
+
+            if (currentFieldValue) {
+                if (Array.isArray(currentFieldValue)) {
+                    // إذا كان الحقل يحتوي بالفعل على مصفوفة ملفات
+                    existingAttachments = currentFieldValue;
+                } else if (typeof currentFieldValue === 'string') {
+                    // إذا كان الحقل يحتوي على رابط نصي واحد (من النظام القديم)، نحوله لمصفوفة لحفظ التاريخ
+                    existingAttachments = [{
+                        name: getFileNameFromUrl(currentFieldValue) || "مستند سابق",
+                        url: currentFieldValue
+                    }];
+                }
+            }
+
+            // 🤝 دمج الملفات القديمة مع الملف الجديد
+            const updatedFilesList = [...existingAttachments, newAttachment];
+
+            // تحديث حالة البيانات في الواجهة (rowData) بالمصفوفة المتراكمة الجديدة
             setRowData({
                 ...rowData,
-                [columnId]: savedPath // سيُخزن كـ: /documents/download/15
+                [columnId]: updatedFilesList
             });
 
-            alert("تم رفع المستند وحفظه بالنظام بنجاح.");
+            alert("تم إضافة المستند الجديد وتراكمه بالنظام بنجاح.");
         } catch (error) {
-            console.error("خطأ أثناء رفع الملف:", error);
+            console.error("خطأ أثناء رفع الملف التراكمي:", error);
             alert("فشل رفع الملف، يرجى التحقق من حجم الملف وصلاحية الاتصال.");
         } finally {
             setUploadingField(null);
@@ -1275,8 +1303,17 @@ export default function DynamicSectionPage() {
     };
 
     const getFileNameFromUrl = (url) => {
-        if (!url) return "";
-        return url.substring(url.lastIndexOf('/') + 1);
+        // إذا كان الرابط غير موجود أو ليس نصاً، نرجعه كما هو أو نرجع نصاً بديلًا
+        if (!url || typeof url !== 'string') {
+            return "مستند قانوني";
+        }
+
+        try {
+            // كودك الحالي المستند إلى substring أو split
+            return url.substring(url.lastIndexOf('/') + 1);
+        } catch (e) {
+            return "مستند قانوني";
+        }
     };
 
     const activeFilterColumnObject = activeTable?.columns_definition.find(c => c.id === selectedFilterColumn);
@@ -1366,30 +1403,46 @@ export default function DynamicSectionPage() {
         return associatedDocs;
     };
 
-    const handleDeleteDocument = async (doc, documentUrl, explicitRowId = null, explicitFieldId = null) => {
-        if (!doc) {
-            alert("خطأ: بيانات المستند غير مكتملة.");
-            return;
-        }
-
-        // 1. استخراج الرابط والمعرف الرقمي للمستند
-        const targetUrl = documentUrl || doc.url || doc.fileUrl || doc.value;
+    const handleDeleteDocument = async (param1, param2, explicitFieldId = null, explicitRowId = null) => {
         let attachmentId = null;
+        let doc = null;
+        let targetUrl = null;
 
-        if (targetUrl && typeof targetUrl === 'string') {
-            const parts = targetUrl.split('/');
-            const lastPart = parts[parts.length - 1];
-            if (!isNaN(lastPart)) {
-                attachmentId = parseInt(lastPart, 10);
+        // 1. فحص ذكي لترتيب المتغيرات الممررة من المكون المتصل
+        if (param1 !== undefined && param1 !== null && (typeof param1 === 'number' || (typeof param1 === 'string' && !isNaN(param1.trim()) && param1.trim() !== ''))) {
+            attachmentId = parseInt(String(param1).trim(), 10);
+            doc = param2; // الكائن الممرر بالكامل (rawDoc)
+        } else {
+            doc = param1;
+            targetUrl = param2 || (doc ? (doc.url || doc.fileUrl || doc.value || doc.path) : null);
+        }
+
+        // استخراج احتياطي للمعرف من الرابط
+        if (!attachmentId && targetUrl && typeof targetUrl === 'string') {
+            const cleanUrl = targetUrl.split('?')[0];
+            const parts = cleanUrl.split('/');
+            for (let i = parts.length - 1; i >= 0; i--) {
+                const part = parts[i].trim();
+                if (part && !isNaN(part)) {
+                    attachmentId = parseInt(part, 10);
+                    break;
+                }
             }
         }
 
-        if (!attachmentId && doc.id) {
-            if (typeof doc.id === 'number') attachmentId = doc.id;
-            else if (typeof doc.id === 'string' && !doc.id.includes('_')) {
-                attachmentId = parseInt(doc.id, 10);
+        if (!attachmentId && doc && typeof doc === 'object') {
+            const potentialIds = [doc.attachment_id, doc.document_id, doc.file_id];
+            for (const idVal of potentialIds) {
+                if (idVal !== undefined && idVal !== null && !isNaN(idVal)) {
+                    attachmentId = parseInt(idVal, 10);
+                    break;
+                }
             }
         }
+
+        console.log("=== تتبع بيانات الحذف الذكي ===");
+        console.log("المعرف الرقمي المستخرج للمستند (attachmentId):", attachmentId);
+        console.log("كائن السجل المرتبط (doc):", doc);
 
         if (!attachmentId || isNaN(attachmentId)) {
             alert("لم يتم العثور على المعرف الرقمي الخاص بالمستند بالسيرفر.");
@@ -1403,92 +1456,134 @@ export default function DynamicSectionPage() {
         try {
             const authToken = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('access_token')) : '';
 
-            // إرسال طلب الحذف المادي
+            // إرسال طلب الحذف المادي للملف
             const response = await fetch(`http://127.0.0.1:8000/api/v1/documents/${attachmentId}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${authToken}` }
             });
 
             if (response.status === 204 || response.ok || response.status === 404) {
+                if (response.status === 404) {
+                    console.log("تنبيه: المستند غير موجود مسبقاً على السيرفر (404)، سيتم استكمال تنظيف الحقول.");
+                }
 
-                // 2. تحديد معرّف السطر (تفضيل الممرر صراحة من الواجهة أولاً)
-                let rowId = explicitRowId || doc.row_id || (editingRow ? editingRow.id : null) || (rowData ? rowData.id : null);
-                let fieldId = explicitFieldId || doc.field_id || "col_1783314290968"; // وضع العمود الافتراضي الظاهر في الـ Logs كـ Fallback
+                // 2. تحديد معرّف السطر بدقة وحمايته من التداخل مع الـ columns
+                let rowId = explicitRowId;
 
-                const cleanUrlForCompare = (url) => {
-                    if (!url || typeof url !== 'string') return '';
-                    return url.replace('http://localhost:8000', '').replace('http://127.0.0.1:8000', '');
-                };
+                if (!rowId && doc && doc.id && !String(doc.id).startsWith('col_')) {
+                    rowId = doc.id;
+                }
+                if (!rowId && doc && doc.row_id && !String(doc.row_id).startsWith('col_')) {
+                    rowId = doc.row_id;
+                }
+                if (!rowId && typeof editingRow !== 'undefined' && editingRow && editingRow.id && !String(editingRow.id).startsWith('col_')) {
+                    rowId = editingRow.id;
+                }
 
-                // 3. البحث الاحتياطي في الـ state إذا كان متاحاً
-                if (!rowId && typeof rows !== 'undefined' && Array.isArray(rows)) {
-                    const foundRow = rows.find(r => r.cells_data && JSON.stringify(r.cells_data).includes(`/download/${attachmentId}`));
-                    if (foundRow) {
+                // استقبال الـ columnKey بشكل صحيح في المتغير المخصص له
+                let fieldId = explicitFieldId || (doc ? doc.field_id : null);
+
+                // 3. البحث الاحتياطي الصارم في الـ state عن معرف السطر الحقيقي فقط
+                if ((!rowId || String(rowId).startsWith('col_')) && typeof rows !== 'undefined' && Array.isArray(rows)) {
+                    const foundRow = rows.find(r => r.cells_data && JSON.stringify(r.cells_data).includes(String(attachmentId)));
+                    if (foundRow && foundRow.id && !String(foundRow.id).startsWith('col_')) {
                         rowId = foundRow.id;
-                        const foundField = Object.keys(foundRow.cells_data).find(key =>
-                            cleanUrlForCompare(foundRow.cells_data[key]).includes(`/download/${attachmentId}`)
-                        );
+                    }
+                }
+
+                // محاولة استخراج اسم الحقل (fieldId) الفعلي إذا لم يصل من المكون
+                if (!fieldId && typeof rows !== 'undefined' && Array.isArray(rows)) {
+                    const targetSearchId = rowId ? String(rowId) : null;
+                    const activeRowObj = rows.find(r => String(r.id) === targetSearchId) || rows.find(r => r.cells_data && JSON.stringify(r.cells_data).includes(String(attachmentId)));
+
+                    if (activeRowObj && activeRowObj.cells_data) {
+                        const foundField = Object.keys(activeRowObj.cells_data).find(key => {
+                            const valStr = String(activeRowObj.cells_data[key]);
+                            return valStr.includes(`/download/${attachmentId}`) || valStr.includes(String(attachmentId));
+                        });
                         if (foundField) fieldId = foundField;
                     }
                 }
 
-                // ضمان وجود rowId بناءً على بياناتك الأخيرة (مريم id: 59)
-                if (!rowId) rowId = 59;
+                if (!rowId || String(rowId).startsWith('col_')) {
+                    console.error("Critical: Could not determine valid rowId for dynamic update. Found:", rowId);
+                    alert("تعذر تحديد السجل الرقمي المرتبط بالملف لتحديثه تلقائياً.");
+                    return;
+                }
 
-                let cleanedCellsData = null;
-
-                // 4. بناء البيانات النظيفة للـ State وقاعدة البيانات إجبارياً
+                // 4. دالة التنظيف المتقدمة (تدعم الحقول النصية والمصفوفات)
                 const performCellsCleanup = (currentCellsData) => {
+                    if (!currentCellsData) return {};
                     const updatedCells = { ...currentCellsData };
-                    // تصفير الحقل الممرر صراحة
-                    if (fieldId) updatedCells[fieldId] = null;
-                    // تصفير احتياطي لأي حقل آخر يحمل نفس الرابط
+
+                    // مَسح ذكي وعميق لكل الحقول التي تحتوي على معرف الملف أو رابط التحميل الخاص به
                     Object.keys(updatedCells).forEach(key => {
-                        const valStr = String(updatedCells[key]);
-                        if (valStr.includes(`/download/${attachmentId}`) || valStr.includes(String(attachmentId))) {
-                            updatedCells[key] = null;
+                        const value = updatedCells[key];
+
+                        if (Array.isArray(value)) {
+                            // إذا كان الحقل عبارة عن مصفوفة ملفات (مثل حالة سعود)، نقوم بفلترة الملف المحذوف فقط
+                            updatedCells[key] = value.filter(fileObj => {
+                                if (!fileObj) return false;
+                                const rawUrl = fileObj.url || fileObj.filePath || "";
+                                const fileIdMatch = rawUrl.match(/\/download\/(\d+)/);
+                                const actualFileId = fileIdMatch ? parseInt(fileIdMatch[1], 10) : fileObj.id;
+                                return parseInt(actualFileId) !== parseInt(attachmentId);
+                            });
+
+                            // إذا أصبحت المصفوفة فارغة تماماً نضعها null أو مصفوفة فارغة حسب تفضيل السيرفر
+                            if (updatedCells[key].length === 0) updatedCells[key] = null;
+                        } else if (value && typeof value === 'string') {
+                            // إذا كان الحقل نصاً مباشراً (رابط مباشر)
+                            if (value.includes(`/download/${attachmentId}`) || value.includes(String(attachmentId))) {
+                                updatedCells[key] = null;
+                            }
                         }
                     });
+
+                    if (fieldId && (!updatedCells[fieldId] || (Array.isArray(updatedCells[fieldId]) && updatedCells[fieldId].length === 0))) {
+                        updatedCells[fieldId] = null;
+                    }
+
                     return updatedCells;
                 };
 
-                // تحديث محلي فوري للـ UI
-                if (typeof rows !== 'undefined' && typeof setRows === 'function') {
-                    setRows(prevRows => prevRows.map(row => {
-                        if (String(row.id) === String(rowId)) {
-                            cleanedCellsData = performCellsCleanup(row.cells_data);
-                            return { ...row, cells_data: cleanedCellsData };
+                // 5. استخراج البيانات الحالية للخلايا لتحديثها محلياً وفورياً
+                let currentCells = null;
+                const fallbackRow = (typeof rows !== 'undefined' && Array.isArray(rows)) ? rows.find(r => String(r.id) === String(rowId)) : null;
+
+                if (fallbackRow && fallbackRow.cells_data) {
+                    currentCells = fallbackRow.cells_data;
+                } else if (doc && doc.cells_data) {
+                    currentCells = doc.cells_data;
+                }
+
+                const cleanedCellsData = performCellsCleanup(currentCells || {});
+
+                // 6. تحديث المراجع والـ States فوراً لضمان اختفاء الفايل محلياً بدون ريفريش
+                if (typeof setRows === 'function') {
+                    setRows(prevRows => prevRows.map(row =>
+                        String(row.id) === String(rowId) ? { ...row, cells_data: cleanedCellsData } : row
+                    ));
+                }
+
+                if (typeof setFilteredRows === 'function') {
+                    setFilteredRows(prev => prev.map(row =>
+                        String(row.id) === String(rowId) ? { ...row, cells_data: cleanedCellsData } : row
+                    ));
+                }
+
+                // تحديث كائن الموكل المفتوح حالياً للتعديل لكي يشعر بالتغيير الفوري للمكون الفرعي
+                if (typeof setEditingRow === 'function') {
+                    setEditingRow(prev => {
+                        if (prev && String(prev.id) === String(rowId)) {
+                            return { ...prev, cells_data: cleanedCellsData };
                         }
-                        return row;
-                    }));
+                        return prev;
+                    });
                 }
 
-                // إذا لم يتم التحديث من خلال setRows، نقوم بإنشاء كائن مخصص إجباري لإرساله للسيرفر
-                if (!cleanedCellsData) {
-                    // نأخذ الكائن الحالي من الـ rows المعروضة أو نضع مصفوفة الحقول الافتراضية للعميل الحالي
-                    const currentRow = (typeof rows !== 'undefined' && Array.isArray(rows)) ? rows.find(r => String(r.id) === String(rowId)) : null;
-                    if (currentRow && currentRow.cells_data) {
-                        cleanedCellsData = performCellsCleanup(currentRow.cells_data);
-                    } else if (doc.cells_data) {
-                        cleanedCellsData = performCellsCleanup(doc.cells_data);
-                    } else {
-                        // كائن طوارئ مبني تماماً على الـ Log الخاص بك لبيانات مريم رقم 59
-                        cleanedCellsData = {
-                            c1: "مريم",
-                            "c-1782931126840": "1216545",
-                            "c-1782931147925": "0554466221",
-                            "col_1783314290968": null
-                        };
-                    }
-                }
-
-                // تصفير الـ setTables والـ filteredRows احتياطياً
-                if (typeof setFilteredRows === 'function' && cleanedCellsData) {
-                    setFilteredRows(prev => prev.map(r => String(r.id) === String(rowId) ? { ...r, cells_data: cleanedCellsData } : r));
-                }
-
-                // 5. إرسال طلب الـ PUT الإجباري فوراً وبدون شروط معقدة
-                const tableId = activeTable?.id || doc.table_id || 4;
+                // 7. مزامنة التحديث مع السيرفر عبر الـ PUT الموجه للـ rowId الرقمي النقي
+                const tableId = (typeof activeTable !== 'undefined' && activeTable?.id) || (doc ? doc.table_id : null) || 4;
 
                 try {
                     const payload = {
@@ -1518,13 +1613,12 @@ export default function DynamicSectionPage() {
 
                 alert("تم حذف المستند بنجاح وتحديث السجل.");
 
-                // 6. إعادة المزامنة النهائية
                 if (tableId && typeof loadTableRows === 'function') {
                     await loadTableRows(tableId);
                 }
             } else {
                 const errorData = await response.json().catch(() => ({}));
-                alert(`فشل الحذف: ${errorData.detail || "حدث خطأ غير معروف"}`);
+                alert(`Fails: ${errorData.detail || "حدث خطأ غير معروف أثناء حذف الملف"}`);
             }
         } catch (error) {
             console.error("خطأ:", error);
@@ -2199,6 +2293,7 @@ export default function DynamicSectionPage() {
                                 getAllAssociatedDocuments={getAllAssociatedDocuments}
                                 handleViewDocument={handleViewDocument}
                                 handleDeleteDocument={handleDeleteDocument}
+                                allDocuments={rows} // مرر مصفوفة الـ rows المجلوبة من السيرفر لجدول رقم 4 هنا كاحتياط
                             />
                         </div>
 
