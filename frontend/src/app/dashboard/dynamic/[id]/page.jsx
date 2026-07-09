@@ -1457,7 +1457,7 @@ export default function DynamicSectionPage() {
             const authToken = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('access_token')) : '';
 
             // إرسال طلب الحذف المادي للملف
-            const response = await fetch(`http://127.0.0.1:8000/api/v1/documents/${attachmentId}`, {
+            const response = await fetch(`http://127.0.0.1:8000/api/v1/attachments/${attachmentId}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${authToken}` }
             });
