@@ -112,12 +112,6 @@ async def get_sections(
                 table_data["user_permission"] = permission
                 allowed_tables.append(table_data)
                 
-                table_data = table.__dict__.copy()
-                table_data["user_permission"] = user_perms.get(
-                    table_id_str,
-                    "read_only"
-                )
-                allowed_tables.append(table_data)
             
             if allowed_tables:
                 section_data = section.__dict__.copy()

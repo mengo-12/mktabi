@@ -770,6 +770,20 @@ export default function SystemBuilderPage() {
         setColumns(table.columns_definition || [{ id: 'c1', name: '', type: 'text', default_permissions: {} }]);
         setViewMode(table.view_mode || 'table');
         setIsStaffTable(table.is_staff_table || false); // سحب حالة الاعتماد عند تعديل الجدول
+        setSelectedSectionId(table.section_id);
+
+        setEditingTableId(table.id);
+
+        setTableName(table.name);
+
+        setColumns(
+            table.columns_definition ||
+            [{ id: 'c1', name: '', type: 'text', default_permissions: {} }]
+        );
+
+        setViewMode(table.view_mode || "table");
+
+        setIsStaffTable(table.is_staff_table || false);
     };
 
     const handleDeleteTemplate = async (id) => {
@@ -1003,6 +1017,52 @@ export default function SystemBuilderPage() {
                                     </div>
                                 ))}
                             </div>
+                            {/* الجداول التابعة للقسم المحدد */}
+                            {selectedSectionId && (
+                                <div className="mt-5 border-t border-zinc-800 pt-4">
+                                    <h3 className="text-sm text-amber-500 font-semibold mb-3">
+                                        جداول القسم
+                                    </h3>
+
+                                    <div className="space-y-2 max-h-56 overflow-y-auto">
+
+                                        {(sections.find(s => s.id === selectedSectionId)?.tables || []).map((table) => (
+
+                                            <div
+                                                key={table.id}
+                                                className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2"
+                                            >
+
+                                                <span className="text-xs text-zinc-200">
+                                                    📋 {table.name}
+                                                </span>
+
+                                                <div className="flex gap-2">
+
+                                                    <button
+                                                        onClick={() => handleSelectTableForEdit(table)}
+                                                        className="text-amber-500 hover:text-amber-400 text-xs"
+                                                    >
+                                                        ✏️
+                                                    </button>
+
+                                                    <button
+                                                        onClick={() => handleDeleteTable(table.id)}
+                                                        className="text-red-500 hover:text-red-400 text-xs"
+                                                    >
+                                                        🗑️
+                                                    </button>
+
+                                                </div>
+
+                                            </div>
+
+                                        ))}
+
+                                    </div>
+                                </div>
+                            )}
+
                         </div>
 
                         <div className="bg-zinc-900 p-6 rounded-xl border border-zinc-800 shadow-xl">
