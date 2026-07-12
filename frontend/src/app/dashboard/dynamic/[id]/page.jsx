@@ -1012,7 +1012,7 @@ export default function DynamicSectionPage() {
                 return "read";
 
 
-            case "hidden":
+            case "no_access":
                 return "no_access";
 
 
@@ -1021,7 +1021,7 @@ export default function DynamicSectionPage() {
 
 
             default:
-                return "read";
+                return "no_access";
 
         }
 

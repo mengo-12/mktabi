@@ -143,11 +143,11 @@ async def get_current_user(
             for k, v in cells.items():
                 # إذا كانت الصلاحية مخزنة كـ قاموس جاهز
                 if isinstance(v, dict):
-                    if any(x in str(v) for x in ["read_only", "read_write", "hidden"]):
+                    if any(x in str(v) for x in ["read_only", "read_write", "no_access"]):
                         permissions_dict = v
                         break
                 # إذا كانت مخزنة كـ نص JSON
-                elif isinstance(v, str) and any(x in v for x in ["read_only", "read_write", "hidden"]):
+                elif isinstance(v, str) and any(x in v for x in ["read_only", "read_write", "no_access"]):
                     try:
                         permissions_dict = json.loads(v)
                         break
@@ -248,7 +248,7 @@ def sanitize_staff_permissions(cells_data: dict, staff_table_id: int) -> dict:
         
         if isinstance(v, dict):
             permissions_dict = v
-        elif isinstance(v, str) and any(x in v for x in ["read_only", "read_write", "hidden"]):
+        elif isinstance(v, str) and any(x in v for x in ["read_only", "read_write", "no_access"]):
             try:
                 permissions_dict = json.loads(v)
                 is_json_string = True

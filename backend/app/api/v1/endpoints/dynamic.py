@@ -27,38 +27,26 @@ def check_dynamic_permission(current_user: User, table_id: int, required_level: 
     تتحقق مما إذا كان المستخدم يمتلك الصلاحية المطلوبة للجدول المعين.
     required_level: 'read' أو 'write'
     """
-    # الأدمن الأساسي أو المدير يمر تلقائياً بدون قيود
+
+    # الأدمن والمدير يتجاوزان جميع القيود
     if not getattr(current_user, "is_dynamic_staff", False):
         return True
 
     user_permissions = current_user.dynamic_permissions or {}
     table_perm = user_permissions.get(str(table_id))
 
-    if not table_perm:
-        raise HTTPException(
-            status_code=403,
-            detail="لا توجد صلاحية لهذا الجدول."
-        )
-
-
-    if table_perm == "hidden":
-        raise HTTPException(
-            status_code=403,
-            detail="لا تملك صلاحية الوصول."
-        )
-
-    # 1. حالة الحجب الكامل
-    if table_perm == "hidden":
+    # لا توجد أي صلاحية لهذا الجدول
+    if not table_perm or table_perm == "no_access":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="⚠️ عذراً، لا تمتلك صلاحية الوصول أو رؤية هذا القسم الحساس."
+            detail="⚠️ عذراً، لا تمتلك صلاحية الوصول لهذا الجدول."
         )
 
-    # 2. حالة طلب تعديل/إضافة/حذف والموظف لديه قراءة فقط
-    if required_level == "write" and (table_perm == "read_only" or not table_perm):
+    # صلاحية قراءة فقط
+    if required_level == "write" and table_perm == "read_only":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="🔒 عذراً، تمتلك صلاحية القراءة فقط، لا يمكنك إضافة، تعديل أو حذف البيانات."
+            detail="🔒 عذراً، تمتلك صلاحية القراءة فقط، ولا يمكنك إضافة أو تعديل أو حذف البيانات."
         )
 
     return True
@@ -115,8 +103,14 @@ async def get_sections(
                     allowed_tables.append(table_data)
                     continue
 
-                if user_perms.get(table_id_str) == "hidden":
+                permission = user_perms.get(table_id_str, "no_access")
+
+                if permission == "no_access":
                     continue
+
+                table_data = table.__dict__.copy()
+                table_data["user_permission"] = permission
+                allowed_tables.append(table_data)
                 
                 table_data = table.__dict__.copy()
                 table_data["user_permission"] = user_perms.get(
@@ -238,9 +232,8 @@ async def get_tables_by_section(
                 "no_access"
             )
 
-            if permission == "hidden":
+            if permission == "no_access":
                 continue
-
             table.user_permission = permission
             allowed_tables.append(table)
 
@@ -427,6 +420,6 @@ async def get_all_tables(
     
     if getattr(current_user, "is_dynamic_staff", False):
         user_perms = current_user.dynamic_permissions or {}
-        return [t for t in tables if user_perms.get(str(t.id)) != "hidden"]
+        return [t for t in tables if user_perms.get(str(t.id), "no_access") != "no_access"]
         
     return tables

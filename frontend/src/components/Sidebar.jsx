@@ -55,11 +55,11 @@
 
 //     return (
 //         <aside className="w-64 bg-[#0F172A] text-slate-400 h-screen fixed top-0 right-0 flex flex-col border-l border-slate-800/60 shadow-xl select-none z-50" dir="rtl">
-            
+
 //             {/* هيدر القائمة الجانبية */}
 //             <div className="p-5 border-b border-slate-800/50 relative overflow-hidden bg-slate-950/20">
 //                 <div className="absolute -top-10 -left-10 w-24 h-24 bg-amber-500/5 rounded-full blur-2xl pointer-events-none" />
-                
+
 //                 <div className="flex items-center gap-3">
 //                     <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/20 shadow-inner">
 //                         <Scale className="w-5 h-5 text-amber-500" />
@@ -79,11 +79,11 @@
 //                         <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-500 mb-2">
 //                             {group.groupName}
 //                         </p>
-                        
+
 //                         {group.items.map((item) => {
 //                             const isActive = pathname === item.path;
 //                             const Icon = item.icon;
-                            
+
 //                             return (
 //                                 <Link
 //                                     key={item.path}
@@ -125,7 +125,7 @@
 //                             </div>
 //                         )}
 //                     </div>
-                    
+
 //                     {/* الاسم والوظيفة */}
 //                     <div className="truncate flex-1">
 //                         <p className="text-xs font-bold text-slate-200 truncate">
@@ -150,15 +150,15 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { dynamicService } from '@/services/dynamicService';
-import { 
-    LayoutDashboard, 
-    Users, 
-    Briefcase, 
+import {
+    LayoutDashboard,
+    Users,
+    Briefcase,
     Scale,
-    CircleDollarSign, 
-    CalendarDays, 
-    BarChart3, 
-    ClipboardList, 
+    CircleDollarSign,
+    CalendarDays,
+    BarChart3,
+    ClipboardList,
     Hourglass,
     Crown,
     FolderOpen,
@@ -174,13 +174,22 @@ export default function Sidebar() {
         const fetchDynamicPages = async () => {
             try {
                 const data = await dynamicService.getSections();
-                setDynamicSections(data);
+
+                setDynamicSections(
+                    (data || []).filter(
+                        section =>
+                            Array.isArray(section.tables) &&
+                            section.tables.length > 0
+                    )
+                );
+
             } catch (error) {
                 console.error("خطأ في جلب الأقسام الديناميكية بالـ Sidebar:", error);
             }
         };
+
         fetchDynamicPages();
-    }, [pathname]); // إعادة الجلب عند التنقل لضمان التحديث اللحظي
+    }, [pathname, user]);
 
     // تنظيم الروابط الثابتة في مجموعات لتنسيق بصري مريح للعين
     const menuGroups = [
@@ -217,11 +226,11 @@ export default function Sidebar() {
 
     return (
         <aside className="w-64 bg-[#0F172A] text-slate-400 h-screen fixed top-0 right-0 flex flex-col border-l border-slate-800/60 shadow-xl select-none z-50" dir="rtl">
-            
+
             {/* هيدر القائمة الجانبية */}
             <div className="p-5 border-b border-slate-800/50 relative overflow-hidden bg-slate-950/20">
                 <div className="absolute -top-10 -left-10 w-24 h-24 bg-amber-500/5 rounded-full blur-2xl pointer-events-none" />
-                
+
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/20 shadow-inner">
                         <Scale className="w-5 h-5 text-amber-500" />
@@ -235,32 +244,30 @@ export default function Sidebar() {
 
             {/* روابط التنقل مقسمة بشكل منسق */}
             <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto custom-scrollbar">
-                
+
                 {/* 1. المجموعات الأساسية الثابتة للنظام */}
                 {menuGroups.map((group, groupIdx) => (
                     <div key={groupIdx} className="space-y-1">
                         <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-500 mb-2">
                             {group.groupName}
                         </p>
-                        
+
                         {group.items.map((item) => {
                             const isActive = pathname === item.path;
                             const Icon = item.icon;
-                            
+
                             return (
                                 <Link
                                     key={item.path}
                                     href={item.path}
-                                    className={`flex items-center justify-between px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-200 group relative ${
-                                        isActive
-                                            ? 'bg-slate-800/50 text-amber-400 border border-slate-700/50 shadow-inner'
-                                            : 'hover:bg-slate-800/30 hover:text-slate-200 border border-transparent'
-                                    }`}
+                                    className={`flex items-center justify-between px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-200 group relative ${isActive
+                                        ? 'bg-slate-800/50 text-amber-400 border border-slate-700/50 shadow-inner'
+                                        : 'hover:bg-slate-800/30 hover:text-slate-200 border border-transparent'
+                                        }`}
                                 >
                                     <div className="flex items-center gap-3">
-                                        <Icon className={`w-4 h-4 transition-transform duration-200 group-hover:scale-105 ${
-                                            isActive ? 'text-amber-500' : 'text-slate-500 group-hover:text-slate-400'
-                                        }`} />
+                                        <Icon className={`w-4 h-4 transition-transform duration-200 group-hover:scale-105 ${isActive ? 'text-amber-500' : 'text-slate-500 group-hover:text-slate-400'
+                                            }`} />
                                         <span>{item.name}</span>
                                     </div>
 
@@ -288,16 +295,14 @@ export default function Sidebar() {
                                 <Link
                                     key={section.id}
                                     href={dynamicPath}
-                                    className={`flex items-center justify-between px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-200 group relative ${
-                                        isActive
-                                            ? 'bg-slate-800/50 text-amber-400 border border-slate-700/50 shadow-inner'
-                                            : 'hover:bg-slate-800/30 hover:text-slate-200 border border-transparent'
-                                    }`}
+                                    className={`flex items-center justify-between px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-200 group relative ${isActive
+                                        ? 'bg-slate-800/50 text-amber-400 border border-slate-700/50 shadow-inner'
+                                        : 'hover:bg-slate-800/30 hover:text-slate-200 border border-transparent'
+                                        }`}
                                 >
                                     <div className="flex items-center gap-3">
-                                        <FolderOpen className={`w-4 h-4 transition-transform duration-200 group-hover:scale-105 ${
-                                            isActive ? 'text-amber-400' : 'text-slate-500 group-hover:text-slate-400'
-                                        }`} />
+                                        <FolderOpen className={`w-4 h-4 transition-transform duration-200 group-hover:scale-105 ${isActive ? 'text-amber-400' : 'text-slate-500 group-hover:text-slate-400'
+                                            }`} />
                                         <span>{section.title}</span>
                                     </div>
 
@@ -322,7 +327,7 @@ export default function Sidebar() {
                             </div>
                         )}
                     </div>
-                    
+
                     <div className="truncate flex-1">
                         <p className="text-xs font-bold text-slate-200 truncate">
                             {user?.full_name || 'الأستاذ المحامي'}
