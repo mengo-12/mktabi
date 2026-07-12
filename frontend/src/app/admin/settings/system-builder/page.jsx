@@ -532,6 +532,13 @@ export default function SystemBuilderPage() {
     // التحكم في التبويب النشط
     const [activeTab, setActiveTab] = useState('engine'); // 'engine' أو 'identity'
 
+    // --- بيانات وصلاحيات المستخدم الحالي المحملة من النظام (مثال افتراضي للمحاكاة) ---
+    const [currentUserPermissions, setCurrentUserPermissions] = useState({
+        can_manage_sections: true,  // صلاحية إدارة الأقسام والصفحات
+        can_engineer_tables: true,  // صلاحية هندسة وبناء الجداول
+        can_manage_identity: true,  // صلاحية تعديل الهوية المرئية
+    });
+
     // --- حالات التبويب الأول (محرك السيستم والجداول والقوالب) ---
     const [sections, setSections] = useState([]);
     const [newSectionTitle, setNewSectionTitle] = useState('');
@@ -541,7 +548,7 @@ export default function SystemBuilderPage() {
 
     const [tableName, setTableName] = useState('');
     const [viewMode, setViewMode] = useState('table'); // table, grid, list
-    const [columns, setColumns] = useState([{ id: 'c1', name: '', type: 'text' }]);
+    const [columns, setColumns] = useState([{ id: 'c1', name: '', type: 'text', default_permissions: {} }]);
     const [editingTemplateId, setEditingTemplateId] = useState(null);
 
     const [templates, setTemplates] = useState([]);
@@ -551,6 +558,12 @@ export default function SystemBuilderPage() {
     const [variables, setVariables] = useState([]);
     const [newVar, setNewVar] = useState({ id: '', name: '', type: 'text' });
     const [editingTableId, setEditingTableId] = useState(null);
+    const [isStaffTable, setIsStaffTable] = useState(false); // تم تفعيلها لترتبط بالـ Checkbox بالأسفل
+
+    // استخراج كافة الجداول الفرعية من كافة الأقسام لتغذية مصفوفة الصلاحيات الديناميكية
+    const allAvailableTables = (sections || [])
+        .flatMap(sec => sec.tables || [])
+        .filter(table => table && table.id && table.id !== editingTableId);
 
     // --- حالات التبويب الثاني (نظام تصميم Canva المرئي الحر للتروئيسة) ---
     const [canvasElements, setCanvasElements] = useState([
@@ -572,6 +585,7 @@ export default function SystemBuilderPage() {
         loadSections();
         loadTemplates();
         loadOfficeSettings();
+        // هنا يمكن جلب صلاحيات المستخدم الحالي من الـ Context أو API الخاص بالـ Auth
     }, []);
 
     const loadSections = async () => {
@@ -581,8 +595,16 @@ export default function SystemBuilderPage() {
                 setSections(data || []);
             } else {
                 setSections([
-                    { id: 'sec-1', title: 'إدارة قضايا الشركات' },
-                    { id: 'sec-2', title: 'عقود الأحوال الشخصية' }
+                    {
+                        id: 'sec-1',
+                        title: 'إدارة قضايا الشركات',
+                        tables: [{ id: 'tbl-1', name: 'القضايا التجارية' }, { id: 'tbl-2', name: 'العملاء والشراكات' }]
+                    },
+                    {
+                        id: 'sec-2',
+                        title: 'عقود الأحوال الشخصية',
+                        tables: [{ id: 'tbl-3', name: 'الجلسات والقرارات' }]
+                    }
                 ]);
             }
         } catch (error) { console.error(error); }
@@ -608,28 +630,29 @@ export default function SystemBuilderPage() {
 
     // --- دوال إدارة الصفحات والجداول والقوالب (CRUD الأقسام) ---
     const handleCreateSection = async () => {
+        if (!currentUserPermissions.can_manage_sections) {
+            return alert("⛔ ليس لديك صلاحية لإنشاء أقسام جديدة في النظام");
+        }
         if (!newSectionTitle.trim()) return;
         if (dynamicService && typeof dynamicService.createSection === 'function') {
             await dynamicService.createSection(newSectionTitle, 'Folder', sections.length);
         } else {
-            setSections([...sections, { id: `sec-${Date.now()}`, title: newSectionTitle }]);
+            setSections([...sections, { id: `sec-${Date.now()}`, title: newSectionTitle, tables: [] }]);
         }
         setNewSectionTitle('');
         loadSections();
     };
 
     const handleUpdateSection = async (id) => {
+        if (!currentUserPermissions.can_manage_sections) {
+            return alert("⛔ ليس لديك صلاحية لتعديل الأقسام");
+        }
         if (!editingSectionTitle.trim()) return;
         try {
             if (dynamicService && typeof dynamicService.updateSection === 'function') {
-                // 1. إرسال طلب التعديل للباك إند
                 await dynamicService.updateSection(id, editingSectionTitle);
-
-                // 2. تصفير حالات التعديل وتحديث الواجهة
                 setEditingSectionId(null);
                 setEditingSectionTitle('');
-
-                // 3. إعادة جلب البيانات الحقيقية من السيرفر فوراً لضمان المزامنة
                 loadSections();
                 alert("تم تعديل اسم القسم بنجاح في قاعدة البيانات! 💾");
             }
@@ -640,16 +663,14 @@ export default function SystemBuilderPage() {
     };
 
     const handleDeleteSection = async (id) => {
+        if (!currentUserPermissions.can_manage_sections) {
+            return alert("⛔ ليس لديك صلاحية لحذف الأقسام");
+        }
         if (!confirm('هل أنت متأكد من حذف هذا القسم وكل الجداول التابعة له؟')) return;
         try {
             if (dynamicService && typeof dynamicService.deleteSection === 'function') {
-                // 1. طلب الحذف من الباك إند
                 await dynamicService.deleteSection(id);
-
-                // 2. في حال كان القسم المحذوف هو المحدد حالياً، نقوم بإلغاء تحديده
                 if (selectedSectionId === id) setSelectedSectionId(null);
-
-                // 3. إعادة جلب البيانات لتحديث القائمة الجانبية
                 loadSections();
                 alert("تم حذف القسم بنجاح من قاعدة البيانات! 🗑️");
             }
@@ -661,7 +682,7 @@ export default function SystemBuilderPage() {
 
     // --- دوال هندسة الجداول والأعمدة المرنة ---
     const handleAddColumnField = () => {
-        setColumns([...columns, { id: `c-${Date.now()}`, name: '', type: 'text' }]);
+        setColumns([...columns, { id: `c-${Date.now()}`, name: '', type: 'text', default_permissions: {} }]);
     };
 
     const handleRemoveColumnField = (id) => {
@@ -675,32 +696,39 @@ export default function SystemBuilderPage() {
         setColumns(updated);
     };
 
+    // دالة لتعديل صلاحيات الوصول الافتراضية لحقل الـ UserAccount بشكل ديناميكي
+    const handlePermissionChange = (columnIndex, tableId, permissionValue) => {
+        const updated = [...columns];
+        if (!updated[columnIndex].default_permissions) {
+            updated[columnIndex].default_permissions = {};
+        }
+        updated[columnIndex].default_permissions[tableId] = permissionValue;
+        setColumns(updated);
+    };
+
     const handleSaveTable = async () => {
+        if (!currentUserPermissions.can_engineer_tables) {
+            return alert("⛔ ليس لديك صلاحية (مهندس نظام) لتعديل أو بناء هياكل الجداول");
+        }
         if (!selectedSectionId || !tableName.trim()) {
             return alert("يرجى اختيار القسم وتحديد اسم الجدول أولاً");
         }
 
         try {
+            // تضمين خاصية جدول الموظفين وحالة الصلاحيات بداخل الـ Payload المرسل للسيرفر
             if (editingTableId) {
-                // 🔄 عملية التحديث (تعديل الهيكل لحل خطأ 422 ديناميكياً)
-                const updatedData = {
-                    name: tableName,
-                    columns_definition: columns,
-                    view_mode: viewMode
-                };
-                await dynamicService.updateTable(editingTableId, tableName, columns, viewMode);
+                await dynamicService.updateTable(editingTableId, tableName, columns, viewMode, { is_staff_table: isStaffTable });
                 alert("تم تحديث هيكل الجدول بنجاح! 🔄");
             } else {
-                // ➕ عملية إنشاء جدول جديد تماماً
-                await dynamicService.createTable(selectedSectionId, tableName, columns, viewMode);
+                await dynamicService.createTable(selectedSectionId, tableName, columns, viewMode, { is_staff_table: isStaffTable });
                 alert("تم إنشاء وتثبيت الجدول الجديد بنجاح! 🚀");
             }
 
-            // إعادة تهيئة الحقول وتحديث القائمة
             setTableName('');
-            setColumns([{ id: 'c1', name: '', type: 'text' }]);
+            setColumns([{ id: 'c1', name: '', type: 'text', default_permissions: {} }]);
             setEditingTableId(null);
-            loadSections(); // لتحديث الشجرة الجانبية بالأقسام والجداول الجديدة
+            setIsStaffTable(false); // إعادة التعيين بعد الحفظ
+            loadSections();
         } catch (error) {
             console.error("خطأ أثناء معالجة الجدول:", error);
             alert("فشل في حفظ الجدول بالنظام");
@@ -708,18 +736,21 @@ export default function SystemBuilderPage() {
     };
 
     const handleDeleteTable = async (tableId) => {
+        if (!currentUserPermissions.can_engineer_tables) {
+            return alert("⛔ ليس لديك صلاحية لحذف الجداول الهيكلية");
+        }
         if (!confirm('هل أنت متأكد من حذف هذا الجدول وكل الصفوف والبيانات التابعة له نهائياً؟')) return;
         try {
             await dynamicService.deleteTable(tableId);
             alert("تم حذف الجدول من النظام بنجاح! 🗑️");
 
-            // إذا كان الجدول المحذوف هو الذي يتم تعديله حالياً، قم بتصفير الحقول
             if (editingTableId === tableId) {
                 setTableName('');
-                setColumns([{ id: 'c1', name: '', type: 'text' }]);
+                setColumns([{ id: 'c1', name: '', type: 'text', default_permissions: {} }]);
                 setEditingTableId(null);
+                setIsStaffTable(false);
             }
-            loadSections(); // تحديث القائمة الجانبية
+            loadSections();
         } catch (error) {
             console.error("خطأ أثناء حذف الجدول:", error);
             alert("فشل في حذف الجدول من السيرفر");
@@ -736,11 +767,15 @@ export default function SystemBuilderPage() {
     const handleSelectTableForEdit = (table) => {
         setEditingTableId(table.id);
         setTableName(table.name);
-        setColumns(table.columns_definition || [{ id: 'c1', name: '', type: 'text' }]);
+        setColumns(table.columns_definition || [{ id: 'c1', name: '', type: 'text', default_permissions: {} }]);
         setViewMode(table.view_mode || 'table');
+        setIsStaffTable(table.is_staff_table || false); // سحب حالة الاعتماد عند تعديل الجدول
     };
 
     const handleDeleteTemplate = async (id) => {
+        if (!currentUserPermissions.can_engineer_tables) {
+            return alert("⛔ لا تمتلك صلاحيات كافية لحذف القوالب القانونية");
+        }
         if (!confirm('هل تريد حذف هذا القالب القانوني نهائياً من النظام؟')) return;
         try {
             const res = await fetch(`http://127.0.0.1:8000/api/v1/office-settings/templates/${id}`, {
@@ -754,7 +789,7 @@ export default function SystemBuilderPage() {
                     setVariables([]);
                     setEditingTemplateId(null);
                 }
-                loadTemplates(); // تحديث القائمة فوراً
+                loadTemplates();
             } else {
                 alert("فشل حذف القالب من السيرفر");
             }
@@ -763,7 +798,6 @@ export default function SystemBuilderPage() {
         }
     };
 
-    // عند الضغط على قالب من القائمة لتحميل بياناته للتعديل
     const handleSelectTemplateForEdit = (tmpl) => {
         setEditingTemplateId(tmpl.id);
         setTemplateTitle(tmpl.title);
@@ -771,29 +805,28 @@ export default function SystemBuilderPage() {
         setContentBody(tmpl.content_body);
         setVariables(tmpl.variables_meta || []);
 
-        // 🎯 الحل الجذري: تحديث ورقة الـ Canva لتعكس تصميم القالب المحدد فوراً
         if (tmpl.visual_design && tmpl.visual_design.canvas_elements) {
             setCanvasElements(tmpl.visual_design.canvas_elements);
         } else if (tmpl.visual_design && tmpl.visual_design.header_data?.canvas_elements) {
             setCanvasElements(tmpl.visual_design.header_data.canvas_elements);
         } else {
-            // إذا كان القالب يفتقر لتصميم خاص، يرجع للهوية الافتراضية للمكتب
             loadOfficeSettings();
         }
     };
 
     const handleSaveTemplate = async () => {
+        if (!currentUserPermissions.can_engineer_tables) {
+            return alert("⛔ لا تمتلك صلاحيات كافية لحفظ وتعديل القوالب القانونية");
+        }
         if (!templateTitle.trim() || !contentBody.trim()) {
             return alert("برجاء إدخال عنوان القالب ومحتواه الأساسي أولاً");
         }
 
-        // 🎯 هنا نقوم بحقن عناصر الكانفاس الحالية داخل تصميم القالب
         const payload = {
             title: templateTitle,
             template_type: templateType,
             visual_design: {
                 font_family: 'Cairo',
-                // نرسل المصفوفة الحالية كاملة ليفهمها الباك إند ويعتمدها لهذا القالب
                 canvas_elements: canvasElements
             },
             content_body: contentBody,
@@ -818,14 +851,10 @@ export default function SystemBuilderPage() {
 
             if (res.ok) {
                 alert(editingTemplateId ? "تم تحديث القالب وتصميمه الخاص بنجاح! 🔄" : "تم حفظ القالب وتصميمه الخاص بنجاح! 🎉");
-
-                // تصفير الحقول للوضع الافتراضي
                 setTemplateTitle('');
                 setContentBody('');
                 setVariables([]);
                 setEditingTemplateId(null);
-
-                // العودة لتصميم المكتب الافتراضي بعد الحفظ
                 loadOfficeSettings();
                 loadTemplates();
             } else {
@@ -835,6 +864,7 @@ export default function SystemBuilderPage() {
             console.error("خطأ أثناء حفظ القالب:", error);
         }
     };
+
     // --- دوال تحريك وبناء عناصر لوحة الـ Canva ---
     const addTextElement = () => {
         const newEl = { id: `el-${Date.now()}`, type: 'text', content: 'كتلة نصية جديدة (اضغط لتعديلها)', x: 10, y: 20, fontSize: 13, fontWeight: 'normal', color: '#27272a', width: 220 };
@@ -874,8 +904,6 @@ export default function SystemBuilderPage() {
         setSelectedElementId(el.id);
         setDraggingId(el.id);
         const rect = canvasRef.current.getBoundingClientRect();
-
-        // العودة للحساب من اليسار ليتطابق مع ستايل left الحالي في الكانفاس
         const mouseXPercent = ((e.clientX - rect.left) / rect.width) * 100;
         const mouseYPercent = ((e.clientY - rect.top) / rect.height) * 100;
         setDragOffset({ x: mouseXPercent - el.x, y: mouseYPercent - el.y });
@@ -884,12 +912,9 @@ export default function SystemBuilderPage() {
     const handleCanvasMouseMove = (e) => {
         if (!draggingId) return;
         const rect = canvasRef.current.getBoundingClientRect();
-
-        // الحساب من اليسار بطريقة طبيعية ومباشرة
         let newX = ((e.clientX - rect.left) / rect.width) * 100 - dragOffset.x;
         let newY = ((e.clientY - rect.top) / rect.height) * 100 - dragOffset.y;
 
-        // قيود الحدود
         newX = Math.max(0, Math.min(newX, 90));
         newY = Math.max(0, Math.min(newY, 90));
         setCanvasElements(canvasElements.map(el => el.id === draggingId ? { ...el, x: newX, y: newY } : el));
@@ -898,6 +923,9 @@ export default function SystemBuilderPage() {
     const handleCanvasMouseUp = () => setDraggingId(null);
 
     const handleSaveOfficeIdentity = async () => {
+        if (!currentUserPermissions.can_manage_identity) {
+            return alert("⛔ عذراً، حسابك لا يملك صلاحيات تعديل الهوية المرئية والشعارات للمكتب");
+        }
         const officePayload = {
             primary_color: primaryColor,
             header_data: { canvas_elements: canvasElements },
@@ -912,79 +940,13 @@ export default function SystemBuilderPage() {
             });
 
             if (resSettings.ok) {
-                const templatePayload = {
-                    title: "قالب مستند مدمج بترويسة Canva",
-                    template_type: "عقد",
-                    content_body: "اكتب نص العقد القانوني هنا...",
-                    visual_design: { primary_color: primaryColor },
-                    variables_meta: []
-                };
-
-                await fetch('http://127.0.0.1:8000/api/v1/office-settings/templates', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(templatePayload)
-                });
-                alert("🏛️ تم حفظ قالب التصميم بنجاح!");
+                alert("🏛️ تم حفظ الهوية المرئية بنجاح!");
+                loadOfficeSettings();
             } else {
                 alert("تم تحديث وحفظ تصميم هوية المستندات بنجاح محلياً! 🎉");
             }
         } catch (error) {
             console.error("خطأ أثناء الحفظ:", error);
-        }
-    };
-
-    const selectedElement = canvasElements.find(el => el.id === selectedElementId);
-
-    const handleSaveTemplateWithCanvas = async () => {
-        // التأكد من وجود عنوان ومحتوى للقالب أولاً (حتى لا يتم حفظ قالب فارغ)
-        if (!templateTitle || !templateTitle.trim()) {
-            return alert("برجاء إدخال اسم أو عنوان القالب في تبويب البيانات أولاً 📝");
-        }
-
-        // بناء الهيكل (Payload) المرسل للباك إند
-        const payload = {
-            title: templateTitle,
-            template_type: templateType || 'general',
-            content_body: contentBody || '', // نص القالب الأساسي
-            variables_meta: Array.isArray(variables) ? variables : [],
-
-            // 🎯 السحر هنا: نأخذ مصفوفة الـ canvasElements الحالية في الصفحة ونضعها داخل القالب
-            visual_design: {
-                font_family: 'Cairo',
-                canvas_elements: canvasElements // العناصر التي صممتها وحركتها بالماوس
-            }
-        };
-
-        try {
-            let response;
-            // إذا كنا نقوم بتعديل قالب موجود مسبقاً
-            if (editingTemplateId) {
-                response = await fetch(`http://127.0.0.1:8000/api/v1/office-settings/templates/${editingTemplateId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-            } else {
-                // إذا كان قالباً جديداً كلياً
-                response = await fetch('http://127.0.0.1:8000/api/v1/office-settings/templates', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-            }
-
-            if (response.ok) {
-                alert("🎯 تم حفظ القالب وتصميم الـ Canva الخاص به بنظام التوليد الموحد بنجاح!");
-
-                // تحديث القوائم في الصفحة لإظهار القالب الجديد أو المحدث
-                if (typeof loadTemplates === 'function') loadTemplates();
-            } else {
-                alert("فشل حفظ القالب، تأكد من اتصال السيرفر.");
-            }
-        } catch (error) {
-            console.error("خطأ أثناء حفظ تصميم القالب:", error);
-            alert("حدث خطأ غير متوقع أثناء الحفظ.");
         }
     };
 
@@ -1050,9 +1012,7 @@ export default function SystemBuilderPage() {
                                     <div key={tmpl.id} className="flex justify-between items-center p-2 bg-zinc-900 rounded border border-zinc-800">
                                         <span className="text-zinc-200 text-xs">{tmpl.title}</span>
                                         <div className="flex gap-2">
-                                            {/* زر اختيار القالب للتعديل */}
                                             <button onClick={() => handleSelectTemplateForEdit(tmpl)} className="text-zinc-400 hover:text-amber-500 text-xs">✏️</button>
-                                            {/* زر حذف القالب */}
                                             <button onClick={() => handleDeleteTemplate(tmpl.id)} className="text-zinc-400 hover:text-red-500 text-xs">🗑️</button>
                                         </div>
                                     </div>
@@ -1073,22 +1033,72 @@ export default function SystemBuilderPage() {
                             </select>
                         </div>
 
-                        <div className="space-y-3 mb-6 max-h-72 overflow-y-auto pr-2">
+                        {/* 👇 المكون المحدث: تفعيل وربط الـ Checkbox مع الـ State بنجاح */}
+                        <div className="flex items-center gap-2 mb-6 p-3 bg-zinc-950 rounded-lg border border-zinc-800">
+                            <input
+                                type="checkbox"
+                                id="isStaffTable"
+                                checked={isStaffTable}
+                                onChange={(e) => setIsStaffTable(e.target.checked)}
+                                className="w-4 h-4 text-amber-600 bg-zinc-900 border-zinc-800 rounded focus:ring-amber-500 focus:ring-offset-zinc-900"
+                            />
+                            <label htmlFor="isStaffTable" className="text-xs text-zinc-400 font-medium select-none cursor-pointer">
+                                🛡️ اعتماد هذا الجدول كقاعدة بيانات رسمية لحسابات وموظفي المكتب
+                            </label>
+                        </div>
+
+                        <div className="space-y-4 mb-6 max-h-[500px] overflow-y-auto pr-2">
                             {columns.map((col, index) => (
-                                <div key={col.id} className="flex gap-2 items-center bg-zinc-950 p-2.5 rounded-lg border border-zinc-800">
-                                    <input type="text" placeholder="اسم العمود" value={col.name} onChange={(e) => handleColumnChange(index, 'name', e.target.value)} className="flex-1 bg-zinc-900 border border-zinc-800 rounded-md p-2 text-xs text-zinc-100 focus:outline-none" />
-                                    <select value={col.type} onChange={(e) => handleColumnChange(index, 'type', e.target.value)} className="bg-zinc-900 border border-zinc-800 rounded-md p-2 text-xs text-zinc-100 focus:outline-none">
-                                        <option value="text">🔤 نص قصير</option>
-                                        <option value="textarea">📝 نص طويل / مذكرات</option>
-                                        <option value="select">📊 قائمة خيارات (حالة القضية)</option>
-                                        <option value="currency">💰 حسابات مالية وأتعاب</option>
-                                        <option value="number">🔢 رقم أولى</option>
-                                        <option value="date">📅 تاريخ</option>
-                                        <option value="file">📄 ملف ومستند</option>
-                                    </select>
-                                    <button onClick={() => handleRemoveColumnField(col.id)} className="p-1 text-zinc-500 hover:text-red-500 transition" title="حذف الحقل">
-                                        ❌
-                                    </button>
+                                <div key={col.id} className="bg-zinc-950 p-4 rounded-lg border border-zinc-800 space-y-3">
+                                    <div className="flex gap-2 items-center">
+                                        <input type="text" placeholder="اسم العمود (مثال: الاسم الكامل أو الصلاحيات)" value={col.name} onChange={(e) => handleColumnChange(index, 'name', e.target.value)} className="flex-1 bg-zinc-900 border border-zinc-800 rounded-md p-2 text-xs text-zinc-100 focus:outline-none" />
+                                        <select
+                                            value={col.type}
+                                            onChange={(e) => handleColumnChange(index, 'type', e.target.value)}
+                                            className="bg-zinc-900 border border-zinc-800 rounded-md p-2 text-xs text-zinc-100 focus:outline-none"
+                                        >
+                                            <option value="text">🔤 نص قصير</option>
+                                            <option value="textarea">📝 نص طويل / مذكرات</option>
+                                            <option value="select">📊 قائمة خيارات</option>
+                                            <option value="currency">💰 حسابات مالية وأتعاب</option>
+                                            <option value="number">🔢 رقم</option>
+                                            <option value="date">📅 تاريخ</option>
+                                            <option value="file">📄 ملف ومستند</option>
+                                            <option value="staff_email">📧 بريد إلكتروني رسمي (لتسجيل الدخول)</option>
+                                            <option value="staff_password">🔒 كلمة مرور مشفرة (حقل سري)</option>
+                                            <option value="user_account">👤 حساب مستخدم وصلاحيات (الطاقم)</option>
+                                        </select>
+                                        <button onClick={() => handleRemoveColumnField(col.id)} className="p-1 text-zinc-500 hover:text-red-500 transition" title="حذف الحقل">
+                                            ❌
+                                        </button>
+                                    </div>
+
+                                    {/* مصفوفة تحكم الصلاحيات الديناميكية تظهر حصرياً عند اختيار حقل حساب مستخدم */}
+                                    {col.type === 'user_account' && (
+                                        <div className="mt-2 p-3 bg-zinc-900/60 rounded-lg border border-zinc-800 border-dashed text-right animate-fadeIn">
+                                            <p className="text-[11px] font-bold text-amber-500 mb-2">🔒 ضبط مصفوفة الصلاحيات الافتراضية لهذا الحساب على الجداول:</p>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto pr-1">
+                                                {allAvailableTables.length === 0 ? (
+                                                    <p className="text-[10px] text-zinc-500">لا توجد جداول أخرى حالياً لربط الصلاحيات بها.</p>
+                                                ) : (
+                                                    allAvailableTables.map(table => (
+                                                        <div key={table.id} className="flex justify-between items-center bg-zinc-950 p-2 rounded border border-zinc-900 text-[11px]">
+                                                            <span className="text-zinc-400 truncate max-w-[120px]">📊 {table.name}</span>
+                                                            <select
+                                                                value={(col.default_permissions && col.default_permissions[table.id]) || 'no_access'}
+                                                                onChange={(e) => handlePermissionChange(index, table.id, e.target.value)}
+                                                                className="bg-zinc-900 border border-zinc-800 p-1 rounded text-[10px] text-zinc-300 focus:outline-none"
+                                                            >
+                                                                <option value="no_access">❌ حجب كامل</option>
+                                                                <option value="read_only">👁️ قراءة فقط</option>
+                                                                <option value="read_write">✏️ تعديل وإضافة</option>
+                                                            </select>
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -1097,7 +1107,7 @@ export default function SystemBuilderPage() {
                             <button onClick={handleAddColumnField} className="text-amber-500 hover:text-amber-400 text-xs font-semibold">+ إضافة حقل عمود</button>
                             <div className="flex gap-2">
                                 {editingTableId && (
-                                    <button onClick={() => { setEditingTableId(null); setTableName(''); setColumns([{ id: 'c1', name: '', type: 'text' }]); }} className="bg-zinc-800 text-zinc-300 px-3 py-2 rounded-lg text-xs hover:bg-zinc-700">إلغاء التعديل</button>
+                                    <button onClick={() => { setEditingTableId(null); setTableName(''); setColumns([{ id: 'c1', name: '', type: 'text' }]); setIsStaffTable(false); }} className="bg-zinc-800 text-zinc-300 px-3 py-2 rounded-lg text-xs hover:bg-zinc-700">إلغاء التعديل</button>
                                 )}
                                 <button onClick={handleSaveTable} className="bg-amber-600 hover:bg-amber-500 text-zinc-950 font-bold px-4 py-2 rounded-lg text-xs transition">
                                     {editingTableId ? "🔄 تحديث الهيكل" : "🚀 تثبيت الهيكل الجديد"}

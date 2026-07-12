@@ -881,10 +881,11 @@
 // }
 
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { dynamicService } from '@/services/dynamicService';
 import apiClient from '@/services/apiClient';
+import { useAuth } from '@/context/AuthContext';
 import GlobalDocumentGenerator from '@/components/GlobalDocumentGenerator';
 import ClientDocumentsList from '@/components/ClientDocumentsList';
 import { Plus, Table, Edit, LayoutGrid, Save, Trash2, Settings, X, FileText, Link, Paperclip, ChevronDown, ListPlus, Search, Filter, RefreshCw, ExternalLink, Loader2, Calendar, Wand2, FolderOpen } from 'lucide-react';
@@ -896,6 +897,13 @@ export default function DynamicSectionPage() {
     const [rows, setRows] = useState([]);
     const [filteredRows, setFilteredRows] = useState([]);
     const [viewMode, setViewMode] = useState('table');
+    const [isLoading, setIsLoading] = useState(true);
+    const { user, loading } = useAuth();
+
+    const userRole =
+        user?.role?.toString().toLowerCase() || 'user';
+
+    const [currentTablePermission, setCurrentTablePermission] = useState('read');
 
     // مخزن لبيانات الجداول الأخرى لإدارة العلاقات الذكية
     const [relationRowsMap, setRelationRowsMap] = useState({});
@@ -936,6 +944,9 @@ export default function DynamicSectionPage() {
     const [isClientDocsModalOpen, setIsClientDocsModalOpen] = useState(false);
     const [selectedClientRowId, setSelectedClientRowId] = useState(null);
 
+    // مخزن منفصل تماماً لجداول النظام المتاحة للصلاحيات والعلاقات
+    const [systemTables, setSystemTables] = useState([]);
+
     // تتبع حالة ترتيب الحقول بالسحب والإفلات
     const [draggedColIndex, setDraggedColIndex] = useState(null);
 
@@ -945,6 +956,128 @@ export default function DynamicSectionPage() {
         }
     }, [sectionId]);
 
+    // 🎯 التعديل هنا: إذا كان المستخدم أدمن، نضمن حصوله على صلاحية 'write' كاملة فوراً
+    const userPermission = useMemo(() => {
+
+        if (!activeTable) {
+            return "no_access";
+        }
+
+
+        if (
+            userRole === "admin" ||
+            userRole === "partner" ||
+            user?.is_superuser === true
+        ) {
+            return "write";
+        }
+
+
+        let permissions =
+            user?.dynamic_permissions || {};
+
+
+        if (typeof permissions === "string") {
+            try {
+                permissions = JSON.parse(permissions);
+            }
+            catch {
+                permissions = {};
+            }
+        }
+
+
+        const permission =
+            permissions[String(activeTable.id)]
+            ||
+            activeTable.user_permission;
+
+
+
+        switch (permission) {
+
+            case "read_write":
+                return "write";
+
+
+            case "write":
+                return "write";
+
+
+            case "read_only":
+                return "read";
+
+
+            case "read":
+                return "read";
+
+
+            case "hidden":
+                return "no_access";
+
+
+            case "no_access":
+                return "no_access";
+
+
+            default:
+                return "read";
+
+        }
+
+
+    }, [
+        user,
+        activeTable,
+        userRole
+    ]);
+
+    // 🎯 تحديث دالة الصلاحيات لتمرير الأدمن في كل الحالات
+    const hasPermission = (action = "read") => {
+
+
+        // إصلاح إذا تم تمرير role بالخطأ
+        if (
+            action !== "read" &&
+            action !== "write"
+        ) {
+            action = "read";
+        }
+
+
+        // الأدمن والشريك
+        if (
+            userRole === "admin" ||
+            userRole === "partner" ||
+            user?.is_superuser === true
+        ) {
+            return true;
+        }
+
+
+
+        if (action === "read") {
+
+            return (
+                userPermission === "read" ||
+                userPermission === "write"
+            );
+
+        }
+
+
+
+        if (action === "write") {
+
+            return userPermission === "write";
+
+        }
+
+
+
+        return false;
+
+    };
     // محرك الفلترة والتصفية الفوري ليدعم نصوص ومصفوفات العلاقات Many-to-Many
     useEffect(() => {
         let result = [...rows];
@@ -1020,19 +1153,60 @@ export default function DynamicSectionPage() {
 
     const loadSectionContent = async () => {
         try {
+            setIsLoading(true);
             const tablesData = await dynamicService.getTablesBySection(sectionId);
-            setTables(tablesData);
-            if (tablesData.length > 0) {
-                const currentActive = tablesData.find(t => t.id === activeTable?.id) || tablesData[0];
+            const verifiedTables = tablesData || [];
+            setTables(verifiedTables);
+
+            // 🌟 إضافة: جلب كل جداول النظام لتكون جاهزة لصلاحيات الموظفين فوراً
+            try {
+                const sectionsData = await dynamicService.getSections();
+                if (sectionsData && Array.isArray(sectionsData) && sectionsData.length > 0) {
+                    const extractedTables = sectionsData.flatMap(sec => sec.tables || []);
+                    setSystemTables(extractedTables);
+                } else {
+                    setSystemTables(verifiedTables);
+                }
+            } catch (err) {
+                console.error("خطأ أثناء جلب جداول النظام الشاملة:", err);
+                setSystemTables(verifiedTables);
+            }
+
+            if (verifiedTables.length > 0) {
+                const currentActive =
+                    verifiedTables.find(
+                        t => t.id === activeTable?.id
+                    )
+                    ||
+                    verifiedTables[0];
+
+
+                // تأكيد وجود صلاحية الجدول
+                if (!currentActive.user_permission) {
+
+                    currentActive.user_permission =
+                        user?.dynamic_permissions?.[String(currentActive.id)]
+                        ||
+                        "read_only";
+
+                }
                 setActiveTable(currentActive);
                 setViewMode(currentActive.view_mode || 'table');
                 loadTableRows(currentActive.id);
-                loadRequiredRelations(currentActive, tablesData);
+                loadRequiredRelations(currentActive, verifiedTables);
+            } else {
+                setActiveTable(null);
+                setRows([]);
+                setFilteredRows([]);
             }
         } catch (error) {
             console.error("خطأ في جلب المحتويات:", error);
+        } finally {
+            setIsLoading(false);
         }
     };
+
+
 
     const loadTableRows = async (tableId) => {
         try {
@@ -1045,6 +1219,7 @@ export default function DynamicSectionPage() {
     };
 
     const loadRequiredRelations = async (currentTable, allTables) => {
+        if (!currentTable?.columns_definition) return;
         const relationCols = currentTable.columns_definition.filter(col => col.type === 'relation' && col.relatedTableId);
 
         const updatedMap = { ...relationRowsMap };
@@ -1052,7 +1227,7 @@ export default function DynamicSectionPage() {
             if (!updatedMap[col.relatedTableId]) {
                 try {
                     const rRows = await dynamicService.getRowsByTable(col.relatedTableId);
-                    updatedMap[col.relatedTableId] = rRows;
+                    updatedMap[col.relatedTableId] = rRows || [];
                 } catch (err) {
                     console.error(`خطأ في جلب بيانات الجدول المترابط ${col.relatedTableId}:`, err);
                 }
@@ -1062,11 +1237,48 @@ export default function DynamicSectionPage() {
     };
 
     const handleTableChange = (table) => {
+
+
         setActiveTable(table);
-        setViewMode(table.view_mode || 'table');
+
+
+        setViewMode(
+            table.view_mode || 'table'
+        );
+
+
+        const permission =
+            userRole === "admin" ||
+                userRole === "partner" ||
+                user?.is_superuser
+
+                ? "write"
+
+                :
+
+                (
+                    user?.dynamic_permissions?.[String(table.id)]
+                    ||
+                    table.user_permission
+                    ||
+                    "read_only"
+                );
+
+
+        setCurrentTablePermission(permission);
+
+
         resetFilters();
+
+
         loadTableRows(table.id);
-        loadRequiredRelations(table, tables);
+
+
+        loadRequiredRelations(
+            table,
+            tables
+        );
+
     };
 
     const resetFilters = () => {
@@ -1079,115 +1291,175 @@ export default function DynamicSectionPage() {
     };
 
     const handleFileUpload = async (e, columnId) => {
-        const file = e.target.files[0]; // التقاط الملف الحالي
+
+        if (!hasPermission('write')) {
+            alert("حسابك لا يملك صلاحية رفع المرفقات.");
+            return;
+        }
+
+        const file = e.target.files[0];
         if (!file) return;
 
         const formData = new FormData();
         formData.append('file', file);
 
         try {
+
             setUploadingField(columnId);
 
-            // 💡 تم التعديل هنا: توجيه الطلب إلى /attachments ليتطابق مع الـ prefix بالسيرفر
-            const response = await apiClient.post('/attachments/upload-general', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
+            const response = await apiClient.post(
+                '/attachments/upload-general',
+                formData,
+                {
+                    headers: {
+                        'Content-Type': 'multipart/form-data'
+                    }
+                }
+            );
 
-            // تنظيف الرابط المستلم من السيرفر
             let savedPath = response.data.url;
 
-            // 💡 تنظيف مرن: لحذف النطاق سواء كان localhost أو 127.0.0.1 لضمان سلامة الرابط في النظام
             if (savedPath.includes('/api/v1')) {
                 const parts = savedPath.split('/api/v1');
                 savedPath = '/api/v1' + parts[1];
             }
 
-            // الكائن الجديد الذي يمثل الملف المرفوع حالياً
             const newAttachment = {
                 name: file.name,
                 url: savedPath
             };
 
-            // ⭐️ المنطق التراكمي: جلب المرفقات القديمة من الـ State الحالي لمنع مسحها
             let existingAttachments = [];
             const currentFieldValue = rowData[columnId];
 
             if (currentFieldValue) {
+
                 if (Array.isArray(currentFieldValue)) {
-                    // إذا كان الحقل يحتوي بالفعل على مصفوفة ملفات
                     existingAttachments = currentFieldValue;
-                } else if (typeof currentFieldValue === 'string') {
-                    // إذا كان الحقل يحتوي على رابط نصي واحد (من النظام القديم)، نحوله لمصفوفة لحفظ التاريخ
-                    existingAttachments = [{
-                        name: getFileNameFromUrl(currentFieldValue) || "مستند سابق",
-                        url: currentFieldValue
-                    }];
+                } else if (typeof currentFieldValue === "string") {
+                    existingAttachments = [
+                        {
+                            name:
+                                getFileNameFromUrl(currentFieldValue) ||
+                                "مستند سابق",
+                            url: currentFieldValue
+                        }
+                    ];
                 }
             }
 
-            // 🤝 دمج الملفات القديمة مع الملف الجديد
-            const updatedFilesList = [...existingAttachments, newAttachment];
-
-            // تحديث حالة البيانات في الواجهة (rowData) بالمصفوفة المتراكمة الجديدة
             setRowData({
                 ...rowData,
-                [columnId]: updatedFilesList
+                [columnId]: [...existingAttachments, newAttachment]
             });
 
-            alert("تم إضافة المستند الجديد وتراكمه بالنظام بنجاح.");
+            alert("تم رفع المستند بنجاح.");
+
         } catch (error) {
-            console.error("خطأ أثناء رفع الملف التراكمي:", error);
-            alert("فشل رفع الملف، يرجى التحقق من حجم الملف وصلاحية الاتصال.");
+
+            console.error(error);
+            alert("فشل رفع الملف.");
+
         } finally {
+
             setUploadingField(null);
+
         }
     };
 
-    const handleDragStart = (index) => setDraggedColIndex(index);
+    const handleDragStart = (index) => {
+
+        if (!hasPermission('write')) return;
+
+        setDraggedColIndex(index);
+    };
+
     const handleDragOver = (e, index) => {
+
+        if (!hasPermission('write')) return;
+
         e.preventDefault();
+
         if (draggedColIndex === null || draggedColIndex === index) return;
+
         const updated = [...manageColumns];
         const draggedItem = updated[draggedColIndex];
+
         updated.splice(draggedColIndex, 1);
         updated.splice(index, 0, draggedItem);
+
         setDraggedColIndex(index);
         setManageColumns(updated);
     };
-    const handleDragEnd = () => setDraggedColIndex(null);
 
-    // --- إدارة الصفوف وتجهيز العلاقات Many-to-Many للـ API والـ UI ---
+    const handleDragEnd = () => {
+        setDraggedColIndex(null);
+    };
+
     const openAddRowModal = () => {
+
+        if (!hasPermission('write')) {
+            alert("لا تملك صلاحية إضافة السجلات.");
+            return;
+        }
+
         setEditingRow(null);
+
         const initialData = {};
+
         activeTable.columns_definition.forEach((col) => {
-            if (col.type === 'relation') {
-                initialData[col.id] = [];
-            } else {
-                initialData[col.id] = '';
-            }
+
+            initialData[col.id] =
+                col.type === 'relation'
+                    ? []
+                    : '';
+
         });
+
         setRowData(initialData);
         setIsRowModalOpen(true);
     };
 
     const openEditRowModal = (row) => {
+
+        if (!hasPermission('write')) {
+            alert("لا تملك صلاحية تعديل السجلات.");
+            return;
+        }
+
         setEditingRow(row);
-        const preparedData = { ...row.cells_data };
+
+        const preparedData = {
+            ...row.cells_data
+        };
+
         activeTable.columns_definition.forEach((col) => {
+
             if (col.type === 'relation') {
+
                 if (!preparedData[col.id]) {
+
                     preparedData[col.id] = [];
+
                 } else if (!Array.isArray(preparedData[col.id])) {
+
                     preparedData[col.id] = [preparedData[col.id]];
+
                 }
             }
         });
+
         setRowData(preparedData);
         setIsRowModalOpen(true);
     };
 
     const handleSaveRow = async () => {
+        // التحقق من صلاحية الكتابة
+        if (!hasPermission('write')) {
+            alert("فشلت العملية: لا تملك صلاحية الحفظ.");
+            return;
+        }
+
         try {
             if (editingRow) {
                 await dynamicService.updateRow(editingRow.id, rowData);
@@ -1198,94 +1470,286 @@ export default function DynamicSectionPage() {
             await loadTableRows(activeTable.id);
 
             const clearedData = {};
+
             activeTable.columns_definition.forEach((col) => {
-                if (col.type === 'relation') {
-                    clearedData[col.id] = [];
-                } else {
-                    clearedData[col.id] = '';
-                }
+                clearedData[col.id] =
+                    col.type === "relation"
+                        ? []
+                        : "";
             });
+
             setRowData(clearedData);
-            setIsRowModalOpen(false);
             setEditingRow(null);
+            setIsRowModalOpen(false);
+
         } catch (error) {
-            console.error("خطأ أثناء الحفظ الفعلي للسجل:", error);
+            console.error("خطأ أثناء حفظ السجل:", error);
             alert("فشل حفظ البيانات.");
         }
     };
 
     const handleDeleteRow = async (rowId) => {
-        if (confirm("هل أنت متأكد من حذف هذا السجل نهائياً؟")) {
-            try {
-                await dynamicService.deleteRow(rowId);
-                if (activeTable?.id) await loadTableRows(activeTable.id);
-            } catch (error) {
-                console.error("خطأ في حذف السجل:", error);
+
+        if (!hasPermission('write')) {
+            alert("عذراً، لا تملك صلاحية حذف السجلات.");
+            return;
+        }
+
+        if (!confirm("هل أنت متأكد من حذف هذا السجل نهائياً؟")) {
+            return;
+        }
+
+        try {
+
+            await dynamicService.deleteRow(rowId);
+
+            if (activeTable?.id) {
+                await loadTableRows(activeTable.id);
             }
+
+        } catch (error) {
+            console.error("خطأ في حذف السجل:", error);
+            alert("فشل حذف السجل.");
         }
     };
 
     const openSettingsModal = async () => {
+
+        // يسمح فقط للأدمن بالدخول إلى باني الجداول
+        if (
+            userRole !== "admin" &&
+            user?.is_superuser !== true
+        ) {
+            alert("هذه الصفحة مخصصة لمدير النظام فقط.");
+            return;
+        }
+
+        if (!activeTable) return;
+
         setManageColumns([...activeTable.columns_definition]);
         setDropdownOptions([]);
         setSelectedRelationTableId('');
+
         try {
-            const allSystemTables = await dynamicService.getAllTables();
-            setTables(allSystemTables);
+
+            const sectionsData = await dynamicService.getSections();
+
+            if (Array.isArray(sectionsData) && sectionsData.length > 0) {
+
+                const extractedTables = sectionsData.flatMap(
+                    sec => sec.tables || []
+                );
+
+                setSystemTables(extractedTables);
+
+            } else {
+
+                const fallbackTables =
+                    await dynamicService.getTablesBySection(sectionId);
+
+                setSystemTables(fallbackTables || []);
+
+            }
+
         } catch (error) {
-            console.error("خطأ أثناء جلب جداول النظام الشاملة للعلاقات:", error);
+
+            console.error("خطأ أثناء جلب الجداول:", error);
+
+            const fallbackTables =
+                await dynamicService.getTablesBySection(sectionId);
+
+            setSystemTables(fallbackTables || []);
+
         }
+
         setIsSettingsModalOpen(true);
     };
 
     const handleAddDropdownOption = () => {
+
+        if (!hasPermission('write')) {
+            alert("لا تملك صلاحية تعديل الهيكل.");
+            return;
+        }
+
         if (!newOptionInput.trim()) return;
-        setDropdownOptions([...dropdownOptions, newOptionInput.trim()]);
+
+        setDropdownOptions([
+            ...dropdownOptions,
+            newOptionInput.trim()
+        ]);
+
         setNewOptionInput('');
     };
 
     const handleAddColumnStructure = () => {
+
+        if (!hasPermission('write')) {
+            alert("لا تملك صلاحية تعديل هيكل الجدول.");
+            return;
+        }
+
         if (!newColumnName.trim()) return;
+
         const newCol = {
             id: `col_${Date.now()}`,
             name: newColumnName.trim(),
             type: newColumnType,
-            options: newColumnType === 'dropdown' ? dropdownOptions : undefined,
-            relatedTableId: newColumnType === 'relation' ? selectedRelationTableId : undefined
+            options:
+                newColumnType === "dropdown"
+                    ? dropdownOptions
+                    : undefined,
+            relatedTableId:
+                newColumnType === "relation"
+                    ? selectedRelationTableId
+                    : undefined
         };
-        setManageColumns([...manageColumns, newCol]);
+
+        setManageColumns([
+            ...manageColumns,
+            newCol
+        ]);
+
         setNewColumnName('');
         setDropdownOptions([]);
         setSelectedRelationTableId('');
     };
 
+    const handleSaveStructure = async () => {
+
+        if (
+            userRole !== "admin" &&
+            user?.is_superuser !== true
+        ) {
+            alert("صلاحية مرفوضة.");
+            return;
+        }
+
+        try {
+
+            await dynamicService.updateTableColumns(
+                activeTable.id,
+                manageColumns
+            );
+
+            alert("تم حفظ هيكل الجدول بنجاح.");
+
+            setIsSettingsModalOpen(false);
+
+            loadSectionContent();
+
+        } catch (error) {
+
+            console.error("خطأ في حفظ الهيكل:", error);
+            alert("تعذر حفظ الهيكل.");
+
+        }
+    };
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-slate-950 text-white">
+                <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+                <span className="mr-3">
+                    جاري تحميل القسم والجداول...
+                </span>
+            </div>
+        );
+    }
+
     const handleRemoveColumnStructure = (colId) => {
-        setManageColumns(manageColumns.filter(c => c.id !== colId));
+
+        if (!hasPermission('write')) {
+            alert("لا تملك صلاحية تعديل هيكل الجدول.");
+            return;
+        }
+
+        setManageColumns(
+            manageColumns.filter(col => col.id !== colId)
+        );
     };
 
     const handleSaveChangesStructure = async () => {
+
+        if (
+            userRole !== "admin" &&
+            user?.is_superuser !== true
+        ) {
+            alert("صلاحية مرفوضة.");
+            return;
+        }
+
         try {
-            await dynamicService.updateTable(activeTable.id, activeTable.name, manageColumns, viewMode);
+
+            await dynamicService.updateTable(
+                activeTable.id,
+                activeTable.name,
+                manageColumns,
+                viewMode
+            );
+
             setIsSettingsModalOpen(false);
-            alert("تم تحديث هيكل الجدول بنجاح!");
+
+            alert("تم تحديث هيكل الجدول بنجاح.");
+
             loadSectionContent();
+
         } catch (error) {
+
             console.error("خطأ أثناء تحديث الهيكل:", error);
+
+            alert("تعذر تحديث هيكل الجدول.");
+
         }
     };
 
     const handleCellBlur = async (rowId, colId, originalValue) => {
+        // التحقق من صلاحية التعديل
+        if (!hasPermission('write')) {
+            setEditingCell(null);
+            alert("عذراً، لا تملك صلاحية تعديل البيانات.");
+            return;
+        }
+
         if (editValue === originalValue) {
             setEditingCell(null);
             return;
         }
+
         try {
             const currentRow = rows.find(r => r.id === rowId);
-            const updatedCellsData = { ...currentRow.cells_data, [colId]: editValue };
+
+            if (!currentRow) {
+                setEditingCell(null);
+                return;
+            }
+
+            const updatedCellsData = {
+                ...currentRow.cells_data,
+                [colId]: editValue
+            };
+
             await dynamicService.updateRow(rowId, updatedCellsData);
-            setRows(prevRows => prevRows.map(row => row.id === rowId ? { ...row, cells_data: updatedCellsData } : row));
+
+            setRows(prevRows =>
+                prevRows.map(row =>
+                    row.id === rowId
+                        ? { ...row, cells_data: updatedCellsData }
+                        : row
+                )
+            );
+
+            setFilteredRows(prevRows =>
+                prevRows.map(row =>
+                    row.id === rowId
+                        ? { ...row, cells_data: updatedCellsData }
+                        : row
+                )
+            );
+
         } catch (error) {
             console.error("خطأ التعديل الفوري:", error);
+            alert("تعذر حفظ التعديل.");
         } finally {
             setEditingCell(null);
         }
@@ -1293,117 +1757,120 @@ export default function DynamicSectionPage() {
 
     const getRelationDisplayValue = (relatedTableId, relatedId) => {
         if (!relatedTableId || !relatedId) return "";
+
         const targetRows = relationRowsMap[relatedTableId] || [];
         const foundRow = targetRows.find(r => String(r.id) === String(relatedId));
+
         if (foundRow) {
             const firstKey = Object.keys(foundRow.cells_data)[0];
             return foundRow.cells_data[firstKey] || `سجل #${relatedId}`;
         }
+
         return `تحميل... (#${relatedId})`;
     };
 
     const getFileNameFromUrl = (url) => {
-        // إذا كان الرابط غير موجود أو ليس نصاً، نرجعه كما هو أو نرجع نصاً بديلًا
         if (!url || typeof url !== 'string') {
             return "مستند قانوني";
         }
 
         try {
-            // كودك الحالي المستند إلى substring أو split
             return url.substring(url.lastIndexOf('/') + 1);
-        } catch (e) {
+        } catch {
             return "مستند قانوني";
         }
     };
 
-    const activeFilterColumnObject = activeTable?.columns_definition.find(c => c.id === selectedFilterColumn);
+    const activeFilterColumnObject =
+        activeTable?.columns_definition.find(c => c.id === selectedFilterColumn);
 
     if (tables.length === 0) {
         return (
-            <div className="md:mr-64 p-8 text-center text-slate-400 min-h-screen bg-[#0B0F19]" dir="rtl">
-                <p className="text-lg font-semibold text-slate-300">هذا القسم لا يحتوي على جداول حالياً.</p>
+            <div
+                className="md:mr-64 p-8 text-center text-slate-400 min-h-screen bg-[#0B0F19]"
+                dir="rtl"
+            >
+                <p className="text-lg font-semibold text-slate-300">
+                    هذا القسم لا يحتوي على جداول حالياً.
+                </p>
             </div>
         );
     }
 
-    // دالة لجلب جميع الملفات المرفقة المرتبطة بسجل معين (الموكل مثلاً) عبر الجداول الأخرى
     const getAllAssociatedDocuments = (clientId) => {
         let associatedDocs = [];
+
         if (!clientId) return associatedDocs;
 
         const targetIdStr = String(clientId);
-        const targetIdNum = Number(clientId);
-
         let rowsToScan = [];
 
-        // 1️⃣ استخراج الأسطر من هيكل الجداول إذا وجد
-        if (Array.isArray(tables) && tables.length > 0) {
-            tables.forEach((table) => {
-                table.rows?.forEach((row) => {
+        if (Array.isArray(tables)) {
+            tables.forEach(table => {
+                table.rows?.forEach(row => {
                     rowsToScan.push({
                         id: row.id,
                         cells_data: row.cells_data,
-                        tableName: table.name || 'الموكلين'
+                        tableName: table.name || "الموكلين"
                     });
                 });
             });
         }
 
-        // 2️⃣ خطة الإنقاذ والبدائل المباشرة بملف الصفحة الأب (rows أو clients أو currentTable)
-        if (rowsToScan.length === 0) {
-            if (typeof rows !== 'undefined' && Array.isArray(rows)) {
-                rows.forEach(r => rowsToScan.push({ id: r.id, cells_data: r.cells_data, tableName: 'الموكلين' }));
-            }
-            else if (typeof clients !== 'undefined' && Array.isArray(clients)) {
-                clients.forEach(c => rowsToScan.push({ id: c.id, cells_data: c.cells_data, tableName: 'الموكلين' }));
-            }
-            else if (typeof currentTable !== 'undefined' && currentTable?.rows) {
-                currentTable.rows.forEach(r => rowsToScan.push({ id: r.id, cells_data: r.cells_data, tableName: currentTable.name }));
-            }
+        if (rowsToScan.length === 0 && Array.isArray(rows)) {
+            rows.forEach(row => {
+                rowsToScan.push({
+                    id: row.id,
+                    cells_data: row.cells_data,
+                    tableName: "الموكلين"
+                });
+            });
         }
 
-        // 3️⃣ تجميع وتجهيز المستندات المرتبطة بالعميل
-        rowsToScan.forEach((row) => {
-            const isRelated = (String(row.id) === targetIdStr || Number(row.id) === targetIdNum);
+        rowsToScan.forEach(row => {
+            if (String(row.id) !== targetIdStr) return;
 
-            if (isRelated) {
-                Object.keys(row.cells_data || {}).forEach((key) => {
-                    const value = row.cells_data[key];
+            Object.entries(row.cells_data || {}).forEach(([key, value]) => {
+                if (
+                    typeof value === "string" &&
+                    (value.startsWith("http") || value.includes("/download/"))
+                ) {
+                    let relativeUrl = value;
 
-                    if (typeof value === 'string' && (value.startsWith('http') || value.includes('/download/'))) {
-                        let relativeUrl = value;
-                        if (relativeUrl.includes('/api/v1')) {
-                            relativeUrl = relativeUrl.split('/api/v1')[1];
-                        } else if (relativeUrl.startsWith('http')) {
-                            try {
-                                const urlObj = new URL(relativeUrl);
-                                relativeUrl = urlObj.pathname.replace('/api/v1', '');
-                            } catch (e) { }
-                        }
-
-                        if (!relativeUrl.startsWith('/')) {
-                            relativeUrl = `/${relativeUrl}`;
-                        }
-
-                        const recordTitle = row.cells_data?.["c1"] || `سجل #${row.id}`;
-
-                        associatedDocs.push({
-                            id: `${row.id}_${key}`,
-                            fileName: typeof getFileNameFromUrl === 'function' ? getFileNameFromUrl(value) : `مستند_${row.id}`,
-                            fileUrl: relativeUrl,
-                            originTable: row.tableName,
-                            recordTitle: recordTitle,
-                            cells_data: { ...row.cells_data, fileUrl: relativeUrl }
-                        });
+                    if (relativeUrl.includes("/api/v1")) {
+                        relativeUrl = relativeUrl.split("/api/v1")[1];
                     }
-                });
-            }
+
+                    if (!relativeUrl.startsWith("/")) {
+                        relativeUrl = `/${relativeUrl}`;
+                    }
+
+                    associatedDocs.push({
+                        id: `${row.id}_${key}`,
+                        fileName: getFileNameFromUrl(value),
+                        fileUrl: relativeUrl,
+                        originTable: row.tableName,
+                        recordTitle:
+                            row.cells_data?.c1 || `سجل #${row.id}`,
+                        cells_data: {
+                            ...row.cells_data,
+                            fileUrl: relativeUrl
+                        }
+                    });
+                }
+            });
         });
 
         return associatedDocs;
     };
 
     const handleDeleteDocument = async (param1, param2, explicitFieldId = null, explicitRowId = null) => {
+        // 🛑 تحقق الصلاحية: منع أصحاب صلاحية القراءة فقط من الحذف نهائياً
+        if (!hasPermission("write")) {
+            alert("عذراً، لا تملك الصلاحية الكافية لحذف المرفقات والمستندات من النظام.");
+            return;
+        }
+
         let attachmentId = null;
         let doc = null;
         let targetUrl = null;
@@ -1521,7 +1988,6 @@ export default function DynamicSectionPage() {
                         const value = updatedCells[key];
 
                         if (Array.isArray(value)) {
-                            // إذا كان الحقل عبارة عن مصفوفة ملفات (مثل حالة سعود)، نقوم بفلترة الملف المحذوف فقط
                             updatedCells[key] = value.filter(fileObj => {
                                 if (!fileObj) return false;
                                 const rawUrl = fileObj.url || fileObj.filePath || "";
@@ -1530,10 +1996,8 @@ export default function DynamicSectionPage() {
                                 return parseInt(actualFileId) !== parseInt(attachmentId);
                             });
 
-                            // إذا أصبحت المصفوفة فارغة تماماً نضعها null أو مصفوفة فارغة حسب تفضيل السيرفر
                             if (updatedCells[key].length === 0) updatedCells[key] = null;
                         } else if (value && typeof value === 'string') {
-                            // إذا كان الحقل نصاً مباشراً (رابط مباشر)
                             if (value.includes(`/download/${attachmentId}`) || value.includes(String(attachmentId))) {
                                 updatedCells[key] = null;
                             }
@@ -1572,7 +2036,6 @@ export default function DynamicSectionPage() {
                     ));
                 }
 
-                // تحديث كائن الموكل المفتوح حالياً للتعديل لكي يشعر بالتغيير الفوري للمكون الفرعي
                 if (typeof setEditingRow === 'function') {
                     setEditingRow(prev => {
                         if (prev && String(prev.id) === String(rowId)) {
@@ -1626,8 +2089,14 @@ export default function DynamicSectionPage() {
         }
     };
 
+
     // تأكد من إضافة الدالة داخل المكون وقبل الـ return
     const handleViewDocument = (fileUrl) => {
+        // 🛑 تحقق الصلاحية: إذا تم حظر المستخدم تماماً، يُمنع من استعراض أي مستند
+        if (!hasPermission(userRole, "canViewDocuments")) {
+            alert("عذراً، لا تملك الصلاحية الكافية لاستعراض الملفات.");
+            return;
+        }
         if (!fileUrl) return alert("خطأ: رابط المستند غير موجود.");
 
         // 1. جلب التوكن الحالي من المتصفح
@@ -1637,14 +2106,12 @@ export default function DynamicSectionPage() {
 
         // 2. حل مشكلة تكرار الرابط: فحص هل الرابط القادم من السيرفر كامل أم جزئي
         if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
-            // إذا كان الرابط كاملاً مثل http://localhost:8000/... نستخدمه مباشرة
             fullUrl = fileUrl;
         } else {
-            // إذا كان الرابط جزئياً مثل /documents/download/23 نركبه مع السيرفر
             fullUrl = `http://127.0.0.1:8000/api/v1${fileUrl}`;
         }
 
-        // 3. حقن التوكن في الرابط كـ Query Parameter (تأكد من عدم تكرار علامة الاستفهام)
+        // 3. حقن التوكن في الرابط كـ Query Parameter
         if (token) {
             const separator = fullUrl.includes('?') ? '&' : '?';
             fullUrl = `${fullUrl}${separator}token=${token}`;
@@ -1653,7 +2120,7 @@ export default function DynamicSectionPage() {
         // 4. تحميل أو عرض المستند عبر الرابط الصحيح النظيف
         const link = document.createElement('a');
         link.href = fullUrl;
-        link.target = '_blank'; // لفتحه في تبويب جديد وعرضه inline
+        link.target = '_blank';
         link.setAttribute('download', fileUrl.split('/').pop() || 'document');
 
         document.body.appendChild(link);
@@ -1681,26 +2148,91 @@ export default function DynamicSectionPage() {
                     {/* شريط التحكم الرئيسي */}
                     <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-4 bg-slate-900/50 p-4 rounded-xl border border-slate-800">
                         <div>
-                            <h1 className="text-xl font-black text-slate-200">{activeTable.name}</h1>
+                            <h1 className="text-xl font-black text-slate-200">
+                                {activeTable.name}
+                            </h1>
                         </div>
+
                         <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-end">
+
                             <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-800">
-                                <button onClick={() => setViewMode('table')} className={`p-1.5 rounded-md ${viewMode === 'table' ? 'bg-slate-800 text-amber-500' : 'text-slate-500'}`}><Table className="w-4 h-4" /></button>
-                                <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-md ${viewMode === 'grid' ? 'bg-slate-800 text-amber-500' : 'text-slate-500'}`}><LayoutGrid className="w-4 h-4" /></button>
-                                <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-md ${viewMode === 'list' ? 'bg-slate-800 text-amber-500' : 'text-slate-500'}`}><FileText className="w-4 h-4" /></button>
-                                <button onClick={() => setViewMode('calendar')} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${viewMode === 'calendar' ? 'bg-amber-600 text-slate-950 shadow-lg font-black' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'}`}><Calendar className="w-3.5 h-3.5" /></button>
+                                <button
+                                    onClick={() => setViewMode('table')}
+                                    className={`p-1.5 rounded-md ${viewMode === 'table'
+                                        ? 'bg-slate-800 text-amber-500'
+                                        : 'text-slate-500'
+                                        }`}
+                                >
+                                    <Table className="w-4 h-4" />
+                                </button>
+
+                                <button
+                                    onClick={() => setViewMode('grid')}
+                                    className={`p-1.5 rounded-md ${viewMode === 'grid'
+                                        ? 'bg-slate-800 text-amber-500'
+                                        : 'text-slate-500'
+                                        }`}
+                                >
+                                    <LayoutGrid className="w-4 h-4" />
+                                </button>
+
+                                <button
+                                    onClick={() => setViewMode('list')}
+                                    className={`p-1.5 rounded-md ${viewMode === 'list'
+                                        ? 'bg-slate-800 text-amber-500'
+                                        : 'text-slate-500'
+                                        }`}
+                                >
+                                    <FileText className="w-4 h-4" />
+                                </button>
+
+                                <button
+                                    onClick={() => setViewMode('calendar')}
+                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${viewMode === 'calendar'
+                                        ? 'bg-amber-600 text-slate-950 shadow-lg font-black'
+                                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                                        }`}
+                                >
+                                    <Calendar className="w-3.5 h-3.5" />
+                                </button>
                             </div>
-                            <button onClick={openSettingsModal} className="bg-slate-950 border border-slate-800 hover:bg-slate-850 text-slate-400 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5"><Settings className="w-4 h-4" /> هيكلة الحقول المتقدمة</button>
-                            <button onClick={openAddRowModal} className="bg-amber-600 hover:bg-amber-500 text-slate-950 text-xs font-black px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-lg"><Plus className="w-4 h-4" /> إضافة سجل جديد</button>
+
+                            {/* الإعدادات تظهر فقط لمن يملك صلاحية الكتابة (والأدمن تلقائياً) */}
+                            {hasPermission('write') && (
+                                <button
+                                    onClick={openSettingsModal}
+                                    className="bg-slate-950 border border-slate-800 hover:bg-slate-850 text-slate-400 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5"
+                                >
+                                    <Settings className="w-4 h-4" />
+                                    هيكلة الحقول المتقدمة
+                                </button>
+                            )}
+
+                            {/* إضافة سجل */}
+                            <button
+                                onClick={openAddRowModal}
+                                disabled={!hasPermission('write')}
+                                className={`text-xs font-black px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-lg transition-all
+                ${hasPermission('write')
+                                        ? 'bg-amber-600 hover:bg-amber-500 text-slate-950 cursor-pointer'
+                                        : 'bg-slate-800 text-slate-500 opacity-50 cursor-not-allowed'
+                                    }`}
+                            >
+                                <Plus className="w-4 h-4" />
+                                إضافة سجل جديد
+                            </button>
+
                         </div>
                     </div>
 
-                    {/* 🔍 محرك الفلترة والبحث الذكي الديناميكي */}
+                    {/* البحث والتصفية */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6 bg-slate-950 p-3 rounded-xl border border-slate-800/80">
+
                         <div className="relative">
                             <span className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-500">
                                 <Search className="w-3.5 h-3.5" />
                             </span>
+
                             <input
                                 type="text"
                                 placeholder="بحث شامل في كل الحقول والمستندات..."
@@ -1711,6 +2243,7 @@ export default function DynamicSectionPage() {
                         </div>
 
                         <div className="flex gap-2 col-span-1 md:col-span-2 items-center flex-wrap md:flex-nowrap">
+
                             <div className="flex items-center gap-1.5 text-slate-400 text-xs shrink-0">
                                 <Filter className="w-3.5 h-3.5 text-amber-500" />
                                 <span>تصفية بحسب:</span>
@@ -1718,22 +2251,32 @@ export default function DynamicSectionPage() {
 
                             <select
                                 value={selectedFilterColumn}
-                                onChange={(e) => { setSelectedFilterColumn(e.target.value); setFilterValue(''); }}
+                                onChange={(e) => {
+                                    setSelectedFilterColumn(e.target.value);
+                                    setFilterValue('');
+                                }}
                                 className="bg-slate-900 border border-slate-800 rounded-xl p-2 text-xs text-slate-300 focus:outline-none"
                             >
                                 <option value="">إختر الحقل...</option>
+
                                 {activeTable.columns_definition.map(col => (
-                                    <option key={col.id} value={col.id}>{col.name}</option>
+                                    <option
+                                        key={col.id}
+                                        value={col.id}
+                                    >
+                                        {col.name}
+                                    </option>
                                 ))}
                             </select>
 
                             {selectedFilterColumn && activeFilterColumnObject && (
                                 <div className="flex gap-1.5 items-center w-full">
+
                                     {activeFilterColumnObject.type === 'number' && (
                                         <select
                                             value={filterOperator}
                                             onChange={(e) => setFilterOperator(e.target.value)}
-                                            className="bg-slate-900 border border-slate-800 rounded-xl p-2 text-xs text-amber-500 font-bold focus:outline-none"
+                                            className="bg-slate-900 border border-slate-800 rounded-xl p-2 text-xs text-amber-500 font-bold"
                                         >
                                             <option value="gt">أكبر من (&gt;)</option>
                                             <option value="lt">أصغر من (&lt;)</option>
@@ -1742,21 +2285,46 @@ export default function DynamicSectionPage() {
                                     )}
 
                                     {activeFilterColumnObject.type === 'date' ? (
+
                                         <div className="flex items-center gap-1 w-full">
-                                            <input type="date" value={filterDateStart} onChange={(e) => setFilterDateStart(e.target.value)} className="bg-slate-900 border border-slate-800 rounded-xl p-1.5 text-xs text-slate-300 max-w-[130px]" />
+                                            <input
+                                                type="date"
+                                                value={filterDateStart}
+                                                onChange={(e) => setFilterDateStart(e.target.value)}
+                                                className="bg-slate-900 border border-slate-800 rounded-xl p-1.5 text-xs text-slate-300 max-w-[130px]"
+                                            />
+
                                             <span className="text-[10px] text-slate-500">إلى</span>
-                                            <input type="date" value={filterDateEnd} onChange={(e) => setFilterDateEnd(e.target.value)} className="bg-slate-900 border border-slate-800 rounded-xl p-1.5 text-xs text-slate-300 max-w-[130px]" />
+
+                                            <input
+                                                type="date"
+                                                value={filterDateEnd}
+                                                onChange={(e) => setFilterDateEnd(e.target.value)}
+                                                className="bg-slate-900 border border-slate-800 rounded-xl p-1.5 text-xs text-slate-300 max-w-[130px]"
+                                            />
                                         </div>
+
                                     ) : activeFilterColumnObject.type === 'dropdown' ? (
+
                                         <select
                                             value={filterValue}
                                             onChange={(e) => setFilterValue(e.target.value)}
                                             className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2 text-xs text-amber-400"
                                         >
                                             <option value="">كل الخيارات...</option>
-                                            {activeFilterColumnObject.options?.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+
+                                            {activeFilterColumnObject.options?.map((opt, i) => (
+                                                <option
+                                                    key={i}
+                                                    value={opt}
+                                                >
+                                                    {opt}
+                                                </option>
+                                            ))}
                                         </select>
+
                                     ) : (
+
                                         <input
                                             type="text"
                                             placeholder="اكتب قيمة التصفية..."
@@ -1764,19 +2332,26 @@ export default function DynamicSectionPage() {
                                             onChange={(e) => setFilterValue(e.target.value)}
                                             className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2 text-xs text-slate-200"
                                         />
+
                                     )}
                                 </div>
                             )}
 
                             {(searchTerm || selectedFilterColumn) && (
-                                <button onClick={resetFilters} className="p-2 bg-slate-900 hover:bg-slate-800 rounded-xl border border-slate-800 text-slate-400 hover:text-slate-200 transition text-[10px] flex items-center gap-1">
-                                    <RefreshCw className="w-3 h-3" /> مسح
+                                <button
+                                    onClick={resetFilters}
+                                    className="p-2 bg-slate-900 hover:bg-slate-800 rounded-xl border border-slate-800 text-slate-400 hover:text-slate-200 transition text-[10px] flex items-center gap-1"
+                                >
+                                    <RefreshCw className="w-3 h-3" />
+                                    مسح
                                 </button>
                             )}
+
                         </div>
                     </div>
 
-                    {/* 🖥️ 1. نمط الجدول (Table View) */}
+                    {/* 🖥️ نمط الجدول المحمي بناءً على رتبة الموظف */}
+                    {/* 📊 1. نمط الجدول (Table View) */}
                     {viewMode === 'table' && (
                         <div className="overflow-x-auto bg-slate-900 rounded-xl border border-slate-800">
                             <table className="w-full text-right border-collapse min-w-[700px]">
@@ -1785,23 +2360,38 @@ export default function DynamicSectionPage() {
                                         {activeTable.columns_definition.map((col) => (
                                             <th key={col.id} className="p-4">{col.name}</th>
                                         ))}
+                                        {/* تظهر خيارات التحكم بناءً على الصلاحيات، بينما توليد المستند متاح للجميع */}
                                         <th className="p-4 text-left">الخيارات</th>
                                     </tr>
                                 </thead>
                                 <tbody className="text-xs text-slate-300 divide-y divide-slate-800/50">
                                     {filteredRows.length === 0 ? (
                                         <tr>
-                                            <td colSpan={activeTable.columns_definition.length + 1} className="p-8 text-center text-slate-500 italic">لا توجد سجلات مطابقة لخيارات البحث الحالية.</td>
+                                            <td colSpan={activeTable.columns_definition.length + 1} className="p-8 text-center text-slate-500 italic">
+                                                لا توجد سجلات مطابقة لخيارات البحث الحالية.
+                                            </td>
                                         </tr>
                                     ) : (
                                         filteredRows.map((row) => (
                                             <tr key={row.id} className="hover:bg-slate-850/40 transition">
                                                 {activeTable.columns_definition.map((col) => {
-                                                    const isEditing = editingCell?.rowId === row.id && editingCell?.colKey === col.id;
+                                                    const isEditing =
+                                                        hasPermission(userRole, "canEditRow") &&
+                                                        editingCell?.rowId === row.id &&
+                                                        editingCell?.colKey === col.id;
                                                     const cellValue = row.cells_data[col.id];
 
                                                     return (
-                                                        <td key={col.id} className="p-4 font-medium min-w-[150px]" onDoubleClick={() => { if (col.type !== 'attachment' && col.type !== 'relation') { setEditingCell({ rowId: row.id, colKey: col.id }); setEditValue(cellValue || ""); } }}>
+                                                        <td
+                                                            key={col.id}
+                                                            className="p-4 font-medium min-w-[150px]"
+                                                            onDoubleClick={() => {
+                                                                if (hasPermission(userRole, "canEditRow") && col.type !== 'attachment' && col.type !== 'relation') {
+                                                                    setEditingCell({ rowId: row.id, colKey: col.id });
+                                                                    setEditValue(cellValue || "");
+                                                                }
+                                                            }}
+                                                        >
                                                             {isEditing ? (
                                                                 col.type === 'dropdown' ? (
                                                                     <select value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={() => handleCellBlur(row.id, col.id, cellValue)} className="w-full bg-slate-950 border border-amber-500 text-xs text-amber-400 p-1 rounded-xl">
@@ -1817,7 +2407,7 @@ export default function DynamicSectionPage() {
                                                                     />
                                                                 )
                                                             ) : (
-                                                                <div className="cursor-pointer hover:bg-slate-800 p-1 rounded min-h-[20px] flex items-center gap-1.5 flex-wrap">
+                                                                <div className="p-1 rounded min-h-[20px] flex items-center gap-1.5 flex-wrap">
                                                                     {col.type === 'relation' && (
                                                                         <div className="flex flex-wrap gap-1">
                                                                             {Array.isArray(cellValue) && cellValue.length > 0 ? (
@@ -1827,18 +2417,35 @@ export default function DynamicSectionPage() {
                                                                                         {getRelationDisplayValue(col.relatedTableId, id)}
                                                                                     </span>
                                                                                 ))
-                                                                            ) : <span className="text-slate-650 italic text-[11px]">غير مرتبط</span>}
+                                                                            ) : <span className="text-slate-655 italic text-[11px]">غير مرتبط</span>}
                                                                         </div>
                                                                     )}
+
                                                                     {col.type === 'attachment' && (
                                                                         cellValue ? (
-                                                                            <a href={cellValue} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-emerald-400 font-bold underline hover:text-emerald-300">
-                                                                                <Paperclip className="w-3 h-3" />
-                                                                                <span className="max-w-[120px] truncate">{getFileNameFromUrl(cellValue)}</span>
-                                                                                <ExternalLink className="w-2.5 h-2.5" />
-                                                                            </a>
-                                                                        ) : <span className="text-slate-650 italic text-[11px]">لا يوجد ملف</span>
+                                                                            <div className="flex items-center gap-2 bg-slate-950/60 p-1 px-2 rounded-lg border border-slate-800">
+                                                                                <a href={cellValue} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-emerald-400 font-bold underline hover:text-emerald-300">
+                                                                                    <Paperclip className="w-3 h-3" />
+                                                                                    <span className="max-w-[120px] truncate">{getFileNameFromUrl(cellValue)}</span>
+                                                                                    <ExternalLink className="w-2.5 h-2.5" />
+                                                                                </a>
+                                                                                {/* 🔐 زر حذف الملف المرفق يظهر فقط لمن يملك صلاحية الكتابة */}
+                                                                                {hasPermission("write") &&
+                                                                                    <button
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            handleDeleteDocument(null, cellValue, col.id, row.id);
+                                                                                        }}
+                                                                                        className="text-red-400 hover:text-red-300 hover:bg-red-950/50 p-0.5 rounded transition"
+                                                                                        title="حذف المستند نهائياً"
+                                                                                    >
+                                                                                        <Trash2 className="w-3 h-3" />
+                                                                                    </button>
+                                                                                }
+                                                                            </div>
+                                                                        ) : <span className="text-slate-655 italic text-[11px]">لا يوجد ملف</span>
                                                                     )}
+
                                                                     {col.type === 'dropdown' && cellValue && <span className="px-2 py-0.5 rounded bg-slate-950 text-amber-400 border border-slate-800 text-[10px]">{cellValue}</span>}
                                                                     {col.type !== 'dropdown' && col.type !== 'relation' && col.type !== 'attachment' && (cellValue || <span className="text-slate-600 italic">فارغ</span>)}
                                                                 </div>
@@ -1846,9 +2453,26 @@ export default function DynamicSectionPage() {
                                                         </td>
                                                     );
                                                 })}
+
+                                                {/* 🛠️ عمود التحكم والخيارات */}
                                                 <td className="p-4 text-left flex items-center justify-end gap-2">
-                                                    <button onClick={() => openEditRowModal(row)} className="p-1.5 bg-slate-950 hover:bg-slate-800 rounded-lg text-blue-400 transition">تعديل</button>
-                                                    <button onClick={() => handleDeleteRow(row.id)} className="p-1.5 bg-slate-950 hover:bg-red-950 rounded-lg text-red-400 transition"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                    <GlobalDocumentGenerator
+                                                        activeTable={activeTable}
+                                                        selectedRow={row}
+                                                        triggerButton={
+                                                            <button className="px-2.5 py-1.5 bg-amber-600/10 hover:bg-amber-600 text-amber-400 hover:text-slate-950 rounded-xl text-[11px] font-bold transition flex items-center gap-1 border border-amber-500/20">
+                                                                <Wand2 className="w-3 h-3" />
+                                                                توليد مستند
+                                                            </button>
+                                                        }
+                                                    />
+                                                    {/* 🔐 أزرار التعديل والحذف تظهر فقط لمن يملك صلاحية الكتابة */}
+                                                    {hasPermission(userRole, "canEditRow") && (
+                                                        <div className="flex gap-2">
+                                                            <button onClick={() => openEditRowModal(row)} className="text-[10px] text-blue-400 hover:text-blue-300 px-2 py-1 transition-colors">تعديل</button>
+                                                            <button onClick={() => handleDeleteRow(row.id)} className="text-[10px] text-red-400 hover:text-red-300 px-2 py-1 transition-colors">حذف</button>
+                                                        </div>
+                                                    )}
                                                 </td>
                                             </tr>
                                         ))
@@ -1894,9 +2518,41 @@ export default function DynamicSectionPage() {
                                             </div>
                                         ))}
                                     </div>
+
+                                    {/* 🛠️ أزرار التحكم في أسفل البطاقة */}
                                     <div className="flex justify-end gap-2 border-t border-slate-800/60 pt-3">
-                                        <button onClick={() => openEditRowModal(row)} className="px-2.5 py-1.5 bg-slate-950 text-blue-400 rounded-lg text-xs font-bold transition">تعديل</button>
-                                        <button onClick={() => handleDeleteRow(row.id)} className="px-2.5 py-1.5 bg-slate-950 text-red-400 rounded-lg text-xs font-bold transition">حذف</button>
+                                        {hasPermission(userRole, "canGenerateDocument") && (
+                                            <GlobalDocumentGenerator
+                                                activeTable={activeTable}
+                                                selectedRow={row}
+                                                triggerButton={
+                                                    <button className="px-2.5 py-1.5 bg-amber-600/10 hover:bg-amber-600 text-amber-400 hover:text-slate-950 rounded-xl text-[11px] font-bold transition flex items-center gap-1 border border-amber-500/20">
+                                                        <Wand2 className="w-3 h-3" />
+                                                        توليد مستند
+                                                    </button>
+                                                }
+                                            />
+                                        )}
+
+                                        <div className="flex gap-2">
+                                            {hasPermission(userRole, "canEditRow") && (
+                                                <button
+                                                    onClick={() => openEditRowModal(row)}
+                                                    className="text-[10px] text-blue-400 hover:text-blue-300 px-2 py-1 transition-colors"
+                                                >
+                                                    تعديل
+                                                </button>
+                                            )}
+
+                                            {hasPermission(userRole, "canDeleteRow") && (
+                                                <button
+                                                    onClick={() => handleDeleteRow(row.id)}
+                                                    className="text-[10px] text-red-400 hover:text-red-300 px-2 py-1 transition-colors"
+                                                >
+                                                    حذف
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -1947,19 +2603,44 @@ export default function DynamicSectionPage() {
                                                     </div>
                                                 </div>
                                             </div>
+
+                                            {/* 🛠️ أزرار خيارات نمط القائمة */}
+                                            {/* 🛠️ أزرار خيارات نمط القائمة */}
                                             <div className="flex items-center gap-2 w-full sm:w-auto justify-end border-t sm:border-0 border-slate-800/50 pt-2 sm:pt-0">
-                                                <GlobalDocumentGenerator
-                                                    activeTable={activeTable}
-                                                    selectedRow={row}
-                                                    triggerButton={
-                                                        <button className="px-2.5 py-1.5 bg-amber-600/10 hover:bg-amber-600 text-amber-400 hover:text-slate-950 rounded-xl text-[11px] font-bold transition flex items-center gap-1 border border-amber-500/20">
-                                                            <Wand2 className="w-3 h-3" />
-                                                            توليد مستند
+
+                                                {hasPermission(userRole, "canGenerateDocument") && (
+                                                    <GlobalDocumentGenerator
+                                                        activeTable={activeTable}
+                                                        selectedRow={row}
+                                                        triggerButton={
+                                                            <button className="px-2.5 py-1.5 bg-amber-600/10 hover:bg-amber-600 text-amber-400 hover:text-slate-950 rounded-xl text-[11px] font-bold transition flex items-center gap-1 border border-amber-500/20">
+                                                                <Wand2 className="w-3 h-3" />
+                                                                توليد مستند
+                                                            </button>
+                                                        }
+                                                    />
+                                                )}
+
+                                                <div className="flex gap-2">
+                                                    {hasPermission(userRole, "canEditRow") && (
+                                                        <button
+                                                            onClick={() => openEditRowModal(row)}
+                                                            className="text-[10px] text-blue-400 hover:text-blue-300 px-2 py-1 transition-colors"
+                                                        >
+                                                            تعديل
                                                         </button>
-                                                    }
-                                                />
-                                                <button onClick={() => openEditRowModal(row)} className="px-3 py-1.5 bg-slate-950 hover:bg-slate-800 text-blue-400 rounded-xl text-[11px] font-bold transition">تعديل</button>
-                                                <button onClick={() => handleDeleteRow(row.id)} className="p-1.5 bg-slate-950 hover:bg-red-950 text-red-400 rounded-xl transition"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                    )}
+
+                                                    {hasPermission(userRole, "canDeleteRow") && (
+                                                        <button
+                                                            onClick={() => handleDeleteRow(row.id)}
+                                                            className="text-[10px] text-red-400 hover:text-red-300 px-2 py-1 transition-colors"
+                                                        >
+                                                            حذف
+                                                        </button>
+                                                    )}
+                                                </div>
+
                                             </div>
                                         </div>
                                     );
@@ -1967,348 +2648,608 @@ export default function DynamicSectionPage() {
                             )}
                         </div>
                     )}
-                </div>
-            )}
 
-            {/* 📅 4. نمط التقويم القانوني الديناميكي (Calendar View) */}
-            {viewMode === 'calendar' && (
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
-                    <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-500 mb-2">
-                        <div>الأحد</div><div>الإثنين</div><div>الثلاثاء</div><div>الأربعاء</div><div>الخميس</div><div>الجمعة</div><div>السبت</div>
-                    </div>
+                    {/* 📅 4. نمط التقويم القانوني الديناميكي (Calendar View) */}
+                    {viewMode === 'calendar' && (
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
+                            <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-500 mb-2">
+                                <div>الأحد</div><div>الإثنين</div><div>الثلاثاء</div><div>الأربعاء</div><div>الخميس</div><div>الجمعة</div><div>السبت</div>
+                            </div>
 
-                    <div className="space-y-2 mt-4">
-                        {(() => {
-                            const dateFieldId = activeTable?.calendar_mapping?.date_field;
-                            const titleFieldId = activeTable?.calendar_mapping?.title_field;
-                            const statusFieldId = activeTable?.calendar_mapping?.status_field;
+                            <div className="space-y-2 mt-4">
+                                {(() => {
+                                    const dateFieldId = activeTable?.calendar_mapping?.date_field;
+                                    const titleFieldId = activeTable?.calendar_mapping?.title_field;
 
-                            const finalDateFieldId = dateFieldId || activeTable.columns_definition.find(c => c.type === 'date')?.id;
-                            const finalTitleFieldId = titleFieldId || activeTable.columns_definition[0]?.id;
-                            const finalStatusFieldId = statusFieldId || activeTable.columns_definition.find(c => c.type === 'dropdown')?.id;
+                                    const finalDateFieldId = dateFieldId || activeTable.columns_definition.find(c => c.type === 'date')?.id;
+                                    const finalTitleFieldId = titleFieldId || activeTable.columns_definition[0]?.id;
 
-                            return filteredRows
-                                .filter(row => finalDateFieldId && !!row.cells_data[finalDateFieldId])
-                                .sort((a, b) => new Date(a.cells_data[finalDateFieldId]) - new Date(b.cells_data[finalDateFieldId]))
-                                .map(row => (
-                                    <div key={row.id} className="flex justify-between items-center bg-slate-950 p-3 rounded-lg border border-slate-850 hover:border-amber-500/40 transition">
-                                        <div className="flex items-center gap-3">
-                                            <div className="text-amber-500 font-mono text-xs bg-slate-900 px-2.5 py-1 rounded border border-slate-800">
-                                                {row.cells_data[finalDateFieldId]}
-                                            </div>
-                                            <span className="text-xs font-bold text-slate-200">
-                                                {row.cells_data[finalTitleFieldId] || 'بدون عنوان'}
-                                            </span>
-                                        </div>
+                                    return filteredRows
+                                        .filter(row => finalDateFieldId && !!row.cells_data[finalDateFieldId])
+                                        // 🛠️ تم إصلاح السطر هنا باستخدام .getTime() لضمان عملية طرح صحيحة رياضياً
+                                        .sort((a, b) => new Date(a.cells_data[finalDateFieldId]).getTime() - new Date(b.cells_data[finalDateFieldId]).getTime())
+                                        .map(row => (
+                                            <div key={row.id} className="flex justify-between items-center bg-slate-950 p-3 rounded-lg border border-slate-850 hover:border-amber-500/40 transition">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-xs font-bold text-amber-400">{row.cells_data[finalDateFieldId]}</span>
+                                                    <h4 className="text-xs font-medium text-slate-200">{row.cells_data[finalTitleFieldId] || "بدون عنوان"}</h4>
+                                                </div>
+                                                {/* 🔒 أزرار التحكم الموحدة لنمط التقويم */}
+                                                <div className="flex items-center gap-2">
+                                                    {hasPermission(userRole, "canGenerateDocument") && (
+                                                        <GlobalDocumentGenerator
+                                                            activeTable={activeTable}
+                                                            selectedRow={row}
+                                                            triggerButton={
+                                                                <button className="px-2.5 py-1.5 bg-amber-600/10 hover:bg-amber-600 text-amber-400 hover:text-slate-950 rounded-xl text-[11px] font-bold transition flex items-center gap-1 border border-amber-500/20">
+                                                                    <Wand2 className="w-3 h-3" />
+                                                                    توليد مستند
+                                                                </button>
+                                                            }
+                                                        />
+                                                    )}
 
-                                        <div className="flex items-center gap-2">
-                                            {finalStatusFieldId && row.cells_data[finalStatusFieldId] && (
-                                                <span className="text-[10px] bg-slate-900 text-slate-400 px-2 py-0.5 rounded border border-slate-800">
-                                                    {row.cells_data[finalStatusFieldId]}
-                                                </span>
-                                            )}
-                                            <button onClick={() => openEditRowModal(row)} className="text-[11px] text-blue-400 hover:underline px-2 py-1 rounded hover:bg-blue-500/10 transition">تعديل</button>
-                                        </div>
-                                    </div>
-                                ));
-                        })()}
-                    </div>
-                </div>
-            )}
+                                                    <div className="flex gap-2">
+                                                        {hasPermission(userRole, "canEditRow") && (
+                                                            <button
+                                                                onClick={() => openEditRowModal(row)}
+                                                                className="text-[10px] text-blue-400 hover:text-blue-300 px-2 py-1 transition-colors"
+                                                            >
+                                                                تعديل
+                                                            </button>
+                                                        )}
 
-            {/* 📥 المودال: إضافة وتعديل سجل المطور والداعم للاختيار المتعدد الشامل */}
-            {/* 📥 المودال: إضافة وتعديل سجل المطور والداعم للاختيار المتعدد الشامل */}
-            {isRowModalOpen && activeTable && (
-                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-4">
-                        <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                            <h3 className="text-sm font-black text-amber-500">
-                                {editingRow ? '📝 تعديل بيانات السجل القانوني الحالي' : '➕ إضافة سجل قانوني جديد للمكتب'}
-                            </h3>
-                            <button onClick={() => setIsRowModalOpen(false)} className="text-slate-500"><X className="w-4 h-4" /></button>
-                        </div>
-
-                        <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
-                            {activeTable.columns_definition.map((col) => (
-                                <div key={col.id}>
-                                    <label className="block text-xs font-bold text-slate-400 mb-1">{col.name}</label>
-
-                                    {col.type === 'dropdown' ? (
-                                        <select value={rowData[col.id] || ''} onChange={(e) => setRowData({ ...rowData, [col.id]: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200">
-                                            <option value="">إختر خياراً...</option>
-                                            {col.options?.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
-                                        </select>
-                                    ) : col.type === 'attachment' ? (
-                                        <div className="space-y-2">
-                                            <div className="w-full bg-slate-950 border border-dashed border-slate-800 rounded-xl p-4 text-center relative hover:border-emerald-500/50 transition">
-                                                <input type="file" className="hidden" id={`file_${col.id}`} onChange={(e) => handleFileUpload(e, col.id)} disabled={uploadingField === col.id} />
-                                                {uploadingField === col.id ? (
-                                                    <div className="flex flex-col items-center justify-center gap-2 py-2">
-                                                        <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
-                                                        <span className="text-xs text-slate-400">جاري رفع المستند القانوني وتشفيره بأمان...</span>
+                                                        {hasPermission(userRole, "canDeleteRow") && (
+                                                            <button
+                                                                onClick={() => handleDeleteRow(row.id)}
+                                                                className="text-[10px] text-red-400 hover:text-red-300 px-2 py-1 transition-colors"
+                                                            >
+                                                                حذف
+                                                            </button>
+                                                        )}
                                                     </div>
-                                                ) : (
-                                                    <div className="flex flex-col items-center gap-1.5">
-                                                        <label htmlFor={`file_${col.id}`} className="cursor-pointer text-xs text-slate-500 flex flex-col items-center gap-1.5">
-                                                            <Paperclip className="w-5 h-5 text-slate-400" />
-                                                            {rowData[col.id] ? (
-                                                                <span className="text-emerald-400 font-bold max-w-full truncate block px-4">
-                                                                    ✓ تم الرفع: {getFileNameFromUrl(rowData[col.id])}
+                                                </div>
+                                            </div>
+                                        ));
+                                })()}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 📥 المودال: إضافة وتعديل سجل المطور والداعم للاختيار المتعدد الشامل */}
+                    {/* 📥 المودال: إضافة وتعديل سجل المطور والداعم للاختيار المتعدد الشامل */}
+                    {isRowModalOpen && activeTable && (
+                        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                            <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-4" dir="rtl">
+                                <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                                    <h3 className="text-sm font-black text-amber-500">
+                                        {!hasPermission(userRole, "canEditRow")
+                                            ? "🔍 استعراض بيانات السجل القانوني الحالي (قراءة فقط)"
+                                            : editingRow
+                                                ? "📝 تعديل بيانات السجل القانوني الحالي"
+                                                : "➕ إضافة سجل قانوني جديد للمكتب"}
+                                    </h3>
+
+                                    <button
+                                        onClick={() => setIsRowModalOpen(false)}
+                                        className="text-slate-500 hover:text-slate-400 transition"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+
+                                <div className="space-y-4 max-h-[60vh] overflow-y-auto pl-1">
+                                    {activeTable.columns_definition.map((col) => (
+                                        <div key={col.id} className="text-right">
+                                            <label className="block text-xs font-bold text-slate-400 mb-1">{col.name}</label>
+
+                                            {col.type === 'dropdown' ? (
+                                                <select
+                                                    value={rowData[col.id] || ''}
+                                                    onChange={(e) => setRowData({ ...rowData, [col.id]: e.target.value })}
+                                                    disabled={!hasPermission(userRole, "canEditRow")}
+                                                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 focus:border-amber-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                >
+                                                    <option value="">إختر خياراً...</option>
+                                                    {col.options?.map((opt, i) => (
+                                                        <option key={i} value={opt}>
+                                                            {opt}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            ) : col.type === 'attachment' ? (
+                                                <div className="space-y-2">
+                                                    <div
+                                                        className={`w-full bg-slate-950 border border-dashed border-slate-800 rounded-xl p-4 text-center relative transition ${hasPermission(userRole, "canEditRow")
+                                                            ? "hover:border-emerald-500/50"
+                                                            : "opacity-70"
+                                                            }`}
+                                                    >
+                                                        <input
+                                                            type="file"
+                                                            className="hidden"
+                                                            id={`file_${col.id}`}
+                                                            onChange={(e) => handleFileUpload(e, col.id)}
+                                                            disabled={
+                                                                uploadingField === col.id ||
+                                                                !hasPermission(userRole, "canEditRow")
+                                                            }
+                                                        />
+
+                                                        {uploadingField === col.id ? (
+                                                            <div className="flex flex-col items-center justify-center gap-2 py-2">
+                                                                <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
+                                                                <span className="text-xs text-slate-400">
+                                                                    جاري رفع المستند القانوني وتشفيره بأمان...
                                                                 </span>
-                                                            ) : "اضغط لرفع ملف أو مستند للمكتب (PDF, DOCX)"}
-                                                        </label>
-
-                                                        {/* أزرار المعاينة والتحكم الذكية */}
-                                                        {rowData[col.id] && (
-                                                            <div className="flex items-center gap-4 mt-2 border-t border-slate-900 pt-2 w-full justify-center">
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => handleViewDocument(rowData[col.id])}
-                                                                    className="text-[11px] text-amber-500 underline hover:text-amber-400 cursor-pointer font-bold"
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex flex-col items-center gap-1.5">
+                                                                <label
+                                                                    htmlFor={
+                                                                        hasPermission(userRole, "canEditRow")
+                                                                            ? `file_${col.id}`
+                                                                            : undefined
+                                                                    }
+                                                                    className={`text-xs text-slate-500 flex flex-col items-center gap-1.5 ${hasPermission(userRole, "canEditRow")
+                                                                        ? "cursor-pointer"
+                                                                        : "cursor-not-allowed"
+                                                                        }`}
                                                                 >
-                                                                    معاينة هذا المستند ↗
-                                                                </button>
+                                                                    <Paperclip className="w-5 h-5 text-slate-400" />
 
-                                                                <span className="text-slate-700">|</span>
+                                                                    {rowData[col.id] ? (
+                                                                        <span className="text-emerald-400 font-bold max-w-full truncate block px-4">
+                                                                            ✓ المستند المرفوع: {getFileNameFromUrl(rowData[col.id])}
+                                                                        </span>
+                                                                    ) : !hasPermission(userRole, "canEditRow") ? (
+                                                                        "لا يوجد مستند مرفق حالياً"
+                                                                    ) : (
+                                                                        "اضغط لرفع ملف أو مستند للمكتب (PDF, DOCX)"
+                                                                    )}
+                                                                </label>
 
-                                                                {/* 🔥 الزر الجديد لفتح الـ Popup واستعراض كافة المستندات المرتبطة بالموكل */}
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        if (editingRow) {
-                                                                            setIsClientDocsModalOpen(true);
-                                                                        } else {
-                                                                            alert("يرجى حفظ السجل أولاً لربطه بالموكل واستعراض أرشيفه.");
-                                                                        }
-                                                                    }}
-                                                                    className="text-[11px] text-cyan-400 hover:text-cyan-350 cursor-pointer font-bold flex items-center gap-1"
-                                                                >
-                                                                    🗂️ عرض أرشيف الموكل الشامل
-                                                                </button>
+                                                                {rowData[col.id] && (
+                                                                    <div className="flex items-center gap-4 mt-2 border-t border-slate-900 pt-2 w-full justify-center">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleViewDocument(rowData[col.id])}
+                                                                            className="text-[11px] text-amber-500 underline hover:text-amber-400 cursor-pointer font-bold"
+                                                                        >
+                                                                            معاينة هذا المستند ↗
+                                                                        </button>
+
+                                                                        <span className="text-slate-700">|</span>
+
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                if (editingRow) {
+                                                                                    setIsClientDocsModalOpen(true);
+                                                                                } else {
+                                                                                    alert("يرجى حفظ السجل أولاً لربطه بالموكل واستعراض أرشيفه.");
+                                                                                }
+                                                                            }}
+                                                                            className="text-[11px] text-cyan-400 hover:text-cyan-350 cursor-pointer font-bold flex items-center gap-1"
+                                                                        >
+                                                                            🗂️ عرض أرشيف الموكل الشامل
+                                                                        </button>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         )}
                                                     </div>
+                                                </div>
+                                            ) : col.type === 'relation' ? (
+                                                <div className="space-y-1">
+                                                    <select
+                                                        multiple
+                                                        value={Array.isArray(rowData[col.id]) ? rowData[col.id] : []}
+                                                        disabled={!hasPermission(userRole, "canEditRow")} /* 🔒 قفل علاقات الجداول المزدوجة */
+                                                        onChange={(e) => {
+                                                            const selectedOptions = Array.from(e.target.selectedOptions, option => option.value);
+                                                            setRowData({ ...rowData, [col.id]: selectedOptions });
+                                                        }}
+                                                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-cyan-400 font-bold min-h-[100px] focus:outline-none focus:border-cyan-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                    >
+                                                        {(relationRowsMap[col.relatedTableId] || []).map((rRow) => {
+                                                            const firstKey = Object.keys(rRow.cells_data)[0];
+                                                            return (
+                                                                <option key={rRow.id} value={rRow.id} className="p-1.5 rounded hover:bg-slate-800">
+                                                                    🔗 {rRow.cells_data[firstKey] || `سجل #${rRow.id}`}
+                                                                </option>
+                                                            );
+                                                        })}
+                                                    </select>
+                                                    {col.type === 'relation' && hasPermission(userRole, "canEditRow") && (
+                                                        <span className="block text-[10px] text-slate-500 mt-1">اضغط مع الاستمرار على Ctrl (أو Cmd في Mac) لاختيار أكثر من سجل.</span>
+                                                    )}
+                                                </div>
+                                            ) : col.type === 'user_account' ? (
+                                                /* 👤 توليد مصفوفة الصلاحيات لجميع الجداول باستثناء جدول الموظفين الحالي */
+                                                <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-3 w-full text-right">
+                                                    <p className="text-[10px] text-slate-400 leading-relaxed">
+                                                        {!hasPermission(userRole, "canEditRow") ? 'مستويات الوصول الممنوحة لهذا الموظف على جداول النظام:' : 'قم بتعيين مستويات الوصول الخاصة بهذا الموظف على جداول النظام المتاحة حالياً:'}
+                                                    </p>
+                                                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                                                        {systemTables && systemTables.length > 0 ? (
+                                                            systemTables
+                                                                .filter((table) => table.id !== activeTable?.id)
+                                                                .map((table) => {
+                                                                    let permissionsObj = {};
+                                                                    try {
+                                                                        if (rowData && rowData[col.id]) {
+                                                                            permissionsObj = typeof rowData[col.id] === 'string'
+                                                                                ? JSON.parse(rowData[col.id])
+                                                                                : rowData[col.id];
+                                                                        }
+                                                                    } catch (e) {
+                                                                        console.error("خطأ أثناء تحليل الصلاحيات الحالية:", e);
+                                                                        permissionsObj = {};
+                                                                    }
+
+                                                                    const currentPermission = permissionsObj[table.id] || 'no_access';
+
+                                                                    const updatePermissionState = (level) => {
+                                                                        // 🔒 منع أي تعديل إذا لم يمتلك المستخدم صلاحية تعديل الصلاحيات
+                                                                        if (!hasPermission(userRole, "canEditPermissions")) return;
+
+                                                                        const updatedPermissions = {
+                                                                            ...permissionsObj,
+                                                                            [table.id]: level,
+                                                                        };
+
+                                                                        setRowData({
+                                                                            ...rowData,
+                                                                            [col.id]: JSON.stringify(updatedPermissions),
+                                                                        });
+                                                                    };
+
+                                                                    return (
+                                                                        <div key={table.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-900 p-2 rounded-lg border border-slate-800/60 gap-2">
+                                                                            <span className="text-xs text-slate-300 font-medium flex items-center gap-1.5">
+                                                                                📊 {table.name || 'جدول غير مسمى'}
+                                                                            </span>
+                                                                            <div className={`flex gap-1 bg-slate-950 p-0.5 rounded border border-slate-800 self-end sm:self-auto ${!hasPermission(userRole, "canEditRow") ? 'pointer-events-none opacity-80' : ''}`}>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    disabled={!hasPermission(userRole, "canEditRow")}
+                                                                                    onClick={() => updatePermissionState('no_access')}
+                                                                                    className={`px-2 py-1 text-[10px] rounded transition-all font-bold ${hasPermission(userRole, "canEditRow") ? 'cursor-pointer' : ''} ${currentPermission === 'no_access' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'text-slate-500'}`}
+                                                                                >
+                                                                                    حجب
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    disabled={!hasPermission(userRole, "canEditRow")}
+                                                                                    onClick={() => updatePermissionState('read_only')}
+                                                                                    className={`px-2 py-1 text-[10px] rounded transition-all font-bold ${hasPermission(userRole, "canEditRow") ? 'cursor-pointer' : ''} ${currentPermission === 'read_only' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'text-slate-500'}`}
+                                                                                >
+                                                                                    قراءة
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    disabled={!hasPermission(userRole, "canEditRow")}
+                                                                                    onClick={() => updatePermissionState('read_write')}
+                                                                                    className={`px-2 py-1 text-[10px] rounded transition-all font-bold ${hasPermission(userRole, "canEditRow") ? 'cursor-pointer' : ''} ${currentPermission === 'read_write' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-slate-500'}`}
+                                                                                >
+                                                                                    كاملة
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                })
+                                                        ) : (
+                                                            <p className="text-[10px] text-amber-500/80 font-medium bg-amber-950/20 border border-amber-900/30 p-2 rounded-lg text-center">
+                                                                ⚠️ لم يتم العثور على جداول أو أقسام نشطة في النظام حالياً.
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                /* 📝 الحقول النصية العادية، وحقول كلمات المرور والبريد الخاصة بالموظفين */
+                                                <input
+                                                    type={col.type === 'number' ? 'number' : col.type === 'date' ? 'date' : col.type === 'staff_password' ? 'password' : col.type === 'staff_email' ? 'email' : 'text'}
+                                                    value={rowData[col.id] || ''}
+                                                    placeholder={col.type === 'staff_password' ? '••••••••' : col.type === 'staff_email' ? 'example@company.com' : ''}
+                                                    onChange={(e) => setRowData({ ...rowData, [col.id]: e.target.value })}
+                                                    disabled={!hasPermission(userRole, "canEditRow")} /* 🔒 قفل الحقول إذا كانت الصلاحية قراءة فقط */
+                                                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 focus:border-amber-500 disabled:opacity-60 disabled:cursor-not-allowed text-right font-medium"
+                                                />
+                                            )}
+                                        </div>
+                                    ))}
+
+                                    {/* 📂 قسم المستندات المرتبطة الديناميكي */}
+                                    {editingRow && (
+                                        <div className="mt-6 pt-4 border-t border-slate-800 space-y-3 text-right">
+                                            <div className="flex items-center gap-2 text-xs font-black text-emerald-400">
+                                                <FolderOpen className="w-4 h-4" />
+                                                <span>ملف الموكل الشامل: المستندات المرتبطة به في النظام</span>
+                                            </div>
+
+                                            <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
+                                                {getAllAssociatedDocuments(editingRow.id).length === 0 ? (
+                                                    <div className="text-[11px] text-slate-500 italic p-3 bg-slate-950 rounded-xl border border-slate-800 text-center">
+                                                        لا توجد مستندات أو عقود مرفوعة مرتبطة بهذا الموكل في الجداول الأخرى حالياً.
+                                                    </div>
+                                                ) : (
+                                                    getAllAssociatedDocuments(editingRow.id).map((doc) => (
+                                                        <div key={doc.id} className="flex justify-between items-center bg-slate-950 p-2.5 rounded-xl border border-slate-800 hover:border-emerald-500/30 transition text-xs gap-4">
+                                                            <div className="flex flex-col gap-0.5 min-w-0 flex-1 text-right">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleViewDocument(doc.fileUrl)}
+                                                                    className="text-slate-200 hover:text-emerald-400 font-bold underline flex items-center gap-1.5 truncate text-right bg-transparent border-none cursor-pointer p-0"
+                                                                >
+                                                                    <Paperclip className="w-3 h-3 text-emerald-500 shrink-0" />
+                                                                    <span className="truncate">{doc.fileName}</span>
+                                                                </button>
+                                                                <span className="text-[10px] text-slate-500 truncate">
+                                                                    مصدره: <strong className="text-slate-400">{doc.originTable}</strong> ({doc.recordTitle})
+                                                                </span>
+                                                            </div>
+
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleViewDocument(doc.fileUrl)}
+                                                                className="px-2.5 py-1 bg-slate-900 border border-slate-800 text-emerald-400 hover:bg-emerald-500 hover:text-slate-950 rounded-lg text-[10px] font-bold transition shrink-0 cursor-pointer"
+                                                            >
+                                                                فتح المستند ↗
+                                                            </button>
+                                                        </div>
+                                                    ))
                                                 )}
                                             </div>
                                         </div>
-                                    ) : col.type === 'relation' ? (
-                                        <select
-                                            multiple
-                                            value={Array.isArray(rowData[col.id]) ? rowData[col.id] : []}
-                                            onChange={(e) => {
-                                                const selectedOptions = Array.from(e.target.selectedOptions, option => option.value);
-                                                setRowData({ ...rowData, [col.id]: selectedOptions });
-                                            }}
-                                            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-cyan-400 font-bold min-h-[100px] focus:outline-none focus:border-cyan-500"
-                                        >
-                                            {(relationRowsMap[col.relatedTableId] || []).map((rRow) => {
-                                                const firstKey = Object.keys(rRow.cells_data)[0];
-                                                return (
-                                                    <option key={rRow.id} value={rRow.id} className="p-1.5 rounded hover:bg-slate-800">
-                                                        🔗 {rRow.cells_data[firstKey] || `سجل #${rRow.id}`}
-                                                    </option>
-                                                );
-                                            })}
-                                        </select>
-                                    ) : (
-                                        <input
-                                            type={col.type === 'number' ? 'number' : col.type === 'date' ? 'date' : 'text'}
-                                            value={rowData[col.id] || ''} onChange={(e) => setRowData({ ...rowData, [col.id]: e.target.value })}
-                                            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 focus:border-amber-500"
-                                        />
                                     )}
-                                    {col.type === 'relation' && <span className="block text-[10px] text-slate-500 mt-1">اضغط مع الاستمرار على Ctrl (أو Cmd في Mac) لاختيار أكثر من سجل.</span>}
                                 </div>
-                            ))}
 
-                            {/* 📂 قسم المستندات المرتبطة الديناميكي المستدعى عبر الدالة الموحدة */}
-                            {editingRow && (
-                                <div className="mt-6 pt-4 border-t border-slate-800 space-y-3 text-right" dir="rtl">
-                                    <div className="flex items-center gap-2 text-xs font-black text-emerald-400">
-                                        <FolderOpen className="w-4 h-4" />
-                                        <span>ملف الموكل الشامل: المستندات المرتبطة به في النظام</span>
-                                    </div>
-
-                                    <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
-                                        {getAllAssociatedDocuments(editingRow.id).length === 0 ? (
-                                            <div className="text-[11px] text-slate-500 italic p-3 bg-slate-950 rounded-xl border border-slate-850 text-center">
-                                                لا توجد مستندات أو عقود مرفوعة مرتبطة بهذا الموكل في الجداول الأخرى حالياً.
-                                            </div>
-                                        ) : (
-                                            getAllAssociatedDocuments(editingRow.id).map((doc) => (
-                                                <div key={doc.id} className="flex justify-between items-center bg-slate-950 p-2.5 rounded-xl border border-slate-850 hover:border-emerald-500/30 transition text-xs gap-4">
-                                                    <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleViewDocument(doc.fileUrl)}
-                                                            className="text-slate-200 hover:text-emerald-400 font-bold underline flex items-center gap-1.5 truncate text-right bg-transparent border-none cursor-pointer p-0"
-                                                        >
-                                                            <Paperclip className="w-3 h-3 text-emerald-500 shrink-0" />
-                                                            <span className="truncate">{doc.fileName}</span>
-                                                        </button>
-                                                        <span className="text-[10px] text-slate-500 truncate">
-                                                            مصدره: <strong className="text-slate-400">{doc.originTable}</strong> ({doc.recordTitle})
-                                                        </span>
-                                                    </div>
-
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleViewDocument(doc.fileUrl)}
-                                                        className="px-2.5 py-1 bg-slate-900 border border-slate-800 text-emerald-400 hover:bg-emerald-500 hover:text-slate-950 rounded-lg text-[10px] font-bold transition shrink-0 cursor-pointer"
-                                                    >
-                                                        فتح المستند ↗
-                                                    </button>
-                                                </div>
-                                            ))
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="flex justify-end gap-2 border-t border-slate-800 pt-4">
-                            <button onClick={() => setIsRowModalOpen(false)} className="bg-slate-950 border border-slate-800 px-4 py-2 rounded-xl text-xs text-slate-400">إلغاء</button>
-                            <button onClick={handleSaveRow} className="bg-amber-600 hover:bg-amber-500 text-slate-950 px-5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5" disabled={uploadingField !== null}>
-                                <Save className="w-4 h-4" /> حفظ السجل
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* [باني المخطط المتقدم والـ Settings] */}
-            {isSettingsModalOpen && activeTable && (
-                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-4">
-                        <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                            <h3 className="text-sm font-black text-amber-500">⚙️ باني مخطط الحقول المتقدم (Dynamic Schema Builder)</h3>
-                            <button onClick={() => setIsSettingsModalOpen(false)} className="text-slate-500"><X className="w-4 h-4" /></button>
-                        </div>
-
-                        <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
-                            <span className="block text-[10px] text-amber-500 font-bold">➕ إضافة حقل ذكي جديد وتحديد المنطق:</span>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                <input type="text" placeholder="اسم الحقل (مثال: أتعاب القضية)..." value={newColumnName} onChange={(e) => setNewColumnName(e.target.value)} className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none" />
-                                <select value={newColumnType} onChange={(e) => setNewColumnType(e.target.value)} className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-400 focus:outline-none">
-                                    <option value="text">نص ذكي</option>
-                                    <option value="number">أرقام / مبالغ</option>
-                                    <option value="date">تاريخ ووقت</option>
-                                    <option value="dropdown">قائمة منسدلة (Dropdown)</option>
-                                    <option value="attachment">حقل مرفقات وملفات</option>
-                                    <option value="relation">حقل علاقة (Relation 🔗)</option>
-                                </select>
-                                <button onClick={handleAddColumnStructure} className="bg-amber-600 hover:bg-amber-500 text-slate-950 rounded-lg text-xs font-black transition">إضافة الحقل للمخطط</button>
-                            </div>
-
-                            {newColumnType === 'dropdown' && (
-                                <div className="p-3 bg-slate-900 rounded-lg border border-slate-800 space-y-2">
-                                    <label className="block text-[10px] text-slate-400 font-bold">خيارات القائمة المنسدلة:</label>
-                                    <div className="flex gap-2">
-                                        <input type="text" placeholder="مثال: قيد التنفيذ، منتهية..." value={newOptionInput} onChange={(e) => setNewOptionInput(e.target.value)} className="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs" />
-                                        <button onClick={handleAddDropdownOption} className="bg-slate-800 px-3 text-xs rounded-lg text-slate-300 hover:bg-slate-700"><ListPlus className="w-3.5 h-3.5" /></button>
-                                    </div>
-                                    <div className="flex flex-wrap gap-1.5 pt-1">
-                                        {dropdownOptions.map((opt, idx) => <span key={idx} className="bg-slate-950 border border-slate-800 text-slate-400 px-2 py-0.5 rounded text-[10px]">{opt}</span>)}
-                                    </div>
-                                </div>
-                            )}
-
-                            {newColumnType === 'relation' && (
-                                <div className="mt-3 animate-in fade-in duration-200">
-                                    <label className="block text-xs font-bold text-cyan-400 mb-1.5">
-                                        🔗 اختر الجدول المرتبط المستهدف (Many-to-Many):
-                                    </label>
-                                    <select
-                                        value={selectedRelationTableId}
-                                        onChange={(e) => setSelectedRelationTableId(e.target.value)}
-                                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-cyan-400 focus:outline-none focus:border-cyan-500"
+                                {/* 🛠️ شريط أزرار التحكم السفلي متوافق مع مستويات الوصول */}
+                                <div className="flex justify-end gap-2 border-t border-slate-800 pt-4 mt-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsRowModalOpen(false)}
+                                        className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-bold rounded-xl transition cursor-pointer"
                                     >
-                                        <option value="">-- اختر جدولاً من القائمة --</option>
-                                        {tables && tables.map((t) => (
-                                            <option key={t.id} value={t.id}>
-                                                📊 {t.name}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
-                        </div>
+                                        {!hasPermission(userRole, "canEditRow") ? 'إغلاق المعاينة' : 'إلغاء التنفيذ'}
+                                    </button>
 
-                        <div className="space-y-2">
-                            <span className="block text-[10px] text-slate-400 font-bold">مخطط الحقول الحالي للجدول:</span>
-                            <div className="max-h-[30vh] overflow-y-auto space-y-2">
-                                {manageColumns.map((col, index) => (
-                                    <div key={col.id} draggable onDragStart={() => handleDragStart(index)} onDragOver={(e) => handleDragOver(e, index)} onDragEnd={handleDragEnd} className="flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-slate-800">
-                                        <div className="flex items-center gap-3 text-xs w-full">
-                                            <div className="cursor-grab text-slate-600 font-bold">☰</div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-slate-200 font-bold">{col.name}</span>
-                                                <span className="px-2 py-0.5 bg-slate-900 text-slate-500 rounded text-[10px]">{col.type}</span>
-                                                {col.type === 'dropdown' && <span className="text-[9px] text-amber-500 font-bold">({col.options?.length} خيارات)</span>}
-                                                {col.type === 'relation' && <span className="text-[9px] text-cyan-400 font-bold">(متعدد 🔗)</span>}
+                                    {hasPermission(userRole, "canEditRow") && (
+                                        <button
+                                            type="button"
+                                            onClick={handleSaveRow} /* الدالة التي تحفظ البيانات لديك */
+                                            className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black rounded-xl transition shadow-lg cursor-pointer"
+                                        >
+                                            {editingRow ? '💾 حفظ التعديلات الحالية' : '🚀 اعتماد وإضافة السجل'}
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* [باني المخطط المتقدم والـ Settings] */}
+                    {/* 🔒 منع موظف القراءة فقط من الدخول للباني بالكامل وقصرها على صلاحية 'write' */}
+                    {isSettingsModalOpen && activeTable && hasPermission(userRole, "canViewSettings") && (
+                        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                            <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-4" dir="rtl">
+                                <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                                    <h3 className="text-sm font-black text-amber-500">⚙️ باني مخطط الحقول المتقدم (Dynamic Schema Builder)</h3>
+                                    <button onClick={() => setIsSettingsModalOpen(false)} className="text-slate-500 hover:text-slate-400 transition">
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+
+                                {/* 🔒 أزرار وحقول إضافة حقل جديد تظهر فقط في حال صلاحية 'write' */}
+                                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
+                                    <span className="block text-[10px] text-amber-500 font-bold">➕ إضافة حقل ذكي جديد وتحديد المنطق:</span>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                        <input
+                                            type="text"
+                                            placeholder="اسم الحقل (مثال: صلاحيات الوصول)..."
+                                            value={newColumnName}
+                                            onChange={(e) => setNewColumnName(e.target.value)}
+                                            className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                                        />
+                                        <select
+                                            value={newColumnType}
+                                            onChange={(e) => setNewColumnType(e.target.value)}
+                                            className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-400 focus:outline-none focus:border-amber-500"
+                                        >
+                                            <option value="text">نص ذكي</option>
+                                            <option value="number">أرقام / مبالغ</option>
+                                            <option value="date">تاريخ ووقت</option>
+                                            <option value="dropdown">قائمة منسدلة (Dropdown)</option>
+                                            <option value="attachment">حقل مرفقات وملفات</option>
+                                            <option value="relation">حقل علاقة (Relation 🔗)</option>
+                                            <option value="staff_email">📧 بريد إلكتروني رسمي</option>
+                                            <option value="staff_password">🔒 كلمة مرور مشفرة</option>
+                                            <option value="user_account">👤 حساب وصلاحيات نظام</option>
+                                        </select>
+                                        <button
+                                            onClick={handleAddColumnStructure}
+                                            className="bg-amber-600 hover:bg-amber-500 text-slate-950 rounded-lg text-xs font-black transition cursor-pointer"
+                                        >
+                                            إضافة الحقل للمخطط
+                                        </button>
+                                    </div>
+
+                                    {newColumnType === 'dropdown' && (
+                                        <div className="p-3 bg-slate-900 rounded-lg border border-slate-800 space-y-2 text-right">
+                                            <label className="block text-[10px] text-slate-400 font-bold">خيارات القائمة المنسدلة:</label>
+                                            <div className="flex gap-2">
+                                                <input
+                                                    type="text"
+                                                    placeholder="مثال: قيد التنفيذ، منتهية..."
+                                                    value={newOptionInput}
+                                                    onChange={(e) => setNewOptionInput(e.target.value)}
+                                                    className="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                                                />
+                                                <button
+                                                    onClick={handleAddDropdownOption}
+                                                    className="bg-slate-800 px-3 text-xs rounded-lg text-slate-300 hover:bg-slate-700 transition cursor-pointer"
+                                                >
+                                                    <ListPlus className="w-3.5 h-3.5" />
+                                                </button>
+                                            </div>
+                                            <div className="flex flex-wrap gap-1.5 pt-1 justify-start">
+                                                {dropdownOptions.map((opt, idx) => (
+                                                    <span key={idx} className="bg-slate-950 border border-slate-800 text-slate-400 px-2 py-0.5 rounded text-[10px]">
+                                                        {opt}
+                                                    </span>
+                                                ))}
                                             </div>
                                         </div>
-                                        <button onClick={() => handleRemoveColumnStructure(col.id)} className="text-red-500 hover:bg-red-950/20 p-2 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
+                                    )}
+
+                                    {(newColumnType === 'relation' || newColumnType === 'user_account') && (
+                                        <div className="mt-3 animate-in fade-in duration-200 p-3 bg-slate-900/50 rounded-xl border border-slate-800/60 text-right">
+                                            <label className="block text-xs font-bold text-cyan-400 mb-1.5">
+                                                {newColumnType === 'user_account' ? '👤 حدد الجدول الرئيسي لمنح صلاحيات الحساب عليه:' : '🔗 اختر الجدول المرتبط المستهدف (Many-to-Many):'}
+                                            </label>
+                                            <select
+                                                value={selectedRelationTableId}
+                                                onChange={(e) => setSelectedRelationTableId(e.target.value)}
+                                                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-slate-300 focus:ring-1 focus:ring-cyan-500 focus:outline-none"
+                                            >
+                                                <option value="">-- اختر الجدول المطلوب من النظام --</option>
+                                                {systemTables && systemTables.map((table) => (
+                                                    <option key={table.id} value={table.id}>
+                                                        {table.name} {table.category ? `(${table.category})` : ''}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                                                {newColumnType === 'user_account'
+                                                    ? 'سيتم ربط هذا الحساب بجدول الموظفين/المستخدمين وتطبيق مصفوفة صلاحيات ديناميكية بناءً على تركيبة هذا الجدول.'
+                                                    : 'يتم استخدام هذا الخيار لإنشاء علاقات مرجعية بين السجلات عبر الجداول.'}
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="space-y-2 text-right">
+                                    <span className="block text-[10px] text-slate-400 font-bold">مخطط الحقول الحالي للجدول:</span>
+                                    <div className="max-h-[30vh] overflow-y-auto space-y-2 pl-1">
+                                        {manageColumns.map((col, index) => (
+                                            <div
+                                                key={col.id}
+                                                draggable={hasPermission(userRole, "canEditRow")} // 🔒 منع السحب والإفلات إذا لم تكن الصلاحية تعديل
+                                                onDragStart={() => handleDragStart(index)}
+                                                onDragOver={(e) => handleDragOver(e, index)}
+                                                onDragEnd={handleDragEnd}
+                                                className="flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-slate-800 gap-4"
+                                            >
+                                                {/* 🔒 زر حذف حقل يظهر فقط للمحامي/الصلاحية العليا للمخطط */}
+                                                {hasPermission(userRole, "canEditRow") && (
+                                                    <button
+                                                        onClick={() => handleRemoveColumnStructure(col.id)}
+                                                        className="text-red-500 hover:bg-red-950/20 p-2 rounded-lg transition-colors cursor-pointer"
+                                                    >
+                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
+
+                                                <div className="flex items-center gap-3 text-xs w-full justify-end">
+                                                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                                                        {col.type === 'user_account' && (
+                                                            <span className="text-[9px] text-emerald-400 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-900/30 font-bold flex items-center gap-0.5">
+                                                                👤 مصفوفة صلاحيات {col.relationTableId ? `[جدول مرتبط]` : ''}
+                                                            </span>
+                                                        )}
+                                                        {col.type === 'staff_password' && (
+                                                            <span className="text-[9px] text-rose-400 bg-rose-950/40 px-1.5 py-0.5 rounded border border-rose-900/30 font-bold flex items-center gap-0.5">
+                                                                🔒 مشفر سري
+                                                            </span>
+                                                        )}
+                                                        {col.type === 'staff_email' && (
+                                                            <span className="text-[9px] text-blue-400 bg-blue-950/40 px-1.5 py-0.5 rounded border border-blue-900/30 font-bold flex items-center gap-0.5">
+                                                                📧 بريد رسمي
+                                                            </span>
+                                                        )}
+                                                        {col.type === 'relation' && <span className="text-[9px] text-cyan-400 font-bold">(متعدد 🔗)</span>}
+                                                        {col.type === 'dropdown' && <span className="text-[9px] text-amber-500 font-bold">({col.options?.length} خيارات)</span>}
+
+                                                        <span className="px-2 py-0.5 bg-slate-900 text-slate-500 rounded text-[10px]">{col.type}</span>
+                                                        <span className="text-slate-200 font-bold">{col.name}</span>
+                                                    </div>
+                                                    {hasPermission(userRole, "canEditRow") && <div className="cursor-grab text-slate-600 font-bold select-none">☰</div>}
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
-                                ))}
+                                </div>
+
+                                <div className="flex justify-end gap-2 border-t border-slate-800 pt-4">
+                                    {/* 🔒 زر حفظ الهيكلية يظهر فقط عند امتلاك صلاحية 'write' */}
+                                    {hasPermission(userRole, "canEditRow") && (
+                                        <button
+                                            onClick={handleSaveChangesStructure}
+                                            className="px-5 py-2 bg-amber-600 hover:bg-amber-500 text-slate-950 text-xs font-black rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+                                        >
+                                            <Save className="w-4 h-4" /> حفظ التغييرات الهيكلية
+                                        </button>
+                                    )}
+
+                                    <GlobalDocumentGenerator
+                                        activeTable={activeTable}
+                                        filteredRows={filteredRows}
+                                        triggerButton={
+                                            <button className="bg-slate-950 text-amber-500 border border-amber-500/30 hover:bg-amber-600 hover:text-slate-950 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg cursor-pointer">
+                                                <Wand2 className="w-4 h-4" />
+                                                توليد مستند شامل للجدول
+                                            </button>
+                                        }
+                                    />
+
+                                    <button
+                                        onClick={() => setIsSettingsModalOpen(false)}
+                                        className="bg-slate-950 border border-slate-800 px-4 py-2 rounded-xl text-xs text-slate-400 hover:bg-slate-900 transition cursor-pointer"
+                                    >
+                                        إلغاء
+                                    </button>
+                                </div>
                             </div>
                         </div>
+                    )}
 
-                        <div className="flex justify-end gap-2 border-t border-slate-800 pt-4">
-                            <GlobalDocumentGenerator
-                                activeTable={activeTable}
-                                filteredRows={filteredRows}
-                                triggerButton={
-                                    <button className="bg-slate-950 text-amber-500 border border-amber-500/30 hover:bg-amber-600 hover:text-slate-950 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg">
-                                        <Wand2 className="w-4 h-4" />
-                                        توليد مستند شامل للجدول
+                    {/* 📂 مودال استعراض أرشيف ملف الموكل الشامل */}
+                    {isClientDocsModalOpen && editingRow && (
+                        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[60] p-4 animate-in fade-in duration-200">
+                            <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl p-6 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto relative" dir="rtl">
+                                <button
+                                    onClick={() => setIsClientDocsModalOpen(false)}
+                                    className="absolute top-4 left-4 text-slate-400 hover:text-slate-200 bg-slate-950 border border-slate-800 p-2 rounded-xl transition cursor-pointer z-10"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+
+                                <div className="pt-2 text-right">
+                                    <ClientDocumentsList
+                                        editingRow={editingRow}
+                                        getAllAssociatedDocuments={getAllAssociatedDocuments}
+                                        handleViewDocument={handleViewDocument}
+                                        handleDeleteDocument={handleDeleteDocument}
+                                        allDocuments={rows}
+                                        /* 🔒 ممرر الصلاحية تلقائياً لمنع الحذف وإخفاء خيارات التعديل إذا كانت صلاحية الحساب الحالي 'read' */
+                                        isReadOnly={!hasPermission(userRole, "canEditRow")}
+                                    />
+                                </div>
+
+                                <div className="flex justify-end border-t border-slate-800 pt-4">
+                                    <button
+                                        onClick={() => setIsClientDocsModalOpen(false)}
+                                        className="bg-slate-950 border border-slate-800 hover:bg-slate-850 px-6 py-2 rounded-xl text-xs font-bold text-slate-300 transition cursor-pointer"
+                                    >
+                                        إغلاق الأرشيف المعروض
                                     </button>
-                                }
-                            />
-                            <button onClick={() => setIsSettingsModalOpen(false)} className="bg-slate-950 border border-slate-800 px-4 py-2 rounded-xl text-xs text-slate-400">إلغاء</button>
-                            <button onClick={handleSaveChangesStructure} className="bg-amber-600 hover:bg-amber-500 text-slate-950 px-5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5">
-                                <Save className="w-4 h-4" /> حفظ التغييرات الهيكلية
-                            </button>
+                                </div>
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
-            )}
-
-            {isClientDocsModalOpen && editingRow && (
-                <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[60] p-4 animate-in fade-in duration-200">
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl p-6 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto relative">
-
-                        {/* زر إغلاق الـ Popup العلوي */}
-                        <button
-                            onClick={() => setIsClientDocsModalOpen(false)}
-                            className="absolute top-4 left-4 text-slate-400 hover:text-slate-200 bg-slate-950 border border-slate-850 p-2 rounded-xl transition cursor-pointer"
-                        >
-                            <X className="w-4 h-4" />
-                        </button>
-
-                        {/* استدعاء جدول المستندات الشامل وتمرير البيانات والدالة الموحدة له */}
-                        <div className="pt-2">
-                            <ClientDocumentsList
-                                editingRow={editingRow}
-                                getAllAssociatedDocuments={getAllAssociatedDocuments}
-                                handleViewDocument={handleViewDocument}
-                                handleDeleteDocument={handleDeleteDocument}
-                                allDocuments={rows} // مرر مصفوفة الـ rows المجلوبة من السيرفر لجدول رقم 4 هنا كاحتياط
-                            />
-                        </div>
-
-                        {/* تذييل النافذة المنبثقة */}
-                        <div className="flex justify-end border-t border-slate-800 pt-4">
-                            <button
-                                onClick={() => setIsClientDocsModalOpen(false)}
-                                className="bg-slate-950 border border-slate-800 hover:bg-slate-850 px-6 py-2 rounded-xl text-xs font-bold text-slate-300 transition cursor-pointer"
-                            >
-                                إغلاق الأرشيف
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            )};
         </div>
-    );
+    )
 }

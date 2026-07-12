@@ -1,7 +1,10 @@
+# backend\app\api\v1\endpoints\dynamic.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload  
 from typing import List, Dict, Any
+
 from app.core.database import get_db 
 from app.models.dynamic import CustomSection, CustomTable, CustomRow
 from app.schemas.dynamic import (
@@ -10,36 +13,156 @@ from app.schemas.dynamic import (
     RowCreate, RowResponse
 )
 
+# 🌟 الاستيرادات الأمنية
+from app.api.deps import get_current_user, sanitize_staff_permissions
+from app.models.auth import User, UserRole
+
 router = APIRouter()
+
+# -----------------------------------------------------------------------------
+# 🛠️ دالة مساعدة مركزية للتحقق من الصلاحية الحركية (قفل الأمان الموحد)
+# -----------------------------------------------------------------------------
+def check_dynamic_permission(current_user: User, table_id: int, required_level: str):
+    """
+    تتحقق مما إذا كان المستخدم يمتلك الصلاحية المطلوبة للجدول المعين.
+    required_level: 'read' أو 'write'
+    """
+    # الأدمن الأساسي أو المدير يمر تلقائياً بدون قيود
+    if not getattr(current_user, "is_dynamic_staff", False):
+        return True
+
+    user_permissions = current_user.dynamic_permissions or {}
+    table_perm = user_permissions.get(str(table_id))
+
+    if not table_perm:
+        raise HTTPException(
+            status_code=403,
+            detail="لا توجد صلاحية لهذا الجدول."
+        )
+
+
+    if table_perm == "hidden":
+        raise HTTPException(
+            status_code=403,
+            detail="لا تملك صلاحية الوصول."
+        )
+
+    # 1. حالة الحجب الكامل
+    if table_perm == "hidden":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="⚠️ عذراً، لا تمتلك صلاحية الوصول أو رؤية هذا القسم الحساس."
+        )
+
+    # 2. حالة طلب تعديل/إضافة/حذف والموظف لديه قراءة فقط
+    if required_level == "write" and (table_perm == "read_only" or not table_perm):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="🔒 عذراً، تمتلك صلاحية القراءة فقط، لا يمكنك إضافة، تعديل أو حذف البيانات."
+        )
+
+    return True
+
 
 # ==================== 1. إدارة صفحات الـ Sidebar ====================
 
 @router.post("/sections", response_model=SectionResponse, status_code=status.HTTP_201_CREATED)
-async def create_section(section: SectionCreate, db: AsyncSession = Depends(get_db)):
+async def create_section(
+    section: SectionCreate, 
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # حماية الهيكل: الموظف لا يمكنه إنشاء أقسام رئيسية بالنظام
+    if getattr(current_user, "is_dynamic_staff", False):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بإنشاء أقسام رئيسية.")
+        
     db_section = CustomSection(**section.model_dump())
     db.add(db_section)
     await db.commit()
-    await db.refresh(db_section)
+    await db.refresh(db_section, ["tables"]) 
     return db_section
 
-@router.get("/sections", response_model=List[SectionResponse])
-async def get_sections(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(CustomSection).order_by(CustomSection.order))
-    return result.scalars().all()
 
-# ✅ مسار تعديل اسم القسم
+@router.get("/sections")
+async def get_sections(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    stmt = select(CustomSection).options(selectinload(CustomSection.tables)).order_by(CustomSection.order)
+    result = await db.execute(stmt)
+    sections = result.scalars().all()
+    
+    if current_user.role in [
+        UserRole.ADMIN,
+        UserRole.PARTNER
+    ]:
+        return sections
+
+    # تصفية القوائم بناءً على مصفوفة الصلاحيات الحركية للموظف
+    if getattr(current_user, "is_dynamic_staff", False):
+        user_perms = current_user.dynamic_permissions or {}
+        filtered_sections = []
+        
+        for section in sections:
+            allowed_tables = []
+            for table in section.tables:
+                table_id_str = str(table.id)
+                
+                # استثناء: جدول الموظفين يظهر دوماً كقراءة فقط للموظف لضمان بيئة العمل
+                if hasattr(current_user, 'staff_table_id') and table.id == current_user.staff_table_id:
+                    table_data = table.__dict__.copy()
+                    table_data["user_permission"] = "read_only" 
+                    allowed_tables.append(table_data)
+                    continue
+
+                if user_perms.get(table_id_str) == "hidden":
+                    continue
+                
+                table_data = table.__dict__.copy()
+                table_data["user_permission"] = user_perms.get(
+                    table_id_str,
+                    "read_only"
+                )
+                allowed_tables.append(table_data)
+            
+            if allowed_tables:
+                section_data = section.__dict__.copy()
+                section_data["tables"] = allowed_tables
+                filtered_sections.append(section_data)
+                
+        return filtered_sections
+
+    return sections
+
+
 @router.put("/sections/{section_id}", response_model=SectionResponse)
-async def update_section(section_id: int, section_data: SectionCreate, db: AsyncSession = Depends(get_db)):
+async def update_section(
+    section_id: int, 
+    section_data: SectionCreate, 
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if getattr(current_user, "is_dynamic_staff", False):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل الأقسام الرئيسية.")
+
     db_section = await db.get(CustomSection, section_id)
     if not db_section:
         raise HTTPException(status_code=404, detail="القسم المطلوب تعديله غير موجود")
     db_section.title = section_data.title
     await db.commit()
-    await db.refresh(db_section)
+    await db.refresh(db_section, ["tables"])
     return db_section
 
+
 @router.delete("/sections/{section_id}", status_code=status.HTTP_200_OK)
-async def delete_section(section_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_section(
+    section_id: int, 
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if getattr(current_user, "is_dynamic_staff", False):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بحذف الأقسام الرئيسية.")
+
     db_section = await db.get(CustomSection, section_id)
     if not db_section:
         raise HTTPException(status_code=404, detail="القسم المطلوب حذفه غير موجود")
@@ -51,7 +174,14 @@ async def delete_section(section_id: int, db: AsyncSession = Depends(get_db)):
 # ==================== 2. إدارة الجداول وهيكلة الأعمدة ====================
 
 @router.post("/tables", response_model=TableResponse)
-async def create_table(table: TableCreate, db: AsyncSession = Depends(get_db)):
+async def create_table(
+    table: TableCreate, 
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if getattr(current_user, "is_dynamic_staff", False):
+        raise HTTPException(status_code=403, detail="غير مصرح للموظفين بإنشاء جداول جديدة.")
+
     section_check = await db.get(CustomSection, table.section_id)
     if not section_check:
         raise HTTPException(status_code=404, detail="القسم الرئيسي غير موجود")
@@ -62,35 +192,100 @@ async def create_table(table: TableCreate, db: AsyncSession = Depends(get_db)):
     await db.refresh(db_table)
     return db_table
 
-@router.get("/sections/{section_id}/tables", response_model=List[TableResponse])
-async def get_tables_by_section(section_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(CustomTable).filter(CustomTable.section_id == section_id))
-    return result.scalars().all()
 
-# ✅ تعديل هيكل الجدول (الأعمدة والاسم) بشكل ديناميكي مرن (حل خطأ 422)
+@router.get("/sections/{section_id}/tables", response_model=List[TableResponse])
+async def get_tables_by_section(
+    section_id: int, 
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+
+    result = await db.execute(
+        select(CustomTable)
+        .filter(CustomTable.section_id == section_id)
+    )
+
+    tables = result.scalars().all()
+
+
+    # =====================================
+    # ADMIN يرى كل شيء
+    # =====================================
+
+    if (
+        current_user.role == UserRole.ADMIN
+        or current_user.role == UserRole.PARTNER
+    ):
+        for table in tables:
+            table.user_permission = "read_write"
+
+        return tables
+
+    # =====================================
+    # الموظف الديناميكي
+    # =====================================
+
+    if getattr(current_user, "is_dynamic_staff", False):
+
+        permissions = current_user.dynamic_permissions or {}
+
+        allowed_tables = []
+
+        for table in tables:
+
+            permission = permissions.get(
+                str(table.id),
+                "no_access"
+            )
+
+            if permission == "hidden":
+                continue
+
+            table.user_permission = permission
+            allowed_tables.append(table)
+
+        return allowed_tables
+
+    return []
+
+
+from app.schemas.dynamic import TableSchemaUpdate 
+
 @router.put("/tables/{table_id}", response_model=TableResponse)
-async def update_table_structure(table_id: int, updated_data: Dict[str, Any], db: AsyncSession = Depends(get_db)):
+async def update_table_structure(
+    table_id: int, 
+    updated_data: TableSchemaUpdate, # 🎯 استخدام الـ Schema بدلاً من الـ Dict المفتوح
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if getattr(current_user, "is_dynamic_staff", False):
+        raise HTTPException(status_code=403, detail="غير مصرح للموظفين بتعديل هيكلية الجداول أو الأعمدة.")
+
     db_table = await db.get(CustomTable, table_id)
     if not db_table:
         raise HTTPException(status_code=404, detail="الجدول المستهدف غير موجود")
     
-    if "name" in updated_data:
-        db_table.name = updated_data["name"]
-    if "columns_definition" in updated_data:
-        db_table.columns_definition = updated_data["columns_definition"]
-    if "view_mode" in updated_data:
-        db_table.view_mode = updated_data["view_mode"]
-
-    if "calendar_mapping" in updated_data:
-        db_table.calendar_mapping = updated_data["calendar_mapping"]
+    # تحديث الحقول المسموح بها فقط بأمان
+    db_table.name = updated_data.name
+    db_table.columns_definition = [col.model_dump() for col in updated_data.columns_definition]
+    db_table.view_mode = updated_data.default_view
+    db_table.is_staff_table = updated_data.is_staff_table
+    if updated_data.calendar_mapping:
+        db_table.calendar_mapping = updated_data.calendar_mapping
     
     await db.commit()
     await db.refresh(db_table)
     return db_table
 
-# ✅ حذف الجدول بالكامل
 @router.delete("/tables/{table_id}", status_code=status.HTTP_200_OK)
-async def delete_table(table_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_table(
+    table_id: int, 
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if getattr(current_user, "is_dynamic_staff", False):
+        raise HTTPException(status_code=403, detail="إجراء محظور. لا يمكنك حذف الجداول.")
+
     db_table = await db.get(CustomTable, table_id)
     if not db_table:
         raise HTTPException(status_code=404, detail="الجدول غير موجود")
@@ -102,21 +297,49 @@ async def delete_table(table_id: int, db: AsyncSession = Depends(get_db)):
 
 # ==================== 3. نظام الأسطر والبيانات (الصفوف) ====================
 
-@router.post("/rows", response_model=RowResponse, status_code=status.HTTP_201_CREATED)
-async def add_new_row(row: RowCreate, db: AsyncSession = Depends(get_db)):
-    table_check = await db.get(CustomTable, row.table_id)
+@router.post("/tables/{table_id}/rows", status_code=status.HTTP_201_CREATED)
+async def create_row(
+    table_id: int,
+    row_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    table_check = await db.get(CustomTable, table_id)
     if not table_check:
         raise HTTPException(status_code=404, detail="الجدول المستهدف غير موجود")
 
-    db_row = CustomRow(**row.model_dump())
+    # 🔒 [قفل أمان موحد]: فحص صلاحية الكتابة للموظف
+    check_dynamic_permission(current_user, table_id, required_level="write")
+            
+    # 🛑 [حماية جدول الموظفين]: منع أي موظف من توليد حسابات أو موظفين جدد
+    if getattr(current_user, "is_dynamic_staff", False) and table_check.is_staff_table:
+        raise HTTPException(
+            status_code=403,
+            detail="غير مصرح لك بإضافة موظفين، هذه الصلاحية للمحامي المدير فقط."
+        )
+
+    cells_content = row_data.get("cells_data", row_data)
+
+    # 🧼 [تطهير الصلاحيات]: حماية حقول مصفوفة الصلاحيات لمنع التلاعب بها عند الإدخال
+    if table_check.is_staff_table:
+        cells_content = sanitize_staff_permissions(cells_content, table_id)
+
+    db_row = CustomRow(table_id=table_id, cells_data=cells_content)
     db.add(db_row)
     await db.commit()
     await db.refresh(db_row)
     return db_row
 
+
 @router.get("/tables/{table_id}/rows", response_model=List[RowResponse])
-async def get_table_rows(table_id: int, db: AsyncSession = Depends(get_db)):
-    # 🎯 الإصلاح: فرز الصفوف دائماً حسب المعرف لضمان عدم قفز الصف عند التعديل
+async def get_table_rows(
+    table_id: int, 
+    current_user: User = Depends(get_current_user), 
+    db: AsyncSession = Depends(get_db)
+):
+    # 🔒 [قفل أمان موحد]: فحص صلاحية القراءة ومنع الـ hidden
+    check_dynamic_permission(current_user, table_id, required_level="read")
+
     result = await db.execute(
         select(CustomRow)
         .filter(CustomRow.table_id == table_id)
@@ -124,41 +347,86 @@ async def get_table_rows(table_id: int, db: AsyncSession = Depends(get_db)):
     )
     return result.scalars().all()
 
-# ✅ المسار الصحيح لتعديل خلايا الصف (حل خطأ 405 Method Not Allowed)
+
 @router.put("/rows/{row_id}", response_model=RowResponse)
-async def update_row_cell(row_id: int, updated_cells: Dict[str, Any], db: AsyncSession = Depends(get_db)):
+async def update_row_cell(
+    row_id: int, 
+    updated_cells: Dict[str, Any], 
+    current_user: User = Depends(get_current_user), 
+    db: AsyncSession = Depends(get_db)
+):
     result = await db.execute(select(CustomRow).filter(CustomRow.id == row_id))
     db_row = result.scalar_one_or_none()
     
     if not db_row:
         raise HTTPException(status_code=404, detail="السجل غير موجود")
-    
-    # استخراج البيانات سواء جاءت مباشرة أو مغلفة بداخل مفتاح cells_data
-    actual_data = updated_cells.get("cells_data", updated_cells) if isinstance(updated_cells, dict) else updated_cells
+        
+    table_check = await db.get(CustomTable, db_row.table_id)
 
+    # 🔒 [قفل أمان موحد]: فحص صلاحية التعديل
+    check_dynamic_permission(current_user, db_row.table_id, required_level="write")
+            
+    # 🛑 [حماية جدول الموظفين]: منع الموظف من تعديل بيانات أو رتب زملائه
+    if getattr(current_user, "is_dynamic_staff", False) and table_check and table_check.is_staff_table:
+        raise HTTPException(
+            status_code=403,
+            detail="غير مصرح للموظفين بتعديل سجلات جدول الموظفين والصلاحيات."
+        )
+
+    actual_data = updated_cells.get("cells_data", updated_cells) if isinstance(updated_cells, dict) else updated_cells
     current_data = dict(db_row.cells_data) if db_row.cells_data else {}
     current_data.update(actual_data)
     
+    # 🧼 [تطهير الصلاحيات]
+    if table_check and table_check.is_staff_table:
+        current_data = sanitize_staff_permissions(current_data, db_row.table_id)
+        
     db_row.cells_data = current_data
     await db.commit()
     await db.refresh(db_row)
     return db_row
 
-# ✅ حذف صف معين
+
 @router.delete("/rows/{row_id}", status_code=status.HTTP_200_OK)
-async def delete_row(row_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_row(
+    row_id: int, 
+    current_user: User = Depends(get_current_user), 
+    db: AsyncSession = Depends(get_db)
+):
     result = await db.execute(select(CustomRow).filter(CustomRow.id == row_id))
     db_row = result.scalar_one_or_none()
     
     if not db_row:
         raise HTTPException(status_code=404, detail="السجل المطلوب لحذفه غير موجود")
         
+    table_check = await db.get(CustomTable, db_row.table_id)
+
+    # 🔒 [قفل أمان موحد]: فحص صلاحيات الحذف للموظف الديناميكي
+    check_dynamic_permission(current_user, db_row.table_id, required_level="write")
+        
+    # 🛑 منع حذف سجلات من جدول الموظفين عبر طاقم العمل الديناميكي
+    if getattr(current_user, "is_dynamic_staff", False) and table_check and table_check.is_staff_table:
+        raise HTTPException(
+            status_code=403,
+            detail="إجراء محظور. لا يمكنك حذف سجلات من جدول الموظفين."
+        )
+        
     await db.delete(db_row)
     await db.commit()
     return {"status": "success", "message": "تم حذف السجل بنجاح"}
 
-# ✅ مسار جديد لجلب جميع الجداول من كافة الأقسام (لحقول العلاقات)
+
 @router.get("/tables/all", response_model=List[TableResponse])
-async def get_all_tables(db: AsyncSession = Depends(get_db)):
+async def get_all_tables(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # حماية هذا المسار العام لضمان تصفية الجداول المحجوبة عن الموظف
     result = await db.execute(select(CustomTable))
-    return result.scalars().all()
+    tables = result.scalars().all()
+    
+    if getattr(current_user, "is_dynamic_staff", False):
+        user_perms = current_user.dynamic_permissions or {}
+        return [t for t in tables if user_perms.get(str(t.id)) != "hidden"]
+        
+    return tables

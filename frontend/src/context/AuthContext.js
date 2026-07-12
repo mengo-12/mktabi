@@ -49,10 +49,46 @@ export function AuthProvider({ children }) {
             const decodedPayload = JSON.parse(window.atob(base64));
 
             // 3. بناء كائن المستخدم من البيانات المشفرة داخل التوكن نفسه (id و role)
+            const profileResponse = await apiClient.get('/auth/me', {
+                headers: {
+                    Authorization: `Bearer ${access_token}`
+                }
+            });
+
+            const rawPermissions =
+                profileResponse.data.dynamic_permissions || {};
+
+            let normalizedPermissions = rawPermissions;
+
+
+            // إذا كانت الصلاحيات JSON string
+            if (typeof rawPermissions === "string") {
+                try {
+                    normalizedPermissions = JSON.parse(rawPermissions);
+                } catch {
+                    normalizedPermissions = {};
+                }
+            }
+
+
             const user_info = {
-                id: decodedPayload.sub,
-                role: decodedPayload.role,
-                full_name: decodedPayload.role === 'admin' ? 'مدير النظام' : 'المحامي المسؤول'
+
+                ...profileResponse.data,
+
+
+                // صلاحيات الجداول
+                dynamic_permissions: normalizedPermissions,
+
+
+                // توحيد الدور
+                role:
+                    typeof profileResponse.data.role === "string"
+                        ? profileResponse.data.role.toLowerCase()
+                        : profileResponse.data.role,
+
+
+                is_dynamic_staff:
+                    profileResponse.data.is_dynamic_staff === true
             };
 
             // 4. الحفظ الصارم في المتصفح والـ State كـ JSON حقيقي ومكتمل
