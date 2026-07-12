@@ -3270,7 +3270,7 @@ export default function DynamicSectionPage() {
                         </div>
                     )}
                 </div>
-            )};
+            )}
         </div>
     )
 }
