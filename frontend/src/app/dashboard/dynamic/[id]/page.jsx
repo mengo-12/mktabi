@@ -882,7 +882,7 @@
 
 'use client';
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { dynamicService } from '@/services/dynamicService';
 import apiClient from '@/services/apiClient';
 import { useAuth } from '@/context/AuthContext';
@@ -892,6 +892,8 @@ import { Plus, Table, Edit, LayoutGrid, Save, Trash2, Settings, X, FileText, Lin
 
 export default function DynamicSectionPage() {
     const { id: sectionId } = useParams();
+    const searchParams = useSearchParams();
+    const selectedTableId = searchParams.get("table");
     const [tables, setTables] = useState([]);
     const [activeTable, setActiveTable] = useState(null);
     const [rows, setRows] = useState([]);
@@ -954,7 +956,7 @@ export default function DynamicSectionPage() {
         if (sectionId) {
             loadSectionContent();
         }
-    }, [sectionId]);
+    }, [sectionId, selectedTableId]);
 
     // 🎯 التعديل هنا: إذا كان المستخدم أدمن، نضمن حصوله على صلاحية 'write' كاملة فوراً
     const userPermission = useMemo(() => {
@@ -1172,33 +1174,50 @@ export default function DynamicSectionPage() {
                 setSystemTables(verifiedTables);
             }
 
-            if (verifiedTables.length > 0) {
-                const currentActive =
-                    verifiedTables.find(
-                        t => t.id === activeTable?.id
-                    )
-                    ||
-                    verifiedTables[0];
+            let currentActive = null;
 
+            // إذا جاء table من الرابط
+            if (selectedTableId) {
+                currentActive = verifiedTables.find(
+                    t => String(t.id) === String(selectedTableId)
+                );
+            }
 
-                // تأكيد وجود صلاحية الجدول
+            // إذا لم يوجد نستخدم الجدول الحالي
+            if (!currentActive && activeTable) {
+                currentActive = verifiedTables.find(
+                    t => t.id === activeTable.id
+                );
+            }
+
+            // إذا لم نجد أي شيء نستخدم أول جدول
+            if (!currentActive) {
+                currentActive = verifiedTables[0];
+            }
+
+            if (currentActive) {
+
                 if (!currentActive.user_permission) {
-
                     currentActive.user_permission =
-                        user?.dynamic_permissions?.[String(currentActive.id)]
-                        ||
+                        user?.dynamic_permissions?.[String(currentActive.id)] ||
                         "read_only";
-
                 }
+
                 setActiveTable(currentActive);
-                setViewMode(currentActive.view_mode || 'table');
-                loadTableRows(currentActive.id);
-                loadRequiredRelations(currentActive, verifiedTables);
+                setViewMode(currentActive.view_mode || "table");
+
+                await loadTableRows(currentActive.id);
+                await loadRequiredRelations(currentActive, verifiedTables);
+
             } else {
+
                 setActiveTable(null);
                 setRows([]);
                 setFilteredRows([]);
+
             }
+
+
         } catch (error) {
             console.error("خطأ في جلب المحتويات:", error);
         } finally {
@@ -1213,8 +1232,10 @@ export default function DynamicSectionPage() {
             const rowsData = await dynamicService.getRowsByTable(tableId);
             setRows(rowsData);
             setFilteredRows(rowsData);
+            return rowsData;
         } catch (error) {
-            console.error("خطأ في جلب الصفوف:", error);
+            console.error(error);
+            return [];
         }
     };
 

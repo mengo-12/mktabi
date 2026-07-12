@@ -147,7 +147,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { dynamicService } from '@/services/dynamicService';
 import {
@@ -162,13 +162,17 @@ import {
     Hourglass,
     Crown,
     FolderOpen,
+    ChevronDown,
+    ChevronLeft,
 } from 'lucide-react';
 
 export default function Sidebar() {
     const pathname = usePathname();
     const { user } = useAuth();
     const [dynamicSections, setDynamicSections] = useState([]);
-
+    const [expandedSections, setExpandedSections] = useState({});
+    const searchParams = useSearchParams();
+    const currentTableId = searchParams.get("table");
     // جلب الصفحات والأقسام الديناميكية التي صممها المدير من الباك إند
     useEffect(() => {
         const fetchDynamicPages = async () => {
@@ -224,6 +228,13 @@ export default function Sidebar() {
         }
     ];
 
+    const toggleSection = (sectionId) => {
+        setExpandedSections(prev => ({
+            ...prev,
+            [sectionId]: !prev[sectionId]
+        }));
+    };
+
     return (
         <aside className="w-64 bg-[#0F172A] text-slate-400 h-screen fixed top-0 right-0 flex flex-col border-l border-slate-800/60 shadow-xl select-none z-50" dir="rtl">
 
@@ -246,7 +257,7 @@ export default function Sidebar() {
             <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto custom-scrollbar">
 
                 {/* 1. المجموعات الأساسية الثابتة للنظام */}
-                {menuGroups.map((group, groupIdx) => (
+                {/* {menuGroups.map((group, groupIdx) => (
                     <div key={groupIdx} className="space-y-1">
                         <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-500 mb-2">
                             {group.groupName}
@@ -278,7 +289,7 @@ export default function Sidebar() {
                             );
                         })}
                     </div>
-                ))}
+                ))} */}
 
                 {/* 2. الأقسام المخصصة والمولدة ديناميكياً من قبل المدير (تنزل تلقائياً هنا) */}
                 {dynamicSections.length > 0 && (
@@ -286,31 +297,84 @@ export default function Sidebar() {
                         <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-amber-500/70 mb-2">
                             الأقسام المخصصة
                         </p>
+
                         {dynamicSections.map((section) => {
-                            // توجيه المستخدم لصفحة العرض الديناميكية الموحدة وتمرير معرف القسم
-                            const dynamicPath = `/dashboard/dynamic/${section.id}`;
-                            const isActive = pathname === dynamicPath;
+
+                            // إظهار الجداول المسموح بها فقط
+                            const visibleTables = (section.tables || []).filter(
+                                table =>
+                                    table.user_permission !== "hidden" &&
+                                    table.user_permission !== "no_access"
+                            );
+
+                            // إذا لم يوجد أي جدول فلا يظهر القسم
+                            if (visibleTables.length === 0) return null;
 
                             return (
-                                <Link
-                                    key={section.id}
-                                    href={dynamicPath}
-                                    className={`flex items-center justify-between px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-200 group relative ${isActive
-                                        ? 'bg-slate-800/50 text-amber-400 border border-slate-700/50 shadow-inner'
-                                        : 'hover:bg-slate-800/30 hover:text-slate-200 border border-transparent'
-                                        }`}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <FolderOpen className={`w-4 h-4 transition-transform duration-200 group-hover:scale-105 ${isActive ? 'text-amber-400' : 'text-slate-500 group-hover:text-slate-400'
-                                            }`} />
-                                        <span>{section.title}</span>
-                                    </div>
+                                <div key={section.id} className="space-y-1">
 
-                                    {isActive && (
-                                        <span className="absolute right-0 top-1/4 bottom-1/4 w-1 bg-amber-400 rounded-l-md" />
+                                    {/* زر فتح وإغلاق القسم */}
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleSection(section.id)}
+                                        className="w-full flex items-center justify-between px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-200 hover:bg-slate-800/30 hover:text-slate-200"
+                                    >
+
+                                        <div className="flex items-center gap-3">
+
+                                            {expandedSections[section.id] ? (
+                                                <ChevronDown className="w-4 h-4 text-slate-400" />
+                                            ) : (
+                                                <ChevronLeft className="w-4 h-4 text-slate-400" />
+                                            )}
+
+                                            <FolderOpen className="w-4 h-4 text-amber-400" />
+
+                                            <span>{section.title}</span>
+
+                                        </div>
+
+                                    </button>
+
+                                    {/* الجداول */}
+                                    {expandedSections[section.id] && (
+
+                                        <div className="mr-8 space-y-1">
+
+                                            {visibleTables.map((table) => {
+
+                                                const tablePath =
+                                                    `/dashboard/dynamic/${section.id}?table=${table.id}`;
+
+                                                const tableActive =
+                                                    String(currentTableId) === String(table.id);
+
+                                                return (
+
+                                                    <Link
+                                                        key={table.id}
+                                                        href={tablePath}
+                                                        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-[11px] transition-all
+                    ${tableActive
+                                                                ? "bg-slate-800/40 text-amber-400"
+                                                                : "hover:bg-slate-800/20 text-slate-400 hover:text-slate-200"
+                                                            }`}
+                                                    >
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+                                                        <span>{table.name}</span>
+                                                    </Link>
+
+                                                );
+
+                                            })}
+
+                                        </div>
+
                                     )}
-                                </Link>
+
+                                </div>
                             );
+
                         })}
                     </div>
                 )}
