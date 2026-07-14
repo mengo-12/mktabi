@@ -1,16 +1,22 @@
 # backend\app\api\v1\endpoints\dynamic.py
+from turtle import title
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload  
 from typing import List, Dict, Any
+from app.schemas.calendar import CalendarEvent
+
+from typing import Optional
 
 from app.core.database import get_db 
 from app.models.dynamic import CustomSection, CustomTable, CustomRow
 from app.schemas.dynamic import (
     SectionCreate, SectionResponse, 
     TableCreate, TableResponse, 
-    RowCreate, RowResponse
+    RowCreate, RowResponse,
+    CalendarMapping, ColumnDefinition
 )
 
 # 🌟 الاستيرادات الأمنية
@@ -51,7 +57,51 @@ def check_dynamic_permission(current_user: User, table_id: int, required_level: 
 
     return True
 
+def build_calendar_event(
+    table: CustomTable,
+    row: CustomRow
+) -> Optional[CalendarEvent]:
 
+    mapping = table.calendar_mapping or {}
+
+    if not mapping.get("enabled"):
+        return None
+
+    cells = row.cells_data or {}
+
+    start_id = mapping.get("start_field")
+    title_id = mapping.get("title_field")
+    end_id = mapping.get("end_field")
+    description_id = mapping.get("description_field")
+
+    start_value = cells.get(start_id)
+
+    if not start_value:
+        return None
+
+    # عنوان اختياري
+    title = cells.get(title_id) if title_id else None
+
+    # إذا لم يتم اختيار عنوان أو كانت القيمة فارغة
+    if not title:
+        title = table.name
+
+    return CalendarEvent(
+        id=f"{table.id}-{row.id}",
+        table_id=table.id,
+        row_id=row.id,
+        section_id=table.section_id,
+        table_name=table.name,
+        section_name=table.section.title if table.section else "",
+        title=title,
+        start=start_value,
+        end=cells.get(end_id) if end_id else None,
+        description=cells.get(description_id) if description_id else None,
+        color=mapping.get("color", "#3b82f6"),
+        all_day=mapping.get("all_day", True),
+        editable=mapping.get("editable", True),
+        icon=mapping.get("icon", "calendar")
+    )
 # ==================== 1. إدارة صفحات الـ Sidebar ====================
 
 @router.post("/sections", response_model=SectionResponse, status_code=status.HTTP_201_CREATED)
@@ -173,8 +223,16 @@ async def create_table(
     section_check = await db.get(CustomSection, table.section_id)
     if not section_check:
         raise HTTPException(status_code=404, detail="القسم الرئيسي غير موجود")
-        
-    db_table = CustomTable(**table.model_dump())
+    
+
+    
+    table_data = table.model_dump()
+    if table.calendar_mapping:
+        table_data["calendar_mapping"] = (
+        table.calendar_mapping.model_dump()
+    )
+    db_table = CustomTable(**table_data)
+
     db.add(db_table)
     await db.commit()
     await db.refresh(db_table)
@@ -257,8 +315,13 @@ async def update_table_structure(
     db_table.columns_definition = [col.model_dump() for col in updated_data.columns_definition]
     db_table.view_mode = updated_data.default_view
     db_table.is_staff_table = updated_data.is_staff_table
+
     if updated_data.calendar_mapping:
-        db_table.calendar_mapping = updated_data.calendar_mapping
+        db_table.calendar_mapping = (
+            updated_data.calendar_mapping.model_dump()
+        )
+    else:
+        db_table.calendar_mapping = None
     
     await db.commit()
     await db.refresh(db_table)
@@ -417,3 +480,65 @@ async def get_all_tables(
         return [t for t in tables if user_perms.get(str(t.id), "no_access") != "no_access"]
         
     return tables
+
+@router.get("/calendar/events", response_model=List[CalendarEvent])
+async def get_calendar_events(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    إرجاع جميع أحداث التقويم المسموح للمستخدم برؤيتها.
+    """
+
+    events: List[CalendarEvent] = []
+
+    result = await db.execute(
+        select(CustomTable).options(
+            selectinload(CustomTable.section)
+        )
+    )
+
+    tables = result.scalars().all()
+
+    for table in tables:
+
+        fresh_table = await db.get(CustomTable, table.id)
+
+        # إذا كان المستخدم موظفاً نتحقق من الصلاحية
+        if getattr(current_user, "is_dynamic_staff", False):
+
+            permissions = current_user.dynamic_permissions or {}
+
+            permission = permissions.get(
+                str(fresh_table.id),
+                "no_access"
+            )
+
+            if permission == "no_access":
+                continue
+
+        if not table.calendar_mapping:
+            continue
+
+        if not table.calendar_mapping.get("enabled"):
+            continue
+
+        rows_result = await db.execute(
+            select(CustomRow).where(
+                CustomRow.table_id == table.id
+            )
+        )
+
+        rows = rows_result.scalars().all()
+
+        for row in rows:
+
+            event = build_calendar_event(
+                table,
+                row
+            )
+
+            if event:
+                events.append(event)
+
+    return events

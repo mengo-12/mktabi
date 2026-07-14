@@ -559,6 +559,7 @@ export default function SystemBuilderPage() {
     const [newVar, setNewVar] = useState({ id: '', name: '', type: 'text' });
     const [editingTableId, setEditingTableId] = useState(null);
     const [isStaffTable, setIsStaffTable] = useState(false); // تم تفعيلها لترتبط بالـ Checkbox بالأسفل
+    const [isEventPreviewOpen, setIsEventPreviewOpen] = useState(false);
 
     // استخراج كافة الجداول الفرعية من كافة الأقسام لتغذية مصفوفة الصلاحيات الديناميكية
     const allAvailableTables = (sections || [])
@@ -579,6 +580,18 @@ export default function SystemBuilderPage() {
     const canvasRef = useRef(null);
     const [draggingId, setDraggingId] = useState(null);
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+    const [calendarMapping, setCalendarMapping] = useState({
+        enabled: false,
+        title_field: "",
+        start_field: "",
+        end_field: "",
+        description_field: "",
+        icon: "calendar",
+        color: "#3b82f6",
+        all_day: true,
+        editable: true,
+    });
 
     // جلب البيانات عند تحميل الصفحة كلياً
     useEffect(() => {
@@ -714,20 +727,69 @@ export default function SystemBuilderPage() {
             return alert("يرجى اختيار القسم وتحديد اسم الجدول أولاً");
         }
 
+        // ===============================
+        // التحقق من إعدادات التقويم
+        // ===============================
+        if (calendarMapping.enabled) {
+
+            if (!calendarMapping.start_field) {
+                return alert("⚠️ يجب اختيار حقل تاريخ البداية.");
+            }
+
+            if (
+                calendarMapping.title_field &&
+                calendarMapping.description_field &&
+                calendarMapping.title_field === calendarMapping.description_field
+            ) {
+                return alert("⚠️ لا يمكن استخدام نفس الحقل كعنوان ووصف.");
+            }
+
+            if (
+                calendarMapping.start_field &&
+                calendarMapping.end_field &&
+                calendarMapping.start_field === calendarMapping.end_field
+            ) {
+                return alert("⚠️ لا يمكن أن يكون تاريخ البداية هو نفسه تاريخ النهاية.");
+            }
+        }
+
         try {
             // تضمين خاصية جدول الموظفين وحالة الصلاحيات بداخل الـ Payload المرسل للسيرفر
             if (editingTableId) {
-                await dynamicService.updateTable(editingTableId, tableName, columns, viewMode, { is_staff_table: isStaffTable });
+                await dynamicService.updateTable(editingTableId, tableName, columns, viewMode, { is_staff_table: isStaffTable, calendar_mapping: calendarMapping });
                 alert("تم تحديث هيكل الجدول بنجاح! 🔄");
             } else {
-                await dynamicService.createTable(selectedSectionId, tableName, columns, viewMode, { is_staff_table: isStaffTable });
+                await dynamicService.createTable(selectedSectionId, tableName, columns, viewMode, { is_staff_table: isStaffTable, calendar_mapping: calendarMapping });
                 alert("تم إنشاء وتثبيت الجدول الجديد بنجاح! 🚀");
             }
 
             setTableName('');
-            setColumns([{ id: 'c1', name: '', type: 'text', default_permissions: {} }]);
+
+            setColumns([
+                {
+                    id: 'c1',
+                    name: '',
+                    type: 'text',
+                    default_permissions: {}
+                }
+            ]);
+
             setEditingTableId(null);
-            setIsStaffTable(false); // إعادة التعيين بعد الحفظ
+
+            setIsStaffTable(false);
+
+            setCalendarMapping({
+                enabled: false,
+                title_field: "",
+                start_field: "",
+                end_field: "",
+                description_field: "",
+                icon: "calendar",
+                color: "#3b82f6",
+                all_day: true,
+                editable: true,
+            });
+
             loadSections();
         } catch (error) {
             console.error("خطأ أثناء معالجة الجدول:", error);
@@ -770,20 +832,19 @@ export default function SystemBuilderPage() {
         setColumns(table.columns_definition || [{ id: 'c1', name: '', type: 'text', default_permissions: {} }]);
         setViewMode(table.view_mode || 'table');
         setIsStaffTable(table.is_staff_table || false); // سحب حالة الاعتماد عند تعديل الجدول
-        setSelectedSectionId(table.section_id);
 
-        setEditingTableId(table.id);
-
-        setTableName(table.name);
-
-        setColumns(
-            table.columns_definition ||
-            [{ id: 'c1', name: '', type: 'text', default_permissions: {} }]
+        setCalendarMapping(
+            table.calendar_mapping || {
+                enabled: false,
+                title_field: "",
+                start_field: "",
+                end_field: "",
+                description_field: "",
+                color: "#3b82f6",
+                all_day: true,
+                editable: true,
+            }
         );
-
-        setViewMode(table.view_mode || "table");
-
-        setIsStaffTable(table.is_staff_table || false);
     };
 
     const handleDeleteTemplate = async (id) => {
@@ -964,6 +1025,72 @@ export default function SystemBuilderPage() {
         }
     };
 
+    const availableFields = columns
+        .filter(col => col.name.trim() !== "")
+        .map(col => ({
+            value: col.name,
+            label: `${col.name} (${col.type})`
+        }));
+
+    const dateFields = columns.filter(
+        col => col.type === "date"
+    );
+
+    const descriptionFields = columns.filter(
+        col =>
+            col.type === "text" ||
+            col.type === "textarea"
+    );
+
+    const isFieldSelected = (columnId, currentField) => {
+        const selectedFields = [
+            calendarMapping.title_field,
+            calendarMapping.start_field,
+            calendarMapping.end_field,
+            calendarMapping.description_field
+        ];
+
+        return (
+            selectedFields.includes(columnId) &&
+            calendarMapping[currentField] !== columnId
+        );
+    };
+
+    const titleFields = columns.filter(
+        col => col.type !== "staff_password"
+    );
+
+    const getColumnName = (columnId) => {
+        return (
+            columns.find(col => col.id === columnId)?.name ||
+            ""
+        );
+    };
+
+    const presetColors = [
+        "#3b82f6", // أزرق
+        "#22c55e", // أخضر
+        "#eab308", // أصفر
+        "#ef4444", // أحمر
+        "#8b5cf6", // بنفسجي
+        "#92400e", // بني
+    ];
+
+    const previewTitle =
+        getColumnName(calendarMapping.title_field) ||
+        tableName ||
+        "عنوان الحدث";
+
+    const previewStart =
+        getColumnName(calendarMapping.start_field) ||
+        "تاريخ البداية";
+
+    const previewEnd =
+        getColumnName(calendarMapping.end_field);
+
+    const previewDescription =
+        getColumnName(calendarMapping.description_field);
+
     return (
         <div className="p-8 bg-zinc-950 text-zinc-100 min-h-screen font-sans text-right select-none" dir="rtl">
 
@@ -1128,6 +1255,9 @@ export default function SystemBuilderPage() {
                                             <option value="staff_password">🔒 كلمة مرور مشفرة (حقل سري)</option>
                                             <option value="user_account">👤 حساب مستخدم وصلاحيات (الطاقم)</option>
                                         </select>
+                                        <p className="text-xs text-zinc-500">
+                                            💡 يتم استخدام حقول "التاريخ" لإنشاء أحداث التقويم تلقائيًا.
+                                        </p>
                                         <button onClick={() => handleRemoveColumnField(col.id)} className="p-1 text-zinc-500 hover:text-red-500 transition" title="حذف الحقل">
                                             ❌
                                         </button>
@@ -1161,13 +1291,445 @@ export default function SystemBuilderPage() {
                                     )}
                                 </div>
                             ))}
+
+                            <div className="mt-8 border-t border-zinc-800 pt-6"> {/* تم إضافة < هنا */}
+
+                                {dateFields.length === 0 ? (
+                                    <div className="rounded-xl border border-red-900 bg-red-950/40 p-4">
+                                        <p className="text-red-400 font-semibold">
+                                            لا يمكن تفعيل التقويم
+                                        </p>
+                                        <p className="text-sm text-zinc-400 mt-2">
+                                            يجب إضافة حقل واحد على الأقل من نوع "تاريخ".
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <h3 className="text-lg font-bold text-amber-500 mb-4">
+                                            🗓️ إعدادات التقويم
+                                        </h3>
+
+
+                                        <div className="space-y-5">
+                                            <label className="flex items-center gap-3">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={calendarMapping.enabled}
+                                                    onChange={(e) =>
+                                                        setCalendarMapping({
+                                                            ...calendarMapping,
+                                                            enabled: e.target.checked
+                                                        })
+                                                    }
+                                                />
+                                                <span className="text-zinc-300">
+                                                    تفعيل التقويم لهذا الجدول
+                                                </span>
+                                            </label>
+
+                                            <div className="mt-6 rounded-xl border border-zinc-700 bg-zinc-950 p-5">
+
+                                                <p className="text-xs text-zinc-500 mb-4">
+                                                    معاينة الحدث داخل التقويم
+                                                </p>
+
+                                                <div
+                                                    className="rounded-lg shadow-lg overflow-hidden border"
+                                                    style={{
+                                                        borderColor: calendarMapping.color
+                                                    }}
+                                                >
+
+                                                    <div
+                                                        className="px-4 py-2 text-white font-semibold flex items-center gap-2"
+                                                        style={{
+                                                            background: calendarMapping.color
+                                                        }}
+                                                    >
+                                                        <span>📅</span>
+                                                        <span>{previewTitle}</span>
+                                                    </div>
+
+                                                    <div className="bg-white text-zinc-800 p-4">
+
+                                                        <div className="text-sm font-semibold">
+                                                            {previewStart}
+                                                        </div>
+
+                                                        {previewEnd && (
+                                                            <div className="text-xs text-zinc-500 mt-1">
+                                                                حتى {previewEnd}
+                                                            </div>
+                                                        )}
+
+                                                        {previewDescription && (
+                                                            <div className="mt-3 text-sm text-zinc-600">
+                                                                {previewDescription}
+                                                            </div>
+                                                        )}
+
+                                                        <div className="mt-4 text-xs text-zinc-400">
+                                                            سيظهر الحدث بهذا الشكل داخل التقويم.
+                                                        </div>
+
+                                                    </div>
+
+                                                </div>
+
+                                            </div>
+
+                                            {calendarMapping.enabled && (
+                                                <>
+                                                    <div>
+                                                        <label className="text-sm text-zinc-400">
+                                                            عنوان الحدث
+                                                        </label>
+                                                        <select
+                                                            value={calendarMapping.title_field}
+                                                            onChange={(e) =>
+                                                                setCalendarMapping({
+                                                                    ...calendarMapping,
+                                                                    title_field: e.target.value
+                                                                })
+                                                            }
+                                                            className="w-full mt-1 bg-zinc-950 border border-zinc-800 rounded-lg p-2"
+                                                        >
+                                                            <option value="">اختر الحقل</option>
+                                                            {titleFields.map(field => (
+                                                                <option
+                                                                    key={field.id}
+                                                                    value={field.id}
+                                                                    disabled={isFieldSelected(field.id, "title_field")}
+                                                                >
+                                                                    {field.name}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+
+                                                    <div>
+                                                        <label className="text-sm text-zinc-400">
+                                                            تاريخ البداية
+                                                        </label>
+                                                        <select
+                                                            value={calendarMapping.start_field}
+                                                            onChange={(e) =>
+                                                                setCalendarMapping({
+                                                                    ...calendarMapping,
+                                                                    start_field: e.target.value
+                                                                })
+                                                            }
+                                                            className="w-full mt-1 bg-zinc-950 border border-zinc-800 rounded-lg p-2"
+                                                        >
+                                                            <option value="">اختر حقل التاريخ</option>
+                                                            {dateFields.map(field => (
+                                                                <option
+                                                                    key={field.id}
+                                                                    value={field.id}
+                                                                    disabled={isFieldSelected(field.id, "start_field")}
+                                                                >
+                                                                    {field.name}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+
+                                                    <div>
+                                                        <label className="text-sm text-zinc-400">
+                                                            تاريخ النهاية
+                                                        </label>
+                                                        <select
+                                                            value={calendarMapping.end_field}
+                                                            onChange={(e) =>
+                                                                setCalendarMapping({
+                                                                    ...calendarMapping,
+                                                                    end_field: e.target.value
+                                                                })
+                                                            }
+                                                            className="w-full mt-1 bg-zinc-950 border border-zinc-800 rounded-lg p-2"
+                                                        >
+                                                            <option value="">بدون</option>
+                                                            {dateFields.map(field => (
+                                                                <option
+                                                                    key={field.id}
+                                                                    value={field.id}
+                                                                    disabled={isFieldSelected(field.id, "end_field")}
+                                                                >
+                                                                    {field.name}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+
+                                                    <div>
+                                                        <label className="text-sm text-zinc-400">
+                                                            الوصف
+                                                        </label>
+                                                        <select
+                                                            value={calendarMapping.description_field}
+                                                            onChange={(e) =>
+                                                                setCalendarMapping({
+                                                                    ...calendarMapping,
+                                                                    description_field: e.target.value
+                                                                })
+                                                            }
+                                                            className="w-full mt-1 bg-zinc-950 border border-zinc-800 rounded-lg p-2"
+                                                        >
+                                                            <option value="">بدون</option>
+                                                            {descriptionFields.map(field => (
+                                                                <option
+                                                                    key={field.id}
+                                                                    value={field.id}
+                                                                    disabled={isFieldSelected(field.id, "description_field")}
+                                                                >
+                                                                    {field.name}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+
+                                                    <div>
+
+                                                        <label className="text-sm text-zinc-400 font-medium">
+                                                            لون الأحداث
+                                                        </label>
+
+                                                        {/* الألوان السريعة */}
+                                                        <div className="flex flex-wrap gap-3 mt-3">
+
+                                                            {presetColors.map((color) => (
+
+                                                                <button
+                                                                    key={color}
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        setCalendarMapping({
+                                                                            ...calendarMapping,
+                                                                            color
+                                                                        })
+                                                                    }
+                                                                    className={`w-9 h-9 rounded-full border-2 transition-all duration-200 ${calendarMapping.color === color
+                                                                        ? "border-white scale-110 shadow-lg"
+                                                                        : "border-zinc-700 hover:scale-105"
+                                                                        }`}
+                                                                    style={{
+                                                                        backgroundColor: color
+                                                                    }}
+                                                                    title={color}
+                                                                />
+
+                                                            ))}
+
+                                                        </div>
+
+                                                        {/* اختيار لون مخصص */}
+
+                                                        <div className="flex items-center gap-3 mt-5">
+
+                                                            <span className="text-sm text-zinc-500">
+                                                                أو اختر لونًا مخصصًا
+                                                            </span>
+
+                                                            <input
+                                                                type="color"
+                                                                value={calendarMapping.color}
+                                                                onChange={(e) =>
+                                                                    setCalendarMapping({
+                                                                        ...calendarMapping,
+                                                                        color: e.target.value
+                                                                    })
+                                                                }
+                                                                className="w-12 h-12 cursor-pointer rounded-lg border border-zinc-700 bg-transparent"
+                                                            />
+
+                                                        </div>
+
+                                                    </div>
+
+                                                    <label className="text-sm text-zinc-400">
+                                                        أيقونة الحدث
+                                                    </label>
+
+                                                    <select
+                                                        value={calendarMapping.icon}
+                                                        onChange={(e) =>
+                                                            setCalendarMapping({
+                                                                ...calendarMapping,
+                                                                icon: e.target.value
+                                                            })
+                                                        }
+                                                        className="w-full mt-1 bg-zinc-950 border border-zinc-800 rounded-lg p-2"
+                                                    >
+                                                        <option value="calendar">📅 جلسة</option>
+                                                        <option value="scale">⚖️ قضية</option>
+                                                        <option value="file">📄 عقد</option>
+                                                        <option value="money">💰 فاتورة</option>
+                                                        <option value="user">👤 موظف</option>
+                                                        <option value="folder">📁 عام</option>
+                                                    </select>
+
+                                                    {/* تم تغليف النصوص هنا بـ <span> لتناسق التصميم */}
+                                                    <label className="flex items-center gap-2 text-zinc-300">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={calendarMapping.all_day}
+                                                            onChange={(e) =>
+                                                                setCalendarMapping({
+                                                                    ...calendarMapping,
+                                                                    all_day: e.target.checked
+                                                                })
+                                                            }
+                                                        />
+                                                        <span>حدث طوال اليوم</span>
+                                                    </label>
+
+                                                    <label className="flex items-center gap-2 text-zinc-300">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={calendarMapping.editable}
+                                                            onChange={(e) =>
+                                                                setCalendarMapping({
+                                                                    ...calendarMapping,
+                                                                    editable: e.target.checked
+                                                                })
+                                                            }
+                                                        />
+                                                        <span>السماح بالسحب والإفلات</span>
+                                                    </label>
+
+                                                    <div className="mt-6 flex justify-end">
+
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setIsEventPreviewOpen(true)}
+                                                            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition"
+                                                        >
+                                                            👁 معاينة الحدث
+                                                        </button>
+
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
+
+                        {isEventPreviewOpen && (
+
+                            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70">
+
+                                <div className="w-full max-w-lg rounded-2xl bg-zinc-900 border border-zinc-700 shadow-2xl overflow-hidden">
+
+                                    {/* Header */}
+
+                                    <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+
+                                        <h2 className="text-lg font-bold text-white">
+                                            👁 معاينة الحدث
+                                        </h2>
+
+                                        <button
+                                            onClick={() => setIsEventPreviewOpen(false)}
+                                            className="text-zinc-400 hover:text-white text-xl"
+                                        >
+                                            ✕
+                                        </button>
+
+                                    </div>
+
+                                    {/* Body */}
+
+                                    <div className="p-6 bg-zinc-950">
+
+                                        <div
+                                            className="rounded-xl overflow-hidden shadow-xl border"
+                                            style={{
+                                                borderColor: calendarMapping.color
+                                            }}
+                                        >
+
+                                            {/* عنوان الحدث */}
+
+                                            <div
+                                                className="px-5 py-3 text-white font-semibold flex items-center gap-2"
+                                                style={{
+                                                    backgroundColor: calendarMapping.color
+                                                }}
+                                            >
+                                                <span>📅</span>
+
+                                                <span>
+                                                    {previewTitle}
+                                                </span>
+
+                                            </div>
+
+                                            {/* المحتوى */}
+
+                                            <div className="bg-white text-zinc-800 p-5">
+
+                                                <div className="text-sm font-semibold">
+                                                    📆 {previewStart}
+                                                </div>
+
+                                                {previewEnd && (
+
+                                                    <div className="text-sm mt-2 text-zinc-500">
+
+                                                        حتى {previewEnd}
+
+                                                    </div>
+
+                                                )}
+
+                                                {previewDescription && (
+
+                                                    <div className="mt-4">
+
+                                                        {previewDescription}
+
+                                                    </div>
+
+                                                )}
+
+                                                <div className="mt-5 text-xs text-zinc-400 border-t pt-4">
+
+                                                    هكذا سيظهر الحدث داخل التقويم.
+
+                                                </div>
+
+                                            </div>
+
+                                        </div>
+
+                                    </div>
+
+                                    {/* Footer */}
+
+                                    <div className="px-6 py-4 border-t border-zinc-800 flex justify-end">
+
+                                        <button
+                                            onClick={() => setIsEventPreviewOpen(false)}
+                                            className="px-5 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white"
+                                        >
+                                            إغلاق
+                                        </button>
+
+                                    </div>
+
+                                </div>
+
+                            </div>
+
+                        )}
 
                         <div className="flex justify-between items-center border-t border-zinc-800 pt-4">
                             <button onClick={handleAddColumnField} className="text-amber-500 hover:text-amber-400 text-xs font-semibold">+ إضافة حقل عمود</button>
                             <div className="flex gap-2">
                                 {editingTableId && (
-                                    <button onClick={() => { setEditingTableId(null); setTableName(''); setColumns([{ id: 'c1', name: '', type: 'text' }]); setIsStaffTable(false); }} className="bg-zinc-800 text-zinc-300 px-3 py-2 rounded-lg text-xs hover:bg-zinc-700">إلغاء التعديل</button>
+                                    <button onClick={() => { setEditingTableId(null); setTableName(''); setColumns([{ id: 'c1', name: '', type: 'text' }]); setIsStaffTable(false); setCalendarMapping({ enabled: false, title_field: "", start_field: "", end_field: "", description_field: "", color: "#3b82f6", all_day: true, editable: true, }); }} className="bg-zinc-800 text-zinc-300 px-3 py-2 rounded-lg text-xs hover:bg-zinc-700">إلغاء التعديل</button>
                                 )}
                                 <button onClick={handleSaveTable} className="bg-amber-600 hover:bg-amber-500 text-zinc-950 font-bold px-4 py-2 rounded-lg text-xs transition">
                                     {editingTableId ? "🔄 تحديث الهيكل" : "🚀 تثبيت الهيكل الجديد"}

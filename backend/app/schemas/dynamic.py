@@ -2,6 +2,30 @@
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 
+class CalendarMapping(BaseModel):
+    """
+    إعدادات ربط الجدول بمحرك التقويم الديناميكي.
+    """
+
+    enabled: bool = False
+
+    # الحقول المستخدمة لبناء الحدث
+    title_field: Optional[str] = None
+    start_field: Optional[str] = None
+    end_field: Optional[str] = None
+    description_field: Optional[str] = None
+
+    icon: str = "calendar"
+
+    # إعدادات العرض
+    color: str = "#3b82f6"
+
+    # حدث طوال اليوم
+    all_day: bool = True
+
+    # هل يسمح بتحريك الحدث من التقويم
+    editable: bool = True
+
 # --- مخططات الأعمدة الداخلية ---
 class ColumnDefinition(BaseModel):
     id: str
@@ -17,7 +41,7 @@ class TableCreate(BaseModel):
     view_mode: Optional[str] = "table"
     columns_definition: List[Dict[str, Any]] # مصفوفة الأعمدة الديناميكية
     is_staff_table: Optional[bool] = False 
-    calendar_mapping: Optional[Dict[str, str]] = None
+    calendar_mapping: Optional[CalendarMapping] = None
 
 class TableResponse(TableCreate):
     id: int
@@ -55,6 +79,6 @@ class RowResponse(RowCreate):
 class TableSchemaUpdate(BaseModel):
     name: str
     default_view: str = "table"
-    calendar_mapping: Optional[Dict[str, str]] = None
+    calendar_mapping: Optional[CalendarMapping] = None
     columns_definition: List[ColumnDefinition]
     is_staff_table: bool = False

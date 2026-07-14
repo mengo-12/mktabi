@@ -13,7 +13,10 @@ class CustomSection(Base):
     order = Column(Integer, default=0)       # ترتيب ظهورها في الـ Sidebar
 
     # علاقة مع الجداول التابعة لهذا القسم
-    tables = relationship("CustomTable", back_populates="section", cascade="all, delete-orphan")
+    tables = relationship(
+    "CustomTable",
+    back_populates="section"
+)
 
 
 class CustomTable(Base):
