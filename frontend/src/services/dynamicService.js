@@ -128,5 +128,10 @@ export const dynamicService = {
 
         // يعيد الكائن المحتوي على { url, name, id }
         return response.data;
-    }
+    },
+
+    async getCalendarEvents() {
+        const response = await apiClient.get("/dynamic/calendar/events");
+        return response.data;
+    },
 };

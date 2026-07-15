@@ -198,35 +198,32 @@ export default function Sidebar() {
     // تنظيم الروابط الثابتة في مجموعات لتنسيق بصري مريح للعين
     const menuGroups = [
         {
-            groupName: "العامة",
+            groupName: "النظام",
             items: [
-                { name: 'الرئيسية', path: '/dashboard', icon: LayoutDashboard },
-            ]
-        },
-        {
-            groupName: "إدارة المكتب",
-            items: [
-                { name: 'إدارة الموكلين', path: '/dashboard/clients', icon: Users },
-                { name: 'إدارة القضايا', path: '/dashboard/cases', icon: Briefcase },
-                { name: 'الفريق والقضاة', path: '/dashboard/lawyers', icon: Scale },
-            ]
-        },
-        {
-            groupName: "الأعمال والإنتاجية",
-            items: [
-                { name: 'المهام اليومية', path: '/dashboard/tasks', icon: ClipboardList },
-                { name: 'مواعيد الزيارات', path: '/dashboard/visits', icon: CalendarDays },
-                { name: 'المساعد الذكي للجدولة', path: '/dashboard/schedule', icon: Hourglass },
-            ]
-        },
-        {
-            groupName: "المالية والتقارير",
-            items: [
-                { name: 'الحسابات والمالية', path: '/dashboard/finance', icon: CircleDollarSign },
-                { name: 'تقارير الأداء', path: '/dashboard/analytics', icon: BarChart3 },
+                {
+                    name: "الرئيسية",
+                    path: "/dashboard",
+                    icon: LayoutDashboard
+                },
+                {
+                    name: "التقويم",
+                    path: "/dashboard/calendar",
+                    icon: CalendarDays
+                },
+                {
+                    name: "المالية",
+                    path: "/dashboard/finance",
+                    icon: CircleDollarSign
+                },
+                {
+                    name: "التقارير",
+                    path: "/dashboard/analytics",
+                    icon: BarChart3
+                }
             ]
         }
     ];
+
 
     const toggleSection = (sectionId) => {
         setExpandedSections(prev => ({
@@ -257,39 +254,49 @@ export default function Sidebar() {
             <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto custom-scrollbar">
 
                 {/* 1. المجموعات الأساسية الثابتة للنظام */}
-                {/* {menuGroups.map((group, groupIdx) => (
+                {menuGroups.map((group, groupIdx) => (
                     <div key={groupIdx} className="space-y-1">
-                        <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-500 mb-2">
+
+                        <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-2">
                             {group.groupName}
                         </p>
 
                         {group.items.map((item) => {
-                            const isActive = pathname === item.path;
+
                             const Icon = item.icon;
+                            const isActive = pathname === item.path;
 
                             return (
                                 <Link
                                     key={item.path}
                                     href={item.path}
-                                    className={`flex items-center justify-between px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-200 group relative ${isActive
-                                        ? 'bg-slate-800/50 text-amber-400 border border-slate-700/50 shadow-inner'
-                                        : 'hover:bg-slate-800/30 hover:text-slate-200 border border-transparent'
+                                    className={`flex items-center justify-between px-4 py-2 rounded-xl text-xs font-semibold transition-all
+                        ${isActive
+                                            ? "bg-slate-800/50 text-amber-400 border border-slate-700/50"
+                                            : "hover:bg-slate-800/30 hover:text-slate-200"
                                         }`}
                                 >
+
                                     <div className="flex items-center gap-3">
-                                        <Icon className={`w-4 h-4 transition-transform duration-200 group-hover:scale-105 ${isActive ? 'text-amber-500' : 'text-slate-500 group-hover:text-slate-400'
-                                            }`} />
+
+                                        <Icon
+                                            className={`w-4 h-4 ${isActive
+                                                    ? "text-amber-500"
+                                                    : "text-slate-500"
+                                                }`}
+                                        />
+
                                         <span>{item.name}</span>
+
                                     </div>
 
-                                    {isActive && (
-                                        <span className="absolute right-0 top-1/4 bottom-1/4 w-1 bg-amber-500 rounded-l-md" />
-                                    )}
                                 </Link>
                             );
+
                         })}
+
                     </div>
-                ))} */}
+                ))}
 
                 {/* 2. الأقسام المخصصة والمولدة ديناميكياً من قبل المدير (تنزل تلقائياً هنا) */}
                 {dynamicSections.length > 0 && (
