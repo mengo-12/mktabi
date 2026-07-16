@@ -134,4 +134,50 @@ export const dynamicService = {
         const response = await apiClient.get("/dynamic/calendar/events");
         return response.data;
     },
+
+    async createCalendarEvent(data) {
+        const response = await apiClient.post(
+            "/dynamic/calendar/events",
+            data
+        );
+
+        return response.data;
+    },
+
+    async getRow(rowId) {
+        const response = await apiClient.get(
+            `/dynamic/rows/${rowId}`
+        );
+
+        return response.data;
+    },
+
+    async updateCalendarRow(rowId, cellsData) {
+
+        const response = await apiClient.put(
+            `/dynamic/rows/${rowId}`,
+            {
+                cells_data: cellsData
+            }
+        );
+
+        return response.data;
+    },
+
+    async deleteCalendarRow(rowId) {
+
+        const response = await apiClient.delete(
+            `/dynamic/rows/${rowId}`
+        );
+
+        return response.data;
+    },
+
+    async getCalendarEvent(eventId) {
+        const response = await apiClient.get(
+            `/dynamic/calendar/events/${eventId}`
+        );
+
+        return response.data;
+    },
 };

@@ -6,7 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload  
 from typing import List, Dict, Any
-from app.schemas.calendar import CalendarEvent
+from app.schemas.calendar import (
+    CalendarEvent,
+    CalendarEventUpdate,
+    CalendarEventCreate
+)
 
 from typing import Optional
 
@@ -22,6 +26,7 @@ from app.schemas.dynamic import (
 # 🌟 الاستيرادات الأمنية
 from app.api.deps import get_current_user, sanitize_staff_permissions
 from app.models.auth import User, UserRole
+
 
 router = APIRouter()
 
@@ -481,6 +486,83 @@ async def get_all_tables(
         
     return tables
 
+@router.get("/tables/{table_id}/form")
+async def get_table_form(
+    table_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    إرجاع هيكل الجدول لبناء نموذج إدخال ديناميكي.
+    """
+
+    # التحقق من صلاحية القراءة
+    check_dynamic_permission(
+        current_user,
+        table_id,
+        required_level="read"
+    )
+
+    result = await db.execute(
+        select(CustomTable)
+        .options(selectinload(CustomTable.section))
+        .where(CustomTable.id == table_id)
+    )
+
+    table = result.scalar_one_or_none()
+
+    if not table:
+        raise HTTPException(
+            status_code=404,
+            detail="الجدول غير موجود."
+        )
+
+    return {
+        "table_id": table.id,
+        "table_name": table.name,
+        "section_id": table.section_id,
+        "section_name": table.section.title if table.section else "",
+        "columns": table.columns_definition or [],
+        "calendar_mapping": table.calendar_mapping or {},
+    }
+
+@router.get("/rows/{row_id}")
+async def get_row(
+    row_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    جلب بيانات سجل واحد لاستخدامها في نافذة التعديل.
+    """
+
+    result = await db.execute(
+        select(CustomRow).where(
+            CustomRow.id == row_id
+        )
+    )
+
+    row = result.scalar_one_or_none()
+
+    if not row:
+        raise HTTPException(
+            status_code=404,
+            detail="السجل غير موجود."
+        )
+
+    # التحقق من الصلاحيات
+    check_dynamic_permission(
+        current_user,
+        row.table_id,
+        required_level="read"
+    )
+
+    return {
+        "id": row.id,
+        "table_id": row.table_id,
+        "cells_data": row.cells_data or {}
+    }
+
 @router.get("/calendar/events", response_model=List[CalendarEvent])
 async def get_calendar_events(
     current_user: User = Depends(get_current_user),
@@ -542,3 +624,265 @@ async def get_calendar_events(
                 events.append(event)
 
     return events
+
+@router.get("/calendar/events/{event_id}")
+async def get_calendar_event_details(
+    event_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    إرجاع جميع تفاصيل حدث واحد لعرضها في نافذة التفاصيل.
+    """
+
+    try:
+        table_id, row_id = event_id.split("-")
+        table_id = int(table_id)
+        row_id = int(row_id)
+
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="معرف الحدث غير صالح."
+        )
+
+    # التحقق من صلاحية القراءة
+    check_dynamic_permission(
+        current_user,
+        table_id,
+        required_level="read"
+    )
+
+    # جلب الجدول مع القسم
+    result = await db.execute(
+        select(CustomTable)
+        .options(selectinload(CustomTable.section))
+        .where(CustomTable.id == table_id)
+    )
+
+    table = result.scalar_one_or_none()
+
+    if not table:
+        raise HTTPException(
+            status_code=404,
+            detail="الجدول غير موجود."
+        )
+
+    # جلب السجل
+    result = await db.execute(
+        select(CustomRow).where(
+            CustomRow.id == row_id,
+            CustomRow.table_id == table_id
+        )
+    )
+
+    row = result.scalar_one_or_none()
+
+    if not row:
+        raise HTTPException(
+            status_code=404,
+            detail="السجل غير موجود."
+        )
+
+    # بناء الحدث
+    event = build_calendar_event(
+        table,
+        row
+    )
+
+    return {
+        "event": event,
+        "table": {
+            "id": table.id,
+            "name": table.name,
+            "section_id": table.section_id,
+            "section_name": table.section.title if table.section else ""
+        },
+        "columns": table.columns_definition or [],
+        "cells_data": row.cells_data or {}
+    }
+
+@router.put("/calendar/events/{event_id}")
+async def update_calendar_event(
+    event_id: str,
+    payload: CalendarEventUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    تحديث تاريخ حدث التقويم بعد السحب أو تغيير المدة.
+    """
+
+    try:
+        table_id, row_id = event_id.split("-")
+        table_id = int(table_id)
+        row_id = int(row_id)
+
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="معرف الحدث غير صالح."
+        )
+
+    # التحقق من صلاحية الكتابة
+    check_dynamic_permission(
+        current_user,
+        table_id,
+        required_level="write"
+    )
+
+    result = await db.execute(
+    select(CustomTable)
+    .options(selectinload(CustomTable.section))
+    .where(CustomTable.id == table_id)
+    )
+
+    table = result.scalar_one_or_none()
+
+    if not table:
+        raise HTTPException(
+            status_code=404,
+            detail="الجدول غير موجود."
+        )
+
+    result = await db.execute(
+        select(CustomRow).where(
+            CustomRow.id == row_id,
+            CustomRow.table_id == table_id
+        )
+    )
+
+    row = result.scalar_one_or_none()
+
+    if not row:
+        raise HTTPException(
+            status_code=404,
+            detail="السجل غير موجود."
+        )
+
+    mapping = table.calendar_mapping or {}
+
+    if not mapping.get("enabled"):
+        raise HTTPException(
+            status_code=400,
+            detail="هذا الجدول غير مرتبط بالتقويم."
+        )
+
+    start_field = mapping.get("start_field")
+    end_field = mapping.get("end_field")
+
+    cells = dict(row.cells_data or {})
+
+    if start_field:
+        cells[start_field] = payload.start.isoformat()
+
+    if end_field:
+        cells[end_field] = (
+            payload.end.isoformat()
+            if payload.end
+            else None
+        )
+
+    if not start_field:
+        raise HTTPException(
+            status_code=400,
+            detail="لم يتم تحديد حقل بداية الحدث."
+    )
+
+    row.cells_data = cells
+
+    await db.commit()
+    await db.refresh(row)
+
+    event = build_calendar_event(table, row)
+
+    return {
+        "success": True,
+        "event": event
+    }
+
+@router.post("/calendar/events")
+async def create_calendar_event(
+    payload: CalendarEventCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    إنشاء سجل جديد من صفحة التقويم باستخدام النموذج الديناميكي.
+    """
+
+    # التحقق من صلاحية الكتابة
+    check_dynamic_permission(
+        current_user,
+        payload.table_id,
+        required_level="write"
+    )
+
+    result = await db.execute(
+    select(CustomTable)
+    .options(selectinload(CustomTable.section))
+    .where(CustomTable.id == payload.table_id)
+    )
+
+    table = result.scalar_one_or_none()
+
+    if not table:
+        raise HTTPException(
+            status_code=404,
+            detail="الجدول غير موجود."
+        )
+
+    # يجب أن يكون التقويم مفعلاً لهذا الجدول
+    mapping = table.calendar_mapping or {}
+
+    if not mapping.get("enabled"):
+        raise HTTPException(
+            status_code=400,
+            detail="هذا الجدول غير مرتبط بالتقويم."
+        )
+
+    cells = dict(payload.cells_data or {})
+
+    # حماية: يجب أن يحتوي السجل على حقل تاريخ البداية
+    start_field = mapping.get("start_field")
+
+    if not start_field:
+        raise HTTPException(
+            status_code=400,
+            detail="لم يتم تحديد حقل تاريخ البداية في إعدادات التقويم."
+        )
+
+    if not cells.get(start_field):
+        raise HTTPException(
+            status_code=400,
+            detail="يجب إدخال تاريخ البداية."
+        )
+
+    # حماية جدول الموظفين
+    if table.is_staff_table:
+        cells = sanitize_staff_permissions(
+            cells,
+            table.id
+        )
+
+    row = CustomRow(
+        table_id=payload.table_id,
+        cells_data=cells
+    )
+
+    db.add(row)
+
+    await db.commit()
+    await db.refresh(row)
+
+    event = build_calendar_event(
+        table,
+        row
+    )
+
+    return {
+        "success": True,
+        "row_id": row.id,
+        "event": event,
+        "message": "تم إنشاء الحدث بنجاح."
+    }

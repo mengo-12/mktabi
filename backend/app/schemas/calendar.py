@@ -1,6 +1,6 @@
 from datetime import datetime
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict, Any
 
 
 class CalendarEvent(BaseModel):
@@ -27,3 +27,12 @@ class CalendarEvent(BaseModel):
     editable: bool = True
 
     icon: Optional[str] = "calendar"
+
+class CalendarEventUpdate(BaseModel):
+    start: datetime
+    end: Optional[datetime] = None
+    all_day: bool = True
+
+class CalendarEventCreate(BaseModel):
+    table_id: int
+    cells_data: Dict[str, Any]
