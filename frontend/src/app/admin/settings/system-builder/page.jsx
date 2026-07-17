@@ -527,6 +527,12 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { dynamicService } from '@/services/dynamicService';
+import {
+    FIELD_TYPES,
+    fieldSupportsOptions,
+    fieldSupportsRelation,
+    fieldSupportsPermissions,
+} from "@/constants/fieldTypes";
 
 export default function SystemBuilderPage() {
     // التحكم في التبويب النشط
@@ -548,7 +554,29 @@ export default function SystemBuilderPage() {
 
     const [tableName, setTableName] = useState('');
     const [viewMode, setViewMode] = useState('table'); // table, grid, list
-    const [columns, setColumns] = useState([{ id: 'c1', name: '', type: 'text', default_permissions: {} }]);
+    const [columns, setColumns] = useState([
+        {
+            id: "c1",
+            name: "",
+            type: "text",
+
+            required: false,
+            unique: false,
+            hidden: false,
+            readonly: false,
+            default_value: "",
+
+            options: [],
+
+            relation: {
+                table_id: "",
+                display_column: "",
+                relation_type: "many_to_one"
+            },
+
+            default_permissions: {}
+        }
+    ]);
     const [editingTemplateId, setEditingTemplateId] = useState(null);
 
     const [templates, setTemplates] = useState([]);
@@ -560,6 +588,11 @@ export default function SystemBuilderPage() {
     const [editingTableId, setEditingTableId] = useState(null);
     const [isStaffTable, setIsStaffTable] = useState(false); // تم تفعيلها لترتبط بالـ Checkbox بالأسفل
     const [isEventPreviewOpen, setIsEventPreviewOpen] = useState(false);
+
+    const [dropdownOptions, setDropdownOptions] = useState([]);
+    const [newOptionInput, setNewOptionInput] = useState("");
+
+    const [selectedRelationTableId, setSelectedRelationTableId] = useState("");
 
     // استخراج كافة الجداول الفرعية من كافة الأقسام لتغذية مصفوفة الصلاحيات الديناميكية
     const allAvailableTables = (sections || [])
@@ -704,9 +737,23 @@ export default function SystemBuilderPage() {
     };
 
     const handleColumnChange = (index, key, value) => {
+
         const updated = [...columns];
+
         updated[index][key] = value;
+
+        if (key === "type") {
+
+            updated[index].options = [];
+
+            updated[index].relatedTableId = "";
+
+            updated[index].default_permissions = {};
+
+        }
+
         setColumns(updated);
+
     };
 
     // دالة لتعديل صلاحيات الوصول الافتراضية لحقل الـ UserAccount بشكل ديناميكي
@@ -767,9 +814,28 @@ export default function SystemBuilderPage() {
 
             setColumns([
                 {
-                    id: 'c1',
-                    name: '',
-                    type: 'text',
+                    id: `c-${Date.now()}`,
+                    name: "",
+                    type: "text",
+
+                    // الإعدادات العامة
+                    required: false,
+                    unique: false,
+                    hidden: false,
+                    readonly: false,
+                    default_value: "",
+
+                    // Dropdown
+                    options: [],
+
+                    // Relation
+                    relation: {
+                        table_id: "",
+                        display_column: "",
+                        relation_type: "many_to_one"
+                    },
+
+                    // User Account
                     default_permissions: {}
                 }
             ]);
@@ -808,7 +874,31 @@ export default function SystemBuilderPage() {
 
             if (editingTableId === tableId) {
                 setTableName('');
-                setColumns([{ id: 'c1', name: '', type: 'text', default_permissions: {} }]);
+                setColumns([{
+                    id: `c-${Date.now()}`,
+                    name: "",
+                    type: "text",
+
+                    // الإعدادات العامة
+                    required: false,
+                    unique: false,
+                    hidden: false,
+                    readonly: false,
+                    default_value: "",
+
+                    // Dropdown
+                    options: [],
+
+                    // Relation
+                    relation: {
+                        table_id: "",
+                        display_column: "",
+                        relation_type: "many_to_one"
+                    },
+
+                    // User Account
+                    default_permissions: {}
+                }]);
                 setEditingTableId(null);
                 setIsStaffTable(false);
             }
@@ -829,7 +919,31 @@ export default function SystemBuilderPage() {
     const handleSelectTableForEdit = (table) => {
         setEditingTableId(table.id);
         setTableName(table.name);
-        setColumns(table.columns_definition || [{ id: 'c1', name: '', type: 'text', default_permissions: {} }]);
+        setColumns(table.columns_definition || [{
+            id: `c-${Date.now()}`,
+            name: "",
+            type: "text",
+
+            // الإعدادات العامة
+            required: false,
+            unique: false,
+            hidden: false,
+            readonly: false,
+            default_value: "",
+
+            // Dropdown
+            options: [],
+
+            // Relation
+            relation: {
+                table_id: "",
+                display_column: "",
+                relation_type: "many_to_one"
+            },
+
+            // User Account
+            default_permissions: {}
+        }]);
         setViewMode(table.view_mode || 'table');
         setIsStaffTable(table.is_staff_table || false); // سحب حالة الاعتماد عند تعديل الجدول
 
@@ -1091,6 +1205,165 @@ export default function SystemBuilderPage() {
     const previewDescription =
         getColumnName(calendarMapping.description_field);
 
+    const addDropdownOption = (columnIndex) => {
+
+        const copy = [...columns];
+
+        copy[columnIndex].options.push("");
+
+        setColumns(copy);
+
+    };
+
+    const getRelationTableId = (column) => {
+        return (
+            column?.relation?.table_id ||
+            column?.relatedTableId ||
+            ""
+        );
+    };
+
+    const handleAddOptionToColumn = (columnIndex) => {
+
+        if (!newOptionInput.trim()) return;
+
+        const updated = [...columns];
+
+        if (!updated[columnIndex].options)
+            updated[columnIndex].options = [];
+
+        updated[columnIndex].options.push(
+            newOptionInput.trim()
+        );
+
+        setColumns(updated);
+
+        setNewOptionInput("");
+
+    };
+
+    const handleAddOption = (columnIndex) => {
+        const updated = [...columns];
+
+        updated[columnIndex].options.push("");
+
+        setColumns(updated);
+    };
+
+    const handleOptionChange = (
+        columnIndex,
+        optionIndex,
+        value
+    ) => {
+
+        const updated = [...columns];
+
+        updated[columnIndex].options[optionIndex] = value;
+
+        setColumns(updated);
+    };
+
+    const handleRemoveOption = (
+        columnIndex,
+        optionIndex
+    ) => {
+
+        const updated = [...columns];
+
+        updated[columnIndex].options.splice(optionIndex, 1);
+
+        setColumns(updated);
+    };
+
+    const moveOptionUp = (columnIndex, optionIndex) => {
+
+        if (optionIndex === 0) return;
+
+        const updated = [...columns];
+
+        const options = updated[columnIndex].options;
+
+        [options[optionIndex - 1], options[optionIndex]] =
+            [options[optionIndex], options[optionIndex - 1]];
+
+        setColumns(updated);
+
+    };
+
+    const moveOptionDown = (columnIndex, optionIndex) => {
+
+        const updated = [...columns];
+
+        const options = updated[columnIndex].options;
+
+        if (optionIndex === options.length - 1) return;
+
+        [options[optionIndex], options[optionIndex + 1]] =
+            [options[optionIndex + 1], options[optionIndex]];
+
+        setColumns(updated);
+
+    };
+
+    const handleRelationChange = (
+        columnIndex,
+        key,
+        value
+    ) => {
+
+        const updated = [...columns];
+
+        updated[columnIndex].relation = {
+            ...updated[columnIndex].relation,
+            [key]: value
+        };
+
+        setColumns(updated);
+
+    };
+
+    const createEmptyColumn = () => ({
+        id: `c-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        name: "",
+        type: "text",
+
+        required: false,
+        unique: false,
+        hidden: false,
+        readonly: false,
+        default_value: "",
+
+        options: [],
+
+        relation: {
+            table_id: "",
+            display_column: "",
+            relation_type: "many_to_one"
+        },
+
+        default_permissions: {}
+    });
+
+    const updateDropdownOption = (columnIndex, optIndex, value) => {
+
+        const copy = [...columns];
+
+        copy[columnIndex].options[optIndex] = value;
+
+        setColumns(copy);
+
+    };
+
+    const removeDropdownOption = (columnIndex, optIndex) => {
+
+        const copy = [...columns];
+
+        copy[columnIndex].options.splice(optIndex, 1);
+
+        setColumns(copy);
+
+    };
+
     return (
         <div className="p-8 bg-zinc-950 text-zinc-100 min-h-screen font-sans text-right select-none" dir="rtl">
 
@@ -1241,19 +1514,23 @@ export default function SystemBuilderPage() {
                                         <input type="text" placeholder="اسم العمود (مثال: الاسم الكامل أو الصلاحيات)" value={col.name} onChange={(e) => handleColumnChange(index, 'name', e.target.value)} className="flex-1 bg-zinc-900 border border-zinc-800 rounded-md p-2 text-xs text-zinc-100 focus:outline-none" />
                                         <select
                                             value={col.type}
-                                            onChange={(e) => handleColumnChange(index, 'type', e.target.value)}
+                                            onChange={(e) =>
+                                                handleColumnChange(
+                                                    index,
+                                                    "type",
+                                                    e.target.value
+                                                )
+                                            }
                                             className="bg-zinc-900 border border-zinc-800 rounded-md p-2 text-xs text-zinc-100 focus:outline-none"
                                         >
-                                            <option value="text">🔤 نص قصير</option>
-                                            <option value="textarea">📝 نص طويل / مذكرات</option>
-                                            <option value="select">📊 قائمة خيارات</option>
-                                            <option value="currency">💰 حسابات مالية وأتعاب</option>
-                                            <option value="number">🔢 رقم</option>
-                                            <option value="date">📅 تاريخ</option>
-                                            <option value="file">📄 ملف ومستند</option>
-                                            <option value="staff_email">📧 بريد إلكتروني رسمي (لتسجيل الدخول)</option>
-                                            <option value="staff_password">🔒 كلمة مرور مشفرة (حقل سري)</option>
-                                            <option value="user_account">👤 حساب مستخدم وصلاحيات (الطاقم)</option>
+                                            {FIELD_TYPES.map((type) => (
+                                                <option
+                                                    key={type.value}
+                                                    value={type.value}
+                                                >
+                                                    {type.label}
+                                                </option>
+                                            ))}
                                         </select>
                                         <p className="text-xs text-zinc-500">
                                             💡 يتم استخدام حقول "التاريخ" لإنشاء أحداث التقويم تلقائيًا.
@@ -1263,8 +1540,206 @@ export default function SystemBuilderPage() {
                                         </button>
                                     </div>
 
+                                    <div className="grid grid-cols-2 gap-3 mt-3">
+
+                                        <label className="flex items-center gap-2 text-xs">
+                                            <input
+                                                type="checkbox"
+                                                checked={col.required}
+                                                onChange={(e) =>
+                                                    handleColumnChange(index, "required", e.target.checked)
+                                                }
+                                            />
+                                            Required
+                                        </label>
+
+                                        <label className="flex items-center gap-2 text-xs">
+                                            <input
+                                                type="checkbox"
+                                                checked={col.unique}
+                                                onChange={(e) =>
+                                                    handleColumnChange(index, "unique", e.target.checked)
+                                                }
+                                            />
+                                            Unique
+                                        </label>
+
+                                        <label className="flex items-center gap-2 text-xs">
+                                            <input
+                                                type="checkbox"
+                                                checked={col.hidden}
+                                                onChange={(e) =>
+                                                    handleColumnChange(index, "hidden", e.target.checked)
+                                                }
+                                            />
+                                            Hidden
+                                        </label>
+
+                                        <label className="flex items-center gap-2 text-xs">
+                                            <input
+                                                type="checkbox"
+                                                checked={col.readonly}
+                                                onChange={(e) =>
+                                                    handleColumnChange(index, "readonly", e.target.checked)
+                                                }
+                                            />
+                                            Read Only
+                                        </label>
+
+                                    </div>
+
+                                    <input
+                                        type="text"
+                                        placeholder="القيمة الافتراضية"
+                                        value={col.default_value}
+                                        onChange={(e) =>
+                                            handleColumnChange(index, "default_value", e.target.value)
+                                        }
+                                        className="w-full mt-3 bg-zinc-900 border border-zinc-800 rounded-md p-2 text-xs"
+                                    />
+
+                                    {col.type === "dropdown" && (
+                                        <div className="mt-4 border rounded-lg border-zinc-800 p-3">
+
+                                            <div className="flex justify-between mb-3">
+
+                                                <span className="text-xs text-amber-500">
+                                                    خيارات القائمة
+                                                </span>
+
+                                                <button
+                                                    onClick={() => addDropdownOption(index)}
+                                                    className="text-xs text-green-400"
+                                                >
+                                                    + إضافة
+                                                </button>
+
+                                            </div>
+
+                                            {col.options.map((option, optIndex) => (
+
+                                                <div
+                                                    key={optIndex}
+                                                    className="flex gap-2 mb-2"
+                                                >
+
+                                                    <input
+                                                        value={option}
+                                                        onChange={(e) =>
+                                                            updateDropdownOption(
+                                                                index,
+                                                                optIndex,
+                                                                e.target.value
+                                                            )
+                                                        }
+                                                        className="flex-1 bg-zinc-900 border border-zinc-800 rounded p-2 text-xs"
+                                                    />
+
+                                                    <button
+                                                        onClick={() =>
+                                                            removeDropdownOption(index, optIndex)
+                                                        }
+                                                    >
+                                                        ❌
+                                                    </button>
+
+                                                </div>
+
+                                            ))}
+
+                                        </div>
+                                    )}
+
+                                    {col.type === "relation" && (
+
+                                        <div className="mt-4 border border-zinc-800 rounded-lg p-3 space-y-3">
+
+                                            <h4 className="text-xs text-amber-500">
+                                                ربط بجدول
+                                            </h4>
+
+                                            <select
+                                                value={getRelationTableId(col)}
+                                                onChange={(e) => {
+                                                    const copy = [...columns];
+
+                                                    if (!copy[index].relation) {
+                                                        copy[index].relation = {
+                                                            table_id: "",
+                                                            relation_type: "many_to_one",
+                                                            display_column: "",
+                                                        };
+                                                    }
+
+                                                    copy[index].relation.table_id = e.target.value;
+                                                    copy[index].relatedTableId = e.target.value;
+
+                                                    setColumns(copy);
+                                                }}
+                                                className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs"
+                                            >
+
+                                                <option value="">اختر جدول</option>
+
+                                                {allAvailableTables.map(table => (
+
+                                                    <option
+                                                        key={table.id}
+                                                        value={table.id}
+                                                    >
+
+                                                        {table.name}
+
+                                                    </option>
+
+                                                ))}
+
+                                            </select>
+
+                                            <select
+                                                value={col.relation?.relation_type || "many_to_one"}
+                                                onChange={(e) => {
+                                                    const copy = [...columns];
+
+                                                    if (!copy[index].relation) {
+                                                        copy[index].relation = {
+                                                            table_id: "",
+                                                            relation_type: "many_to_one",
+                                                            display_column: "",
+                                                        };
+                                                    }
+
+                                                    copy[index].relation.relation_type = e.target.value;
+
+                                                    setColumns(copy);
+                                                }}
+                                                className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs"
+                                            >
+
+                                                <option value="one_to_one">
+                                                    One To One
+                                                </option>
+
+                                                <option value="one_to_many">
+                                                    One To Many
+                                                </option>
+
+                                                <option value="many_to_one">
+                                                    Many To One
+                                                </option>
+
+                                                <option value="many_to_many">
+                                                    Many To Many
+                                                </option>
+
+                                            </select>
+
+                                        </div>
+
+                                    )}
+
                                     {/* مصفوفة تحكم الصلاحيات الديناميكية تظهر حصرياً عند اختيار حقل حساب مستخدم */}
-                                    {col.type === 'user_account' && (
+                                    {fieldSupportsPermissions(col.type) && (
                                         <div className="mt-2 p-3 bg-zinc-900/60 rounded-lg border border-zinc-800 border-dashed text-right animate-fadeIn">
                                             <p className="text-[11px] font-bold text-amber-500 mb-2">🔒 ضبط مصفوفة الصلاحيات الافتراضية لهذا الحساب على الجداول:</p>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto pr-1">

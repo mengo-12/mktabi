@@ -889,6 +889,11 @@ import { useAuth } from '@/context/AuthContext';
 import GlobalDocumentGenerator from '@/components/GlobalDocumentGenerator';
 import ClientDocumentsList from '@/components/ClientDocumentsList';
 import { Plus, Table, Edit, LayoutGrid, Save, Trash2, Settings, X, FileText, Link, Paperclip, ChevronDown, ListPlus, Search, Filter, RefreshCw, ExternalLink, Loader2, Calendar, Wand2, FolderOpen } from 'lucide-react';
+import {
+    FIELD_TYPES,
+    fieldSupportsOptions,
+    fieldSupportsRelation,
+} from "@/constants/fieldTypes";
 
 export default function DynamicSectionPage() {
     const { id: sectionId } = useParams();
@@ -1034,6 +1039,58 @@ export default function DynamicSectionPage() {
         userRole
     ]);
 
+    const getRelationTableId = (column) => {
+        return (
+            column?.relation?.table_id ||
+            column?.relatedTableId ||
+            ""
+        );
+    };
+
+
+    const loadRequiredRelations = async (currentTable) => {
+        if (!currentTable?.columns_definition) return;
+
+        const updatedMap = { ...relationRowsMap };
+
+        const relationCols = currentTable.columns_definition.filter(
+            (col) => col.type === "relation" && getRelationTableId(col)
+        );
+
+        for (const col of relationCols) {
+            const relationTableId = getRelationTableId(col);
+
+            if (!updatedMap[relationTableId]) {
+                const rRows = await dynamicService.getRowsByTable(relationTableId);
+                updatedMap[relationTableId] = rRows || [];
+            }
+        }
+
+        setRelationRowsMap(updatedMap);
+    };
+
+    const getRelationDisplayValue = (column, relatedId) => {
+
+        const relatedTableId = getRelationTableId(column);
+
+        if (!relatedTableId || !relatedId) return "";
+
+        const targetRows = relationRowsMap[relatedTableId] || [];
+
+        const foundRow = targetRows.find(
+            r => String(r.id) === String(relatedId)
+        );
+
+        if (foundRow) {
+            const firstKey = Object.keys(foundRow.cells_data)[0];
+            return foundRow.cells_data[firstKey] || `سجل #${relatedId}`;
+        }
+
+        return `تحميل... (#${relatedId})`;
+    };
+
+
+
     // 🎯 تحديث دالة الصلاحيات لتمرير الأدمن في كل الحالات
     const hasPermission = (action = "read") => {
 
@@ -1091,7 +1148,7 @@ export default function DynamicSectionPage() {
                     const column = activeTable?.columns_definition.find(c => c.id === colId);
                     if (column?.type === 'relation' && Array.isArray(val)) {
                         return val.some(id => {
-                            const name = getRelationDisplayValue(column.relatedTableId, id);
+                            const name = getRelationDisplayValue(col, id)
                             return name.toLowerCase().includes(term);
                         });
                     }
@@ -1111,11 +1168,19 @@ export default function DynamicSectionPage() {
                         if (!filterValue) return true;
                         if (Array.isArray(cellValue)) {
                             return cellValue.some(id => {
-                                const displayName = getRelationDisplayValue(column.relatedTableId, id);
+                                const displayName =
+                                    getRelationDisplayValue(
+                                        column,
+                                        cellValue
+                                    );
                                 return displayName.toLowerCase().includes(String(filterValue).toLowerCase());
                             });
                         }
-                        const displayName = getRelationDisplayValue(column.relatedTableId, cellValue);
+                        const displayName =
+                            getRelationDisplayValue(
+                                column,
+                                cellValue
+                            );
                         return displayName.toLowerCase().includes(String(filterValue).toLowerCase());
                     }
 
@@ -1237,24 +1302,6 @@ export default function DynamicSectionPage() {
             console.error(error);
             return [];
         }
-    };
-
-    const loadRequiredRelations = async (currentTable, allTables) => {
-        if (!currentTable?.columns_definition) return;
-        const relationCols = currentTable.columns_definition.filter(col => col.type === 'relation' && col.relatedTableId);
-
-        const updatedMap = { ...relationRowsMap };
-        for (const col of relationCols) {
-            if (!updatedMap[col.relatedTableId]) {
-                try {
-                    const rRows = await dynamicService.getRowsByTable(col.relatedTableId);
-                    updatedMap[col.relatedTableId] = rRows || [];
-                } catch (err) {
-                    console.error(`خطأ في جلب بيانات الجدول المترابط ${col.relatedTableId}:`, err);
-                }
-            }
-        }
-        setRelationRowsMap(updatedMap);
     };
 
     const handleTableChange = (table) => {
@@ -1616,14 +1663,23 @@ export default function DynamicSectionPage() {
             id: `col_${Date.now()}`,
             name: newColumnName.trim(),
             type: newColumnType,
-            options:
-                newColumnType === "dropdown"
-                    ? dropdownOptions
-                    : undefined,
-            relatedTableId:
-                newColumnType === "relation"
-                    ? selectedRelationTableId
-                    : undefined
+
+            ...(fieldSupportsOptions(newColumnType) && {
+                options: dropdownOptions,
+            }),
+
+            ...(fieldSupportsRelation(newColumnType) && {
+                relation: {
+                    table_id: selectedRelationTableId,
+                    relation_type: "many_to_one",
+                    display_column: ""
+                },
+                relatedTableId: selectedRelationTableId
+            }),
+
+            ...(fieldSupportsPermissions(newColumnType) && {
+                default_permissions: {},
+            }),
         };
 
         setManageColumns([
@@ -1776,19 +1832,6 @@ export default function DynamicSectionPage() {
         }
     };
 
-    const getRelationDisplayValue = (relatedTableId, relatedId) => {
-        if (!relatedTableId || !relatedId) return "";
-
-        const targetRows = relationRowsMap[relatedTableId] || [];
-        const foundRow = targetRows.find(r => String(r.id) === String(relatedId));
-
-        if (foundRow) {
-            const firstKey = Object.keys(foundRow.cells_data)[0];
-            return foundRow.cells_data[firstKey] || `سجل #${relatedId}`;
-        }
-
-        return `تحميل... (#${relatedId})`;
-    };
 
     const getFileNameFromUrl = (url) => {
         if (!url || typeof url !== 'string') {
@@ -2435,7 +2478,7 @@ export default function DynamicSectionPage() {
                                                                                 cellValue.map((id) => (
                                                                                     <span key={id} className="inline-flex items-center gap-1 bg-cyan-950/40 border border-cyan-800/30 text-cyan-400 px-2 py-0.5 rounded text-[10px] underline">
                                                                                         <Link className="w-2.5 h-2.5" />
-                                                                                        {getRelationDisplayValue(col.relatedTableId, id)}
+                                                                                        {getRelationDisplayValue(col, id)}
                                                                                     </span>
                                                                                 ))
                                                                             ) : <span className="text-slate-655 italic text-[11px]">غير مرتبط</span>}
@@ -2519,7 +2562,7 @@ export default function DynamicSectionPage() {
                                                                 row.cells_data[col.id].map((relatedId) => (
                                                                     <span key={relatedId} className="inline-flex items-center gap-1 bg-cyan-950/40 border border-cyan-800/30 text-cyan-400 px-2 py-0.5 rounded text-[11px] underline">
                                                                         <Link className="w-2.5 h-2.5" />
-                                                                        {getRelationDisplayValue(col.relatedTableId, relatedId) || '-'}
+                                                                        {getRelationDisplayValue(col, relatedId) || '-'}
                                                                     </span>
                                                                 ))
                                                             ) : (
@@ -2611,7 +2654,7 @@ export default function DynamicSectionPage() {
                                                                         {Array.isArray(row.cells_data[col.id]) && row.cells_data[col.id].length > 0 ? (
                                                                             row.cells_data[col.id].map(relatedId => (
                                                                                 <strong key={relatedId} className="text-cyan-400 underline font-semibold">
-                                                                                    {getRelationDisplayValue(col.relatedTableId, relatedId) || '-'}
+                                                                                    {getRelationDisplayValue(col, relatedId) || '-'}
                                                                                 </strong>
                                                                             ))
                                                                         ) : '-'}
@@ -2864,6 +2907,7 @@ export default function DynamicSectionPage() {
                                             ) : col.type === 'relation' ? (
                                                 <div className="space-y-1">
                                                     <select
+
                                                         multiple
                                                         value={Array.isArray(rowData[col.id]) ? rowData[col.id] : []}
                                                         disabled={!hasPermission(userRole, "canEditRow")} /* 🔒 قفل علاقات الجداول المزدوجة */
@@ -2873,7 +2917,7 @@ export default function DynamicSectionPage() {
                                                         }}
                                                         className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-cyan-400 font-bold min-h-[100px] focus:outline-none focus:border-cyan-500 disabled:opacity-60 disabled:cursor-not-allowed"
                                                     >
-                                                        {(relationRowsMap[col.relatedTableId] || []).map((rRow) => {
+                                                        {(relationRowsMap[getRelationTableId(col)] || []).map((rRow) => {
                                                             const firstKey = Object.keys(rRow.cells_data)[0];
                                                             return (
                                                                 <option key={rRow.id} value={rRow.id} className="p-1.5 rounded hover:bg-slate-800">
@@ -2881,6 +2925,7 @@ export default function DynamicSectionPage() {
                                                                 </option>
                                                             );
                                                         })}
+
                                                     </select>
                                                     {col.type === 'relation' && hasPermission(userRole, "canEditRow") && (
                                                         <span className="block text-[10px] text-slate-500 mt-1">اضغط مع الاستمرار على Ctrl (أو Cmd في Mac) لاختيار أكثر من سجل.</span>
@@ -3078,15 +3123,14 @@ export default function DynamicSectionPage() {
                                             onChange={(e) => setNewColumnType(e.target.value)}
                                             className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-400 focus:outline-none focus:border-amber-500"
                                         >
-                                            <option value="text">نص ذكي</option>
-                                            <option value="number">أرقام / مبالغ</option>
-                                            <option value="date">تاريخ ووقت</option>
-                                            <option value="dropdown">قائمة منسدلة (Dropdown)</option>
-                                            <option value="attachment">حقل مرفقات وملفات</option>
-                                            <option value="relation">حقل علاقة (Relation 🔗)</option>
-                                            <option value="staff_email">📧 بريد إلكتروني رسمي</option>
-                                            <option value="staff_password">🔒 كلمة مرور مشفرة</option>
-                                            <option value="user_account">👤 حساب وصلاحيات نظام</option>
+                                            {FIELD_TYPES.map((type) => (
+                                                <option
+                                                    key={type.value}
+                                                    value={type.value}
+                                                >
+                                                    {type.label}
+                                                </option>
+                                            ))}
                                         </select>
                                         <button
                                             onClick={handleAddColumnStructure}
@@ -3096,7 +3140,7 @@ export default function DynamicSectionPage() {
                                         </button>
                                     </div>
 
-                                    {newColumnType === 'dropdown' && (
+                                    {fieldSupportsOptions(newColumnType) && (
                                         <div className="p-3 bg-slate-900 rounded-lg border border-slate-800 space-y-2 text-right">
                                             <label className="block text-[10px] text-slate-400 font-bold">خيارات القائمة المنسدلة:</label>
                                             <div className="flex gap-2">
@@ -3124,7 +3168,7 @@ export default function DynamicSectionPage() {
                                         </div>
                                     )}
 
-                                    {(newColumnType === 'relation' || newColumnType === 'user_account') && (
+                                    {(fieldSupportsRelation(newColumnType)) && (
                                         <div className="mt-3 animate-in fade-in duration-200 p-3 bg-slate-900/50 rounded-xl border border-slate-800/60 text-right">
                                             <label className="block text-xs font-bold text-cyan-400 mb-1.5">
                                                 {newColumnType === 'user_account' ? '👤 حدد الجدول الرئيسي لمنح صلاحيات الحساب عليه:' : '🔗 اختر الجدول المرتبط المستهدف (Many-to-Many):'}
