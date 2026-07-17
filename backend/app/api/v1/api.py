@@ -2,7 +2,7 @@
 from fastapi import APIRouter
 from app.api.v1.endpoints import (
     auth, clients, cases, attachments, hearings, 
-    lawyers, visits, analytics, tasks, notifications, dynamic, office_settings
+    lawyers, visits, analytics, tasks, notifications, dynamic, office_settings, report_builder
 )
 
 api_router = APIRouter()
@@ -23,3 +23,6 @@ api_router.include_router(notifications.router, prefix="/notifications", tags=["
 api_router.include_router(dynamic.router, prefix="/dynamic", tags=["Dynamic System OS"])
 # 📄 2. أضف هذا السطر لربط مسار قوالب المستندات وإعدادات المكتب بالسيستم
 api_router.include_router(office_settings.router, prefix="/office-settings", tags=["Office Settings & Document Generation"])
+
+# Report Builder
+api_router.include_router(report_builder.router, prefix="/report-builder", tags=["Report Builder"])
