@@ -73,7 +73,7 @@ export default function QueryCanvas() {
         try {
             const result = await reportBuilderService.runQuery({
                 table_id: selectedTable.id,
-                columns: selectedColumns,
+                columns: selectedColumns.map(column => column.id),
             });
 
             setReportResult(result);
@@ -83,6 +83,30 @@ export default function QueryCanvas() {
         } finally {
             setLoadingPreview(false);
         }
+    };
+
+
+    const renderCellValue = (value) => {
+        if (value == null) return "";
+
+        if (Array.isArray(value)) {
+            return value
+                .map(item => {
+                    if (item && typeof item === "object") {
+                        return item.display || "";
+                    }
+
+                    return String(item);
+                })
+                .filter(Boolean)
+                .join("، ");
+        }
+
+        if (typeof value === "object") {
+            return value.display || "";
+        }
+
+        return String(value);
     };
 
     return (
@@ -388,9 +412,7 @@ export default function QueryCanvas() {
                                                     key={col.id}
                                                     className="border-b border-slate-800 px-3 py-2"
                                                 >
-                                                    {String(
-                                                        row.cells_data?.[col.id] ?? ""
-                                                    )}
+                                                    {renderCellValue(row[col.id])}
                                                 </td>
 
                                             ))}
@@ -437,7 +459,7 @@ export default function QueryCanvas() {
 
                                 <tbody>
 
-                                    {previewRows.map((row) => (
+                                    {reportResult.rows.map((row) => (
 
                                         <tr key={row.id}>
 
@@ -446,10 +468,9 @@ export default function QueryCanvas() {
                                                 <td
                                                     key={col.id}
                                                     className="border px-2 py-1"
+
                                                 >
-                                                    {String(
-                                                        row.cells_data?.[col.id] ?? ""
-                                                    )}
+                                                    {renderCellValue(row[col.id])}
                                                 </td>
 
                                             ))}

@@ -23,6 +23,11 @@ class ReportRunnerService:
         for column in columns_definition:
             columns_map[column["id"]] = column
 
+        relation_cache = await ReportRunnerService.preload_relation_tables(
+            db,
+            columns_map,
+        )
+
         result = await db.execute(
             select(CustomRow).where(CustomRow.table_id == table_id)
         )
@@ -67,8 +72,10 @@ class ReportRunnerService:
                         relation_ids = value if isinstance(value, list) else [value]
 
                         if relation_table_id:
-                            related_rows = await ReportRunnerService.resolve_relation(
-                                db, int(relation_table_id), relation_ids
+                            related_rows = ReportRunnerService.resolve_relation(
+                                relation_cache,
+                                int(relation_table_id),
+                                relation_ids,
                             )
                             item[column["id"]] = related_rows
                         else:
@@ -104,11 +111,13 @@ class ReportRunnerService:
         return lookup
 
     @staticmethod
-    async def resolve_relation(
-        db: AsyncSession, relation_table_id: int, relation_ids: list
+    def resolve_relation(
+        relation_cache: dict,
+        relation_table_id: int,
+        relation_ids: list,
     ):
 
-        lookup = await ReportRunnerService.load_relation_table(db, relation_table_id)
+        lookup = relation_cache.get(relation_table_id)
 
         if not lookup:
             return []
@@ -125,7 +134,6 @@ class ReportRunnerService:
             display = None
 
             for value in row.values():
-
                 if value not in [None, "", []]:
                     display = value
                     break
@@ -133,3 +141,40 @@ class ReportRunnerService:
             results.append({"id": relation_id, "display": display, "data": row})
 
         return results
+
+    @staticmethod
+    async def preload_relation_tables(
+        db: AsyncSession,
+        columns_map: dict,
+    ):
+        """
+        تحميل جميع الجداول المرتبطة مرة واحدة.
+        """
+
+        relation_cache = {}
+
+        for column in columns_map.values():
+
+            if column.get("type") != "relation":
+                continue
+
+            relation_table_id = column.get("relatedTableId") or (
+                column.get("relation") or {}
+            ).get("table_id")
+
+            if not relation_table_id:
+                continue
+
+            relation_table_id = int(relation_table_id)
+
+            if relation_table_id in relation_cache:
+                continue
+
+            relation_cache[relation_table_id] = (
+                await ReportRunnerService.load_relation_table(
+                    db,
+                    relation_table_id,
+                )
+            )
+
+        return relation_cache
