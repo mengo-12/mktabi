@@ -9,23 +9,27 @@ class ReportRunnerService:
     @staticmethod
     async def run_query(db: AsyncSession, payload: dict):
 
+        selected_relations = {
+            relation["column_id"]: relation["table_id"]
+            for relation in payload.get("relations", [])
+        }
+
         table_id = payload.get("table_id")
-        selected_columns = payload.get("columns", [])
 
         table = await db.get(CustomTable, table_id)
 
         if not table:
-            return {"columns": [], "rows": []}
+            return {
+                "table": None,
+                "columns": [],
+                "rows": [],
+            }
 
-        columns_definition = table.columns_definition or []
-        columns_map = {}
-
-        for column in columns_definition:
-            columns_map[column["id"]] = column
+        selected_columns = payload.get("columns", [])
 
         relation_cache = await ReportRunnerService.preload_relation_tables(
             db,
-            columns_map,
+            selected_columns,
         )
 
         result = await db.execute(
@@ -33,15 +37,18 @@ class ReportRunnerService:
         )
 
         rows = result.scalars().all()
+
         response_columns = []
 
-        for column_id in selected_columns:
-            column = columns_map.get(column_id)
-            if not column:
-                continue
+        for column in selected_columns:
 
             response_columns.append(
-                {"id": column["id"], "name": column["name"], "type": column["type"]}
+                {
+                    "id": column["id"],
+                    "name": column["name"],
+                    "type": column["type"],
+                    "path": column.get("path", []),
+                }
             )
 
         response_rows = []
@@ -52,34 +59,48 @@ class ReportRunnerService:
 
             # تم إصلاح المسافات هنا لتدخل داخل حلقة الـ rows والدالة بشكل سليم
             for column in response_columns:
-                value = cells.get(column["id"])
+                if column.get("path"):
+                    value = ReportRunnerService.get_value_by_path(
+                        row,
+                        column["path"],
+                        relation_cache,
+                    )
+                else:
+                    value = cells.get(column["id"])
 
                 # ===========================
                 # Relation Join
                 # ===========================
-                if column["type"] == "relation":
-                    relation_table_id = None
-                    definition = columns_map.get(column["id"])
 
-                    if definition:
-                        relation_table_id = definition.get("relatedTableId") or (
-                            definition.get("relation") or {}
-                        ).get("table_id")
+                if column["type"] == "relation":
+
+                    relation_table_id = None
+
+                    path = column.get("path", [])
+
+                    if len(path) >= 2:
+                        relation_table_id = path[-2].get("relation_table_id")
+
+                    if relation_table_id is None:
+                        relation_table_id = selected_relations.get(column["id"])
 
                     if value is None:
+
                         item[column["id"]] = []
+
                     else:
+
                         relation_ids = value if isinstance(value, list) else [value]
 
                         if relation_table_id:
-                            related_rows = ReportRunnerService.resolve_relation(
+                            item[column["id"]] = ReportRunnerService.resolve_relation(
                                 relation_cache,
                                 int(relation_table_id),
                                 relation_ids,
                             )
-                            item[column["id"]] = related_rows
                         else:
                             item[column["id"]] = relation_ids
+
                 else:
                     item[column["id"]] = value
 
@@ -92,7 +113,10 @@ class ReportRunnerService:
         }
 
     @staticmethod
-    async def load_relation_table(db: AsyncSession, table_id: int):
+    async def load_relation_table(
+        db: AsyncSession,
+        table_id: int,
+    ):
         table = await db.get(CustomTable, table_id)
 
         if not table:
@@ -103,14 +127,10 @@ class ReportRunnerService:
         )
 
         rows = result.scalars().all()
-        lookup = {}
-
-        for row in rows:
-            lookup[row.id] = row.cells_data or {}
 
         return {
             "table": table,
-            "rows": lookup,
+            "objects": {row.id: row for row in rows},
         }
 
     @staticmethod
@@ -125,7 +145,7 @@ class ReportRunnerService:
         if not cache:
             return []
 
-        lookup = cache["rows"]
+        lookup = cache["objects"]
 
         results = []
 
@@ -137,8 +157,8 @@ class ReportRunnerService:
                 continue
 
             display = ReportRunnerService.get_display_value(
-                cache,
-                relation_id,
+                row,
+                cache["table"],
             )
             results.append({"id": relation_id, "display": display, "data": row})
 
@@ -147,7 +167,7 @@ class ReportRunnerService:
     @staticmethod
     async def preload_relation_tables(
         db: AsyncSession,
-        columns_map: dict,
+        selected_columns: list,
     ):
         """
         تحميل جميع الجداول المرتبطة مرة واحدة.
@@ -155,76 +175,102 @@ class ReportRunnerService:
 
         relation_cache = {}
 
-        for column in columns_map.values():
+        for column in selected_columns:
 
-            if column.get("type") != "relation":
-                continue
+            for step in column.get("path", []):
 
-            relation_table_id = column.get("relatedTableId") or (
-                column.get("relation") or {}
-            ).get("table_id")
+                relation_table_id = step.get("relation_table_id")
 
-            if not relation_table_id:
-                continue
+                if not relation_table_id:
+                    continue
 
-            relation_table_id = int(relation_table_id)
+                relation_table_id = int(relation_table_id)
 
-            if relation_table_id in relation_cache:
-                continue
+                if relation_table_id in relation_cache:
+                    continue
 
-            relation_cache[relation_table_id] = (
-                await ReportRunnerService.load_relation_table(
+                cache = await ReportRunnerService.load_relation_table(
                     db,
                     relation_table_id,
                 )
-            )
+
+                if cache:
+                    relation_cache[relation_table_id] = cache
 
         return relation_cache
 
+    @staticmethod
+    def get_display_value(row, table):
+        """
+        إرجاع قيمة العرض (display_value) لأي سجل اعتماداً على display_column
+        """
 
-@staticmethod
-def get_display_value(
-    cache: dict,
-    relation_id: int,
-):
-    """
-    تحديد القيمة المعروضة للسجل المرتبط.
-    """
+        if row is None:
+            return ""
 
-    table = cache["table"]
-    lookup = cache["rows"]
+        cells = row.cells_data or {}
 
-    row = lookup.get(int(relation_id))
+        # إذا كان الجدول لا يملك display_column
+        if not table or not table.display_column:
+            if cells:
+                first_key = next(iter(cells))
+                value = cells.get(first_key)
+                return "" if value is None else str(value)
+            return ""
 
-    if not row:
+        value = cells.get(table.display_column)
+
+        if value is None:
+            return ""
+
+        return str(value)
+
+    @staticmethod
+    def get_value_by_path(
+        root_row,
+        path: list,
+        relation_cache: dict,
+    ):
+        """
+        استخراج قيمة عمود من أي مستوى من العلاقات.
+        """
+
+        current_row = root_row
+
+        i = 0
+
+        while i < len(path):
+
+            step = path[i]
+
+            # آخر خطوة = العمود المطلوب
+            if i == len(path) - 1:
+                return (current_row.cells_data or {}).get(step["column_id"])
+
+            relation_column = step["column_id"]
+
+            relation_info = path[i + 1]
+
+            relation_table_id = relation_info["relation_table_id"]
+
+            relation_value = (current_row.cells_data or {}).get(relation_column)
+
+            if relation_value is None:
+                return None
+
+            if isinstance(relation_value, list):
+                relation_value = relation_value[0]
+
+            cache = relation_cache.get(int(relation_table_id))
+
+            if not cache:
+                return None
+
+            current_row = cache["objects"].get(int(relation_value))
+
+            if current_row is None:
+                return None
+
+            i += 2
+
         return None
-
-    # استخدام Display Column إذا كان محدداً
-    display_column = getattr(table, "display_column", None)
-
-    if display_column:
-        value = row.get(display_column)
-
-        if value not in [None, "", []]:
-            return value
-
-    # أولاً: الحقل المسمى name
-    for key, value in row.items():
-        if key.lower() == "name" and value not in [None, "", []]:
-            return value
-
-    # ثانياً: العمود c1 (غالباً اسم السجل)
-    if row.get("c1") not in [None, "", []]:
-        return row["c1"]
-
-    # ثالثاً: أول قيمة نصية
-    for value in row.values():
-        if isinstance(value, str) and value.strip():
-            return value
-
-    # رابعاً: أول قيمة غير فارغة
-    for value in row.values():
-        if value not in [None, "", []]:
-            return value
-
-    return relation_id

@@ -49,6 +49,8 @@ const useReportStore = create((set) => ({
 
     selectedColumn: null,
 
+    selectedRelations: [],
+
     reportResult: null,
 
     // -------------------------
@@ -206,6 +208,45 @@ const useReportStore = create((set) => ({
 
     },
 
+    toggleRelation(relation) {
+
+    set((state) => {
+
+        const exists =
+            state.selectedRelations.find(
+                r => String(r.column.id) === String(relation.column.id)
+            );
+
+        if (exists) {
+
+            return {
+
+                selectedRelations:
+
+                    state.selectedRelations.filter(
+                        r => String(r.column.id) !== String(relation.column.id)
+                    )
+
+            };
+
+        }
+
+        return {
+
+            selectedRelations: [
+
+                ...state.selectedRelations,
+
+                relation
+
+            ]
+
+        };
+
+    });
+
+},
+
     // -------------------------
     // تغيير نوع العرض
     // -------------------------
@@ -237,6 +278,7 @@ const useReportStore = create((set) => ({
     // -------------------------
 
     resetReport() {
+        
 
         set({
 
@@ -246,7 +288,9 @@ const useReportStore = create((set) => ({
 
             selectedSection: null,
 
-            selectedColumn: null
+            selectedColumn: null,
+
+            selectedRelations: [],
 
         });
 

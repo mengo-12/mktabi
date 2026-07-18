@@ -23,7 +23,10 @@ export default function QueryCanvas() {
         report,
         toggleColumn,
         reportResult,
-        setReportResult
+        setReportResult,
+        selectedRelations,
+        toggleRelation,
+        dataSources
     } = useReportStore();
 
     // لا يوجد جدول محدد
@@ -31,13 +34,52 @@ export default function QueryCanvas() {
         return <EmptyCanvas />;
     }
 
-    const columns =
-        selectedTable.columns ||
-        selectedTable.columns_definition ||
-        [];
+    const flattenColumns = (table, prefix = "") => {
+        if (!table) return [];
+
+        const result = [];
+
+        for (const column of table.columns || []) {
+
+            result.push({
+                ...column,
+                label: prefix
+                    ? `${prefix} → ${column.label || column.name}}`
+                    : column.name,
+            });
+
+            if (column.type === "relation") {
+
+                const childTable =
+                    table.relations?.find(
+                        r => String(r.column_id) === String(column.id)
+                    )?.table;
+
+                if (childTable) {
+
+                    result.push(
+                        ...flattenColumns(
+                            childTable,
+                            prefix
+                                ? `${prefix} → ${column.label || column.name}`
+                                : column.name
+                        )
+                    );
+
+                }
+
+            }
+
+        }
+
+        return result;
+    };
+
+    const columns = flattenColumns(selectedTable);
 
     const selectedColumns =
         report.query.columns || [];
+
 
     const isSelected = (columnId) => {
         return selectedColumns.some(
@@ -71,10 +113,26 @@ export default function QueryCanvas() {
         setLoadingPreview(true);
 
         try {
-            const result = await reportBuilderService.runQuery({
+            const payload = {
                 table_id: selectedTable.id,
-                columns: selectedColumns.map(column => column.id),
-            });
+
+                columns: selectedColumns.map((column) => ({
+                    id: column.id,
+                    name: column.name,
+                    type: column.type,
+                    path: column.path || [],
+                })),
+
+                relations: selectedRelations.map((relation) => ({
+                    column_id: relation.column.id,
+                    table_id:
+                        relation.table?.id ??
+                        relation.column.relatedTableId ??
+                        relation.column.relation?.table_id,
+                })),
+            };
+
+            const result = await reportBuilderService.runQuery(payload);
 
             setReportResult(result);
             setPreviewRows(result.rows || []);
@@ -108,6 +166,16 @@ export default function QueryCanvas() {
 
         return String(value);
     };
+
+    const relationColumns =
+
+        columns.filter(
+
+            col =>
+
+                col.type === "relation"
+
+        );
 
     return (
         <div className="h-full flex flex-col overflow-hidden">
@@ -169,7 +237,7 @@ export default function QueryCanvas() {
                             return (
 
                                 <button
-                                    key={column.id}
+                                    key={`${column.id}-${JSON.stringify(column.path || [])}`}
                                     type="button"
                                     onClick={() =>
                                         toggleColumn(column)
@@ -208,7 +276,7 @@ export default function QueryCanvas() {
 
                                         <div className="text-sm font-medium text-white">
 
-                                            {column.name}
+                                            {column.label || column.name}
 
                                         </div>
 
@@ -261,7 +329,7 @@ export default function QueryCanvas() {
                             {selectedColumns.map((column) => (
 
                                 <div
-                                    key={column.id}
+                                    key={`${column.id}-${JSON.stringify(column.path || [])}`}
                                     className="
                                         px-3
                                         py-1.5
@@ -275,7 +343,7 @@ export default function QueryCanvas() {
                                     "
                                 >
 
-                                    {column.name}
+                                    {column.label || column.name}
 
                                 </div>
 
@@ -305,10 +373,126 @@ export default function QueryCanvas() {
                     title="Relations"
                     description="ربط الجدول الحالي بالجداول الأخرى."
                 >
-                    <div className="text-slate-500 text-sm">
-                        لم تتم إضافة أي علاقة.
+                    <div className="space-y-3">
+
+                        {
+
+                            relationColumns.length === 0 ?
+
+                                (
+
+                                    <div className="text-sm text-slate-500">
+
+                                        لا يحتوي هذا الجدول على أي علاقات.
+
+                                    </div>
+
+                                )
+
+                                :
+
+                                relationColumns.map((column) => {
+
+                                    const relationTableId =
+
+                                        column.relatedTableId ||
+
+                                        column.relation?.table_id;
+
+                                    const relatedTable =
+
+                                        dataSources
+                                            .flatMap(section => section.tables || [])
+                                            .find(
+                                                table =>
+                                                    String(table.id) === String(relationTableId)
+                                            );
+
+                                    const checked =
+
+                                        selectedRelations.some(
+
+                                            r =>
+
+                                                String(r.column.id) === String(column.id)
+
+                                        );
+
+                                    return (
+
+                                        <label
+                                            key={column.id}
+                                            className="
+                            flex
+                            items-center
+                            justify-between
+                            rounded-lg
+                            border
+                            border-slate-800
+                            bg-slate-900
+                            px-4
+                            py-3
+                            cursor-pointer
+                        "
+                                        >
+
+                                            <div>
+
+                                                <div className="text-white text-sm">
+
+                                                    {column.label || column.name}
+
+                                                </div>
+
+                                                <div className="text-xs text-slate-500">
+
+                                                    →
+
+                                                    {
+
+                                                        relatedTable?.name ||
+
+                                                        `جدول #${relationTableId}`
+
+                                                    }
+
+                                                </div>
+
+                                            </div>
+
+                                            <input
+
+                                                type="checkbox"
+
+                                                checked={checked}
+
+                                                onChange={() =>
+
+                                                    toggleRelation({
+
+                                                        column,
+
+                                                        table: relatedTable
+
+                                                    })
+
+                                                }
+
+                                            />
+
+                                        </label>
+
+                                    );
+
+                                })
+
+                        }
+
                     </div>
                 </SectionCard>
+
+
+
 
                 {/* ================= group by ================= */}
 
@@ -385,7 +569,7 @@ export default function QueryCanvas() {
                                         {selectedColumns.map(col => (
 
                                             <th
-                                                key={col.id}
+                                                key={`${col.id}-${JSON.stringify(col.path || [])}`}
                                                 className="border-b border-slate-800 px-3 py-2 text-left"
                                             >
                                                 {col.name}
@@ -409,7 +593,7 @@ export default function QueryCanvas() {
                                             {selectedColumns.map(col => (
 
                                                 <td
-                                                    key={col.id}
+                                                    key={`${col.id}-${JSON.stringify(col.path || [])}`}
                                                     className="border-b border-slate-800 px-3 py-2"
                                                 >
                                                     {renderCellValue(row[col.id])}
@@ -448,7 +632,7 @@ export default function QueryCanvas() {
                                     <tr>
                                         {selectedColumns.map(col => (
                                             <th
-                                                key={col.id}
+                                                key={`${col.id}-${JSON.stringify(col.path || [])}`}
                                                 className="border px-2 py-1 text-left"
                                             >
                                                 {col.name}
@@ -466,7 +650,7 @@ export default function QueryCanvas() {
                                             {selectedColumns.map(col => (
 
                                                 <td
-                                                    key={col.id}
+                                                    key={`${col.id}-${JSON.stringify(col.path || [])}`}
                                                     className="border px-2 py-1"
 
                                                 >
