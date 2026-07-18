@@ -58,7 +58,8 @@ export const dynamicService = {
             columns_definition: columnsDefinition,
             view_mode: viewMode,
             is_staff_table: options.is_staff_table ?? false,
-            calendar_mapping: options.calendar_mapping ?? null
+            calendar_mapping: options.calendar_mapping ?? null,
+            display_column: options.display_column ?? null
         });
 
         return response.data;
@@ -76,7 +77,8 @@ export const dynamicService = {
             columns_definition: columnsDefinition,
             default_view: viewMode,
             is_staff_table: options.is_staff_table ?? false,
-            calendar_mapping: options.calendar_mapping ?? null
+            calendar_mapping: options.calendar_mapping ?? null,
+            display_column: options.display_column ?? null
         });
 
         return response.data;

@@ -108,7 +108,10 @@ class ReportRunnerService:
         for row in rows:
             lookup[row.id] = row.cells_data or {}
 
-        return lookup
+        return {
+            "table": table,
+            "rows": lookup,
+        }
 
     @staticmethod
     def resolve_relation(
@@ -117,10 +120,12 @@ class ReportRunnerService:
         relation_ids: list,
     ):
 
-        lookup = relation_cache.get(relation_table_id)
+        cache = relation_cache.get(relation_table_id)
 
-        if not lookup:
+        if not cache:
             return []
+
+        lookup = cache["rows"]
 
         results = []
 
@@ -131,13 +136,10 @@ class ReportRunnerService:
             if not row:
                 continue
 
-            display = None
-
-            for value in row.values():
-                if value not in [None, "", []]:
-                    display = value
-                    break
-
+            display = ReportRunnerService.get_display_value(
+                cache,
+                relation_id,
+            )
             results.append({"id": relation_id, "display": display, "data": row})
 
         return results
@@ -178,3 +180,51 @@ class ReportRunnerService:
             )
 
         return relation_cache
+
+
+@staticmethod
+def get_display_value(
+    cache: dict,
+    relation_id: int,
+):
+    """
+    تحديد القيمة المعروضة للسجل المرتبط.
+    """
+
+    table = cache["table"]
+    lookup = cache["rows"]
+
+    row = lookup.get(int(relation_id))
+
+    if not row:
+        return None
+
+    # استخدام Display Column إذا كان محدداً
+    display_column = getattr(table, "display_column", None)
+
+    if display_column:
+        value = row.get(display_column)
+
+        if value not in [None, "", []]:
+            return value
+
+    # أولاً: الحقل المسمى name
+    for key, value in row.items():
+        if key.lower() == "name" and value not in [None, "", []]:
+            return value
+
+    # ثانياً: العمود c1 (غالباً اسم السجل)
+    if row.get("c1") not in [None, "", []]:
+        return row["c1"]
+
+    # ثالثاً: أول قيمة نصية
+    for value in row.values():
+        if isinstance(value, str) and value.strip():
+            return value
+
+    # رابعاً: أول قيمة غير فارغة
+    for value in row.values():
+        if value not in [None, "", []]:
+            return value
+
+    return relation_id

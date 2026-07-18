@@ -593,6 +593,7 @@ export default function SystemBuilderPage() {
     const [newOptionInput, setNewOptionInput] = useState("");
 
     const [selectedRelationTableId, setSelectedRelationTableId] = useState("");
+    const [displayColumn, setDisplayColumn] = useState("");
 
     // استخراج كافة الجداول الفرعية من كافة الأقسام لتغذية مصفوفة الصلاحيات الديناميكية
     const allAvailableTables = (sections || [])
@@ -803,14 +804,16 @@ export default function SystemBuilderPage() {
         try {
             // تضمين خاصية جدول الموظفين وحالة الصلاحيات بداخل الـ Payload المرسل للسيرفر
             if (editingTableId) {
-                await dynamicService.updateTable(editingTableId, tableName, columns, viewMode, { is_staff_table: isStaffTable, calendar_mapping: calendarMapping });
+                await dynamicService.updateTable(editingTableId, tableName, columns, viewMode, { is_staff_table: isStaffTable, calendar_mapping: calendarMapping, display_column: displayColumn, });
                 alert("تم تحديث هيكل الجدول بنجاح! 🔄");
             } else {
-                await dynamicService.createTable(selectedSectionId, tableName, columns, viewMode, { is_staff_table: isStaffTable, calendar_mapping: calendarMapping });
+                await dynamicService.createTable(selectedSectionId, tableName, columns, viewMode, { is_staff_table: isStaffTable, calendar_mapping: calendarMapping, display_column: displayColumn, });
                 alert("تم إنشاء وتثبيت الجدول الجديد بنجاح! 🚀");
             }
 
             setTableName('');
+
+            setDisplayColumn("");
 
             setColumns([
                 {
@@ -874,6 +877,8 @@ export default function SystemBuilderPage() {
 
             if (editingTableId === tableId) {
                 setTableName('');
+                setDisplayColumn("");
+
                 setColumns([{
                     id: `c-${Date.now()}`,
                     name: "",
@@ -918,7 +923,9 @@ export default function SystemBuilderPage() {
 
     const handleSelectTableForEdit = (table) => {
         setEditingTableId(table.id);
-        setTableName(table.name);
+        setTableName(table.name || "");
+        setDisplayColumn(table.display_column ?? "");
+
         setColumns(table.columns_definition || [{
             id: `c-${Date.now()}`,
             name: "",
@@ -1491,6 +1498,38 @@ export default function SystemBuilderPage() {
                                 <option value="grid">🎴 عرض بطاقات</option>
                                 <option value="list">📝 عرض قائمة</option>
                             </select>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 mb-6">
+
+                            <div className="space-y-2">
+                                <label className="text-sm text-zinc-300">
+                                    عمود العرض (Display Column)
+                                </label>
+
+                                <select
+                                    value={displayColumn ?? ""}
+                                    onChange={(e) => setDisplayColumn(e.target.value)}
+                                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-sm text-zinc-100"
+                                >
+                                    <option value="">
+                                        اختر عمود العرض
+                                    </option>
+
+                                    {columns.map((column) => (
+                                        <option
+                                            key={column.id}
+                                            value={column.id}
+                                        >
+                                            {column.name}
+                                        </option>
+                                    ))}
+                                </select>
+
+                                <p className="text-xs text-zinc-500">
+                                    هذا العمود سيستخدم عند عرض السجل في جميع حقول العلاقات والتقارير.
+                                </p>
+                            </div>
                         </div>
 
                         {/* 👇 المكون المحدث: تفعيل وربط الـ Checkbox مع الـ State بنجاح */}
