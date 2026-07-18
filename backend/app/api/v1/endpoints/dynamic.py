@@ -405,6 +405,14 @@ async def get_table_rows(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+
+    table_result = await db.execute(
+        select(CustomTable).where(CustomTable.id == table_id)
+    )
+
+    table = table_result.scalar_one_or_none()
+
+    display_column = table.display_column if table else None
     # 🔒 [قفل أمان موحد]: فحص صلاحية القراءة ومنع الـ hidden
     check_dynamic_permission(current_user, table_id, required_level="read")
 
@@ -413,7 +421,42 @@ async def get_table_rows(
         .filter(CustomRow.table_id == table_id)
         .order_by(CustomRow.id.asc())
     )
-    return result.scalars().all()
+    rows = result.scalars().all()
+
+    response = []
+
+    for row in rows:
+
+        display_value = ""
+
+        if row.cells_data:
+
+            # إذا تم اختيار Display Column
+            if display_column and display_column in row.cells_data:
+                value = row.cells_data.get(display_column)
+
+                if value not in (None, ""):
+                    display_value = str(value)
+
+            # إذا لم يتم اختيار Display Column أو كانت قيمته فارغة
+            if not display_value:
+                first_value = next(iter(row.cells_data.values()), None)
+
+                if first_value not in (None, ""):
+                    display_value = str(first_value)
+                else:
+                    display_value = f"سجل #{row.id}"
+
+        response.append(
+            {
+                "id": row.id,
+                "table_id": row.table_id,
+                "cells_data": row.cells_data,
+                "display_value": display_value,
+            }
+        )
+
+    return response
 
 
 @router.put("/rows/{row_id}", response_model=RowResponse)

@@ -1081,12 +1081,15 @@ export default function DynamicSectionPage() {
             r => String(r.id) === String(relatedId)
         );
 
-        if (foundRow) {
-            const firstKey = Object.keys(foundRow.cells_data)[0];
-            return foundRow.cells_data[firstKey] || `سجل #${relatedId}`;
+        if (!foundRow) {
+            return `تحميل... (#${relatedId})`;
         }
 
-        return `تحميل... (#${relatedId})`;
+        return (
+            foundRow.display_value ||
+            Object.values(foundRow.cells_data || {})[0] ||
+            `سجل #${relatedId}`
+        );
     };
 
 
@@ -2917,14 +2920,15 @@ export default function DynamicSectionPage() {
                                                         }}
                                                         className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-cyan-400 font-bold min-h-[100px] focus:outline-none focus:border-cyan-500 disabled:opacity-60 disabled:cursor-not-allowed"
                                                     >
-                                                        {(relationRowsMap[getRelationTableId(col)] || []).map((rRow) => {
-                                                            const firstKey = Object.keys(rRow.cells_data)[0];
-                                                            return (
-                                                                <option key={rRow.id} value={rRow.id} className="p-1.5 rounded hover:bg-slate-800">
-                                                                    🔗 {rRow.cells_data[firstKey] || `سجل #${rRow.id}`}
-                                                                </option>
-                                                            );
-                                                        })}
+                                                        {(relationRowsMap[getRelationTableId(col)] || []).map((rRow) => (
+                                                            <option
+                                                                key={rRow.id}
+                                                                value={rRow.id}
+                                                                className="p-1.5 rounded hover:bg-slate-800"
+                                                            >
+                                                                🔗 {rRow.display_value || `سجل #${rRow.id}`}
+                                                            </option>
+                                                        ))}
 
                                                     </select>
                                                     {col.type === 'relation' && hasPermission(userRole, "canEditRow") && (

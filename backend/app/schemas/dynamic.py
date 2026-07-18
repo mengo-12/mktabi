@@ -82,6 +82,9 @@ class RowCreate(BaseModel):
 class RowResponse(RowCreate):
     id: int
 
+    # القيمة التي ستستخدم لعرض السجل داخل حقول العلاقات
+    display_value: Optional[str] = None
+
     class Config:
         from_attributes = True
 
