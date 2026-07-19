@@ -1,6 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.report_builder import ReportBuilder
 
 from app.models.dynamic import CustomSection, CustomTable
 
@@ -142,3 +143,14 @@ class ReportBuilderService:
             "columns": columns,
             "relations": relations,
         }
+
+    @staticmethod
+    async def get_reports(
+        db: AsyncSession,
+    ):
+        result = await db.execute(
+            select(ReportBuilder)
+            .order_by(ReportBuilder.created_at.desc())
+        )
+
+        return result.scalars().all()

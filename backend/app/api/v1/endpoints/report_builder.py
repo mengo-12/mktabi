@@ -12,6 +12,13 @@ from app.services.report_runner_service import ReportRunnerService
 router = APIRouter()
 
 
+@router.get("/")
+async def get_reports(
+    db: AsyncSession = Depends(get_db),
+):
+    return await ReportBuilderService.get_reports(db)
+
+
 @router.get("/datasources")
 async def get_datasources(db: AsyncSession = Depends(get_db)):
 

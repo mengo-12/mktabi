@@ -2,7 +2,7 @@
 from fastapi import APIRouter
 from app.api.v1.endpoints import (
     auth, clients, cases, attachments, hearings, 
-    lawyers, visits, analytics, tasks, notifications, dynamic, office_settings, report_builder, dashboard
+    lawyers, visits, analytics, tasks, notifications, dynamic, office_settings, report_builder, dashboard, dashboard_widget
 )
 
 api_router = APIRouter()
@@ -28,3 +28,5 @@ api_router.include_router(office_settings.router, prefix="/office-settings", tag
 api_router.include_router(report_builder.router, prefix="/report-builder", tags=["Report Builder"])
 
 api_router.include_router(dashboard.router, prefix="/dashboards", tags=["Dashboard Builder"],)
+
+api_router.include_router(dashboard_widget.router,prefix="/dashboard-widgets",tags=["Dashboard Widgets"],)
