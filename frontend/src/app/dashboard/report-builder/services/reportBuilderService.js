@@ -13,6 +13,17 @@ const reportBuilderService = {
         );
 
         return data;
+    },
+
+    async createReport(payload) {
+
+        const { data } = await apiClient.post(
+            "/report-builder/",
+            payload
+        );
+
+        return data;
+
     }
 };
 

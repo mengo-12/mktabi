@@ -9,13 +9,19 @@ import {
     Database,
     CheckSquare,
     Square,
-    Columns3
+    Columns3,
+    Save
 } from "lucide-react";
 
 export default function QueryCanvas() {
 
     const [previewRows, setPreviewRows] = useState([]);
     const [loadingPreview, setLoadingPreview] = useState(false);
+
+    const [saveModalOpen, setSaveModalOpen] = useState(false);
+    const [reportName, setReportName] = useState("");
+    const [reportDescription, setReportDescription] = useState("");
+    const [saving, setSaving] = useState(false);
 
 
     const {
@@ -26,7 +32,7 @@ export default function QueryCanvas() {
         setReportResult,
         selectedRelations,
         toggleRelation,
-        dataSources
+        dataSources,
     } = useReportStore();
 
     // لا يوجد جدول محدد
@@ -130,6 +136,7 @@ export default function QueryCanvas() {
                         relation.column.relatedTableId ??
                         relation.column.relation?.table_id,
                 })),
+
             };
 
             const result = await reportBuilderService.runQuery(payload);
@@ -141,6 +148,50 @@ export default function QueryCanvas() {
         } finally {
             setLoadingPreview(false);
         }
+    };
+
+    const saveReport = async () => {
+
+        if (!reportName.trim()) {
+            alert("أدخل اسم التقرير");
+            return;
+        }
+
+        setSaving(true);
+
+        try {
+
+            const payload = {
+                table_id: selectedTable.id,
+                columns: selectedColumns.map(column => ({
+                    id: column.id,
+                    name: column.name,
+                    type: column.type,
+                    path: column.path || [],
+                })),
+                relations: selectedRelations.map(relation => ({
+                    column_id: relation.column.id,
+                    table_id:
+                        relation.table?.id ??
+                        relation.column.relatedTableId ??
+                        relation.column.relation?.table_id,
+                })),
+            };
+            await reportBuilderService.createReport(payload);
+
+            setSaveModalOpen(false);
+            setReportName("");
+            setReportDescription("");
+
+            alert("تم حفظ التقرير");
+
+        } catch (e) {
+            console.error(e);
+            alert("فشل الحفظ");
+        } finally {
+            setSaving(false);
+        }
+
     };
 
 
@@ -205,6 +256,14 @@ export default function QueryCanvas() {
                         className="px-4 py-2 rounded bg-blue-600 text-white"
                     >
                         تشغيل التقرير
+                    </button>
+
+                    <button
+                        onClick={() => setSaveModalOpen(true)}
+                        className="px-4 py-2 rounded bg-green-600 text-white flex items-center gap-2"
+                    >
+                        <Save size={18} />
+                        حفظ التقرير
                     </button>
 
                 </div>
@@ -492,8 +551,6 @@ export default function QueryCanvas() {
                 </SectionCard>
 
 
-
-
                 {/* ================= group by ================= */}
 
 
@@ -674,6 +731,64 @@ export default function QueryCanvas() {
                 )}
 
             </div>
+
+            {
+                saveModalOpen && (
+
+                    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+
+                        <div className="bg-slate-900 rounded-xl w-[500px] p-6">
+
+                            <h2 className="text-white text-xl font-bold mb-6">
+                                حفظ التقرير
+                            </h2>
+
+                            <input
+                                className="w-full mb-4 rounded bg-slate-800 border border-slate-700 px-3 py-2 text-white"
+                                placeholder="اسم التقرير"
+                                value={reportName}
+                                onChange={(e) =>
+                                    setReportName(e.target.value)
+                                }
+                            />
+
+                            <textarea
+                                className="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-white"
+                                rows={4}
+                                placeholder="وصف التقرير"
+                                value={reportDescription}
+                                onChange={(e) =>
+                                    setReportDescription(e.target.value)
+                                }
+                            />
+
+                            <div className="flex justify-end gap-3 mt-6">
+
+                                <button
+                                    onClick={() =>
+                                        setSaveModalOpen(false)
+                                    }
+                                    className="px-4 py-2 rounded bg-slate-700 text-white"
+                                >
+                                    إلغاء
+                                </button>
+
+                                <button
+                                    disabled={saving}
+                                    onClick={saveReport}
+                                    className="px-4 py-2 rounded bg-green-600 text-white"
+                                >
+                                    {saving ? "جاري الحفظ..." : "حفظ"}
+                                </button>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                )
+            }
 
         </div>
     );

@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from typing import List, Dict, Any, Optional
 
 
@@ -60,3 +61,21 @@ class ReportRunRequest(BaseModel):
     table_id: int
     columns: List[ReportColumn]
     relations: List[RelationRequest] = []
+    visualization: dict[str, Any] | None = None
+
+class ReportBuilderResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    description: str | None = None
+    section_id: int | None = None
+    base_table_id: int
+    config: dict = {}
+
+class ReportBuilderCreate(BaseModel):
+    name: str
+    description: str | None = None
+    section_id: int | None = None
+    base_table_id: int
+    config: dict

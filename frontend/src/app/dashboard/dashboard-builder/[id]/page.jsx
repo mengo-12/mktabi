@@ -2,15 +2,37 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import {
-    Plus,
-    ArrowRight,
-} from "lucide-react";
-
 import Link from "next/link";
+import apiClient from "@/services/apiClient";
+import reportService from "../services/reportService";
+
+import { Plus, ArrowRight, } from "lucide-react";
+
+import dashboardWidgetService from "../services/dashboardWidgetService";
 import dashboardService from "../services/dashboardService";
 
+import {
+    BarChart,
+    Bar,
+    LineChart,
+    Line,
+    PieChart,
+    Pie,
+    Cell,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer
+} from "recharts";
+
 export default function DashboardCanvasPage() {
+
+    const [isWidgetModalOpen, setIsWidgetModalOpen] = useState(false);
+
+    const [reports, setReports] = useState([]);
+
+    const [widgetForm, setWidgetForm] = useState({ title: "", widget_type: "table", report_id: "", });
 
     const { id } = useParams();
 
@@ -18,11 +40,43 @@ export default function DashboardCanvasPage() {
 
     const [loading, setLoading] = useState(true);
 
+    const [widgets, setWidgets] = useState([]);
+
     useEffect(() => {
 
         loadDashboard();
 
     }, [id]);
+
+
+    const loadWidgets = async () => {
+
+        try {
+
+            const data =
+                await dashboardWidgetService.getWidgets(
+                    dashboard.id
+                );
+
+            setWidgets(data);
+
+        } catch (err) {
+
+            console.error(err);
+
+        }
+
+    };
+
+
+    const loadReports = async () => {
+        try {
+            const data = await reportService.getReports();
+            setReports(data);
+        } catch (err) {
+            console.error(err);
+        }
+    };
 
     const loadDashboard = async () => {
 
@@ -40,6 +94,29 @@ export default function DashboardCanvasPage() {
         } finally {
 
             setLoading(false);
+
+        }
+
+    };
+
+    const createWidget = async () => {
+
+        try {
+
+            await dashboardWidgetService.createWidget({
+                dashboard_id: dashboard.id,
+                title: widgetForm.title,
+                widget_type: widgetForm.widget_type,
+                report_id: Number(widgetForm.report_id),
+            });
+
+            setIsWidgetModalOpen(false);
+
+            loadWidgets();
+
+        } catch (err) {
+
+            console.error(err);
 
         }
 
@@ -65,95 +142,279 @@ export default function DashboardCanvasPage() {
 
     }
 
+
     return (
 
-        <div className="mr-64 p-6 space-y-6">
+        <div className="mr-64 p-6 space-y-6"><div className="flex items-center justify-between">
 
-            <div className="flex items-center justify-between">
+            <div>
 
-                <div>
+                <div className="flex items-center gap-3">
 
-                    <div className="flex items-center gap-3">
+                    <Link
+                        href="/dashboard/dashboard-builder"
+                        className="p-2 rounded-lg border"
+                    >
+                        <ArrowRight size={18} />
+                    </Link>
 
-                        <Link
-                            href="/dashboard/dashboard-builder"
-                            className="p-2 rounded-lg border"
-                        >
-                            <ArrowRight size={18} />
-                        </Link>
+                    <div
+                        className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl"
+                        style={{ background: dashboard.color }}
+                    >
+                        {dashboard.icon}
+                    </div>
 
-                        <div
-                            className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl"
-                            style={{
-                                background: dashboard.color,
-                            }}
-                        >
-                            {dashboard.icon}
-                        </div>
+                    <div>
 
-                        <div>
+                        <h1 className="text-2xl font-bold">
+                            {dashboard.name}
+                        </h1>
 
-                            <h1 className="text-2xl font-bold">
+                        <p className="text-slate-500">
+                            {dashboard.description}
+                        </p>
 
-                                {dashboard.name}
+                    </div>
 
-                            </h1>
+                </div>
 
-                            <p className="text-slate-500">
+            </div>
 
-                                {dashboard.description}
+            <button
+                onClick={async () => {
 
+                    await loadReports();
+
+                    setWidgetForm({
+                        title: "",
+                        widget_type: "table",
+                        report_id: "",
+                    });
+
+                    setIsWidgetModalOpen(true);
+
+                }}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white flex items-center gap-2"
+            >
+                <Plus size={18} />
+                Add Widget
+            </button>
+
+        </div>
+
+            <div className="grid grid-cols-12 gap-5">
+
+                {widgets.length === 0 && (
+
+                    <div
+                        className="
+                col-span-12
+                rounded-xl
+                border-2
+                border-dashed
+                border-slate-700
+                h-[500px]
+                flex
+                items-center
+                justify-center
+            "
+                    >
+
+                        <div className="text-center">
+
+                            <div className="text-6xl mb-5">
+                                📊
+                            </div>
+
+                            <h2 className="text-xl font-semibold">
+                                Dashboard Canvas
+                            </h2>
+
+                            <p className="text-slate-500 mt-2">
+                                لا توجد Widgets حتى الآن
                             </p>
 
                         </div>
 
                     </div>
 
-                </div>
+                )}
 
-                <button
-                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white"
-                >
-                    <Plus size={18} />
+                {widgets.map(widget => (
 
-                    Add Widget
+                    <div
+                        key={widget.id}
+                        className="col-span-12 rounded-xl border border-slate-800 bg-slate-900"
+                    >
 
-                </button>
+                        <div className="px-5 py-3 border-b border-slate-800 font-semibold">
 
-            </div>
+                            {widget.title}
 
-            <div
-                className="
-                    rounded-xl
-                    border-2
-                    border-dashed
-                    border-slate-700
-                    h-[700px]
-                    flex
-                    items-center
-                    justify-center
-                "
-            >
+                        </div>
 
-                <div className="text-center">
+                        <div className="p-5">
 
-                    <div className="text-6xl mb-5">
+                            {widget.widget_type === "table" ? (
 
-                        📊
+                                <TableWidget widget={widget} />
+
+                            ) : (
+
+                                <ChartLoader widget={widget} />
+
+                            )}
+                            {/*                             
+                            {widget.widget_type === "bar" && (
+                                <BarWidget widget={widget} />
+                            )}
+
+                            {widget.widget_type === "line" && (
+                                <LineWidget widget={widget} />
+                            )}
+
+                            {widget.widget_type === "pie" && (
+                                <PieWidget widget={widget} />
+                            )}
+
+                            {widget.widget_type === "kpi" && (
+                                <KPIWidget widget={widget} />
+                            )} */}
+
+                        </div>
 
                     </div>
 
-                    <h2 className="text-xl font-semibold">
+                ))}
 
-                        Dashboard Canvas
+            </div>
 
-                    </h2>
+            <AddWidgetModal
+                open={isWidgetModalOpen}
+                onClose={() => setIsWidgetModalOpen(false)}
+                reports={reports}
+                widgetForm={widgetForm}
+                setWidgetForm={setWidgetForm}
+                onCreate={createWidget}
+            />
 
-                    <p className="text-slate-500 mt-2">
+        </div>
 
-                        لا توجد Widgets حتى الآن
 
-                    </p>
+    );
+
+}
+
+function AddWidgetModal({
+    open,
+    onClose,
+    reports,
+    widgetForm,
+    setWidgetForm,
+    onCreate,
+}) {
+
+    if (!open) return null;
+
+    return (
+
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+
+            <div className="w-full max-w-lg rounded-xl bg-slate-900 border border-slate-800 p-6">
+
+                <h2 className="text-xl font-bold mb-6">
+
+                    إضافة Widget
+
+                </h2>
+
+                <div className="space-y-4">
+
+                    <input
+                        value={widgetForm.title}
+                        onChange={(e) =>
+                            setWidgetForm({
+                                ...widgetForm,
+                                title: e.target.value
+                            })
+                        }
+                        placeholder="عنوان الـ Widget"
+                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"
+                    />
+
+                    <select
+                        value={widgetForm.widget_type}
+                        onChange={(e) =>
+                            setWidgetForm({
+                                ...widgetForm,
+                                widget_type: e.target.value
+                            })
+                        }
+                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"
+                    >
+
+                        <option value="table">Table</option>
+                        <option value="kpi">KPI</option>
+                        <option value="bar">Bar Chart</option>
+                        <option value="line">Line Chart</option>
+                        <option value="pie">Pie Chart</option>
+
+                    </select>
+
+                    <select
+                        value={widgetForm.report_id}
+                        onChange={(e) =>
+                            setWidgetForm({
+                                ...widgetForm,
+                                report_id: e.target.value
+                            })
+                        }
+                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"
+                    >
+
+                        <option value="">
+
+                            اختر التقرير
+
+                        </option>
+
+                        {reports.map(report => (
+
+                            <option
+                                key={report.id}
+                                value={report.id}
+                            >
+
+                                {report.name}
+
+                            </option>
+
+                        ))}
+
+                    </select>
+
+                </div>
+
+                <div className="flex justify-end gap-3 mt-6">
+
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 border border-slate-700 rounded-lg"
+                    >
+
+                        إلغاء
+
+                    </button>
+
+                    <button
+                        onClick={onCreate}
+                        className="px-4 py-2 bg-blue-600 rounded-lg text-white"
+                    >
+
+                        إنشاء
+
+                    </button>
 
                 </div>
 
@@ -163,4 +424,372 @@ export default function DashboardCanvasPage() {
 
     );
 
+}
+
+function TableWidget({ widget }) {
+
+    const [loading, setLoading] = useState(true);
+
+    const [result, setResult] = useState(null);
+
+    useEffect(() => {
+
+        load();
+
+    }, [widget.report_id]);
+
+    const load = async () => {
+
+        try {
+
+            const report =
+                await reportService.getReport(widget.report_id);
+
+            const query =
+                report.config?.query;
+
+            if (!query) {
+                throw new Error("Report query not found");
+            }
+
+
+            const { data } = await apiClient.post(
+                "/report-builder/run",
+                {
+                    ...report.config.query,
+                    visualization: {
+                        ...report.config.visualization,
+                        type: widget.widget_type,
+                    },
+                }
+            );
+
+
+            setResult(data);
+
+        } catch (err) {
+
+            console.error(err);
+
+        } finally {
+
+            setLoading(false);
+
+        }
+
+    };
+
+    if (loading) {
+
+        return <div>Loading...</div>;
+
+    }
+
+    if (!result) {
+
+        return <div>No Data</div>;
+
+    }
+
+    const renderCell = (value) => {
+
+        if (value == null)
+            return "";
+
+        if (Array.isArray(value)) {
+
+            return value
+                .map(item => {
+
+                    if (typeof item === "object") {
+                        return item.display;
+                    }
+
+                    return String(item);
+
+                })
+                .join("، ");
+
+        }
+
+        if (typeof value === "object") {
+            return value.display ?? "";
+        }
+
+        return String(value);
+
+    };
+
+    return (
+
+        <table className="w-full border-collapse">
+
+            <thead>
+
+                <tr>
+
+                    {result.columns.map(col => (
+
+                        <th
+                            key={col.id}
+                            className="border px-3 py-2 text-right"
+                        >
+
+                            {col.name}
+
+                        </th>
+
+                    ))}
+
+                </tr>
+
+            </thead>
+
+            <tbody>
+
+                {result.rows.map((row, index) => (
+
+                    <tr key={index}>
+
+                        {result.columns.map(col => (
+
+                            <td
+                                key={col.id}
+                                className="border px-3 py-2"
+                            >
+
+                                {renderCell(row[col.id])}
+
+                            </td>
+
+                        ))}
+
+                    </tr>
+
+                ))}
+
+            </tbody>
+
+        </table>
+
+    );
+
+}
+
+function prepareChartData(result) {
+
+    if (!result?.rows?.length) return [];
+
+    const groupColumn =
+        result.columns.find(c =>
+            c.type === "dropdown" ||
+            c.type === "text"
+        ) || result.columns[0];
+
+    const map = {};
+
+    result.rows.forEach(row => {
+
+        let value = row[groupColumn.id];
+
+        if (Array.isArray(value))
+            value = value.join(",");
+
+        value = value || "غير محدد";
+
+        map[value] = (map[value] || 0) + 1;
+
+    });
+
+    return Object.entries(map).map(([name, value]) => ({
+        name,
+        value,
+    }));
+
+}
+
+function ChartLoader({ widget }) {
+
+    const [loading, setLoading] = useState(true);
+
+    const [result, setResult] = useState(null);
+
+    console.log(result);
+    console.log(widget.widget_type);
+    console.log(result?.chart?.type);
+
+    useEffect(() => {
+        load();
+    }, [widget.report_id, widget.widget_type]);
+
+    const load = async () => {
+
+        const report =
+            await reportService.getReport(widget.report_id);
+
+
+        const { data } = await apiClient.post(
+            "/report-builder/run",
+            {
+                ...report.config.query,
+                visualization: {
+                    ...report.config.visualization,
+                    type: widget.widget_type,
+                },
+            }
+        );
+
+        setResult(data);
+
+        setLoading(false);
+
+    };
+
+    if (loading)
+        return <div>Loading...</div>;
+
+    const chartData = result.chart;
+
+    if (!chartData) {
+        return (
+            <div className="text-center py-10 text-slate-400">
+                هذا التقرير لا يحتوي على إعدادات رسم بياني.
+            </div>
+        );
+    }
+
+    const chartType = widget.widget_type;
+
+    if (
+        !chartData.labels ||
+        !chartData.datasets?.length
+    ) {
+        return (
+            <div className="text-center py-10">
+                لا توجد بيانات للرسم البياني
+            </div>
+        );
+    }
+
+
+    if (chartType === "bar") {
+
+        return (
+
+            <ResponsiveContainer width="100%" height={320}>
+
+                <BarChart
+                    data={chartData.labels.map((label, i) => ({
+                        name: label,
+                        value: chartData.datasets[0].data[i],
+                    }))}
+                >
+
+                    <CartesianGrid strokeDasharray="3 3" />
+
+                    <XAxis dataKey="name" />
+
+                    <YAxis />
+
+                    <Tooltip />
+
+                    <Bar dataKey="value" />
+
+                </BarChart>
+
+            </ResponsiveContainer>
+
+        );
+
+    }
+
+    if (chartType === "line") {
+
+        return (
+
+            <ResponsiveContainer width="100%" height={320}>
+
+                <LineChart
+                    data={chartData.labels.map((label, i) => ({
+                        name: label,
+                        value: chartData.datasets[0].data[i],
+                    }))}
+                >
+
+                    <CartesianGrid strokeDasharray="3 3" />
+
+                    <XAxis dataKey="name" />
+
+                    <YAxis />
+
+                    <Tooltip />
+
+                    <Line
+                        dataKey="value"
+                        type="monotone"
+                    />
+
+                </LineChart>
+
+            </ResponsiveContainer>
+
+        );
+
+    }
+
+    if (chartType === "pie") {
+
+        return (
+
+            <ResponsiveContainer width="100%" height={320}>
+
+                <PieChart>
+
+                    <Pie
+                        data={chartData.labels.map((label, i) => ({
+                            name: label,
+                            value: chartData.datasets[0].data[i],
+                        }))}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={90}
+                        label
+                    />
+
+                    <Tooltip />
+
+                </PieChart>
+
+            </ResponsiveContainer>
+
+        );
+
+    }
+
+    if (chartType === "kpi") {
+        return (
+
+            <div className="text-center py-12">
+
+                <div className="text-6xl font-bold">
+
+                    {result.rows.length}
+
+                </div>
+
+                <div className="text-slate-400 mt-3">
+
+                    إجمالي السجلات
+
+                </div>
+
+            </div>
+
+        );
+
+}
+
+return null;
 }

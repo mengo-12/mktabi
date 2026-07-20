@@ -150,7 +150,39 @@ class ReportBuilderService:
     ):
         result = await db.execute(
             select(ReportBuilder)
-            .order_by(ReportBuilder.created_at.desc())
+            .order_by(ReportBuilder.id.desc())
         )
 
         return result.scalars().all()
+    
+    @staticmethod
+    async def create_report(db, payload):
+
+        report = ReportBuilder(
+            name=payload.name,
+            description=payload.description,
+            section_id=payload.section_id,
+            base_table_id=payload.base_table_id,
+            config=payload.config,
+        )
+
+        db.add(report)
+
+        await db.commit()
+
+        await db.refresh(report)
+
+        return report
+    
+    @staticmethod
+    async def get_report(
+        db: AsyncSession,
+        report_id: int,
+    ):
+        result = await db.execute(
+            select(ReportBuilder).where(
+                ReportBuilder.id == report_id
+            )
+        )
+
+        return result.scalar_one_or_none()

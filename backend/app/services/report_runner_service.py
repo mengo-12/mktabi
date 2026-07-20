@@ -1,5 +1,6 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from collections import defaultdict
 
 from app.models.dynamic import CustomTable, CustomRow
 
@@ -106,10 +107,28 @@ class ReportRunnerService:
 
             response_rows.append(item)
 
+        visualization = payload.get("visualization")
+
+        chart = ReportRunnerService.build_chart(
+            response_rows,
+            visualization,
+        )
+
         return {
-            "table": {"id": table.id, "name": table.name},
+
+            "table": {
+                "id": table.id,
+                "name": table.name,
+            },
+
             "columns": response_columns,
+
             "rows": response_rows,
+
+            "chart": chart,
+
+            "visualization": visualization,
+
         }
 
     @staticmethod
@@ -274,3 +293,103 @@ class ReportRunnerService:
             i += 2
 
         return None
+    
+    @staticmethod
+    def build_chart(rows, visualization):
+
+        if not visualization:
+            return None
+
+        chart_type = visualization.get("type", "bar")
+
+        if chart_type == "table":
+            return None
+
+        x_axis = visualization.get("xAxis")
+        y_axis = visualization.get("yAxis")
+        aggregation = visualization.get("aggregation", "count")
+
+        if not x_axis:
+            return None
+
+        groups = defaultdict(list)
+
+        for row in rows:
+            key = row.get(x_axis)
+
+            if isinstance(key, list):
+                key = ", ".join(map(str, key))
+
+            if key is None:
+                key = "بدون قيمة"
+
+            groups[str(key)].append(row)
+
+        labels = []
+        values = []
+
+        for label, items in groups.items():
+
+            labels.append(label)
+
+            if aggregation == "count":
+                values.append(len(items))
+                continue
+
+            nums = []
+
+            for item in items:
+
+                value = item.get(y_axis)
+
+                if isinstance(value, list):
+                    continue
+
+                try:
+                    nums.append(float(value))
+                except:
+                    pass
+
+            if aggregation == "sum":
+                values.append(sum(nums))
+
+            elif aggregation == "avg":
+                values.append(
+                    sum(nums) / len(nums)
+                    if nums else 0
+                )
+
+            elif aggregation == "min":
+                values.append(
+                    min(nums)
+                    if nums else 0
+                )
+
+            elif aggregation == "max":
+                values.append(
+                    max(nums)
+                    if nums else 0
+                )
+
+            else:
+                values.append(len(items))
+
+        return {
+
+            "type": chart_type,
+
+            "labels": labels,
+
+            "datasets": [
+
+                {
+
+                    "label": y_axis or aggregation,
+
+                    "data": values
+
+                }
+
+            ]
+
+        }

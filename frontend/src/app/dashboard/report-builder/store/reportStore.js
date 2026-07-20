@@ -19,8 +19,24 @@ const initialReport = {
         calculatedFields: []
     },
 
+    // visualization: {
+    //     type: "table",
+
+    //     xAxis: "",
+
+    //     yAxis: "",
+
+    //     aggregation: "count",
+
+    //     groupBy: "",
+
+    //     sortBy: "",
+
+    //     sortDirection: "asc",
+    // },
+
     view: {
-        type: "table", // table | cards | chart | calendar | kpi
+        type: "table",
         hiddenColumns: [],
         columnOrder: []
     },
@@ -210,42 +226,42 @@ const useReportStore = create((set) => ({
 
     toggleRelation(relation) {
 
-    set((state) => {
+        set((state) => {
 
-        const exists =
-            state.selectedRelations.find(
-                r => String(r.column.id) === String(relation.column.id)
-            );
+            const exists =
+                state.selectedRelations.find(
+                    r => String(r.column.id) === String(relation.column.id)
+                );
 
-        if (exists) {
+            if (exists) {
+
+                return {
+
+                    selectedRelations:
+
+                        state.selectedRelations.filter(
+                            r => String(r.column.id) !== String(relation.column.id)
+                        )
+
+                };
+
+            }
 
             return {
 
-                selectedRelations:
+                selectedRelations: [
 
-                    state.selectedRelations.filter(
-                        r => String(r.column.id) !== String(relation.column.id)
-                    )
+                    ...state.selectedRelations,
+
+                    relation
+
+                ]
 
             };
 
-        }
+        });
 
-        return {
-
-            selectedRelations: [
-
-                ...state.selectedRelations,
-
-                relation
-
-            ]
-
-        };
-
-    });
-
-},
+    },
 
     // -------------------------
     // تغيير نوع العرض
@@ -273,12 +289,40 @@ const useReportStore = create((set) => ({
 
     },
 
+    // // -------------------------
+    // // Visualization
+    // // -------------------------
+
+    // setVisualization(values) {
+
+    //     set((state) => ({
+
+    //         report: {
+
+    //             ...state.report,
+
+    //             visualization: {
+
+    //                 ...state.report.visualization,
+
+    //                 ...values,
+
+    //             },
+
+    //         },
+
+    //     }));
+
+    // },
+
+
+
     // -------------------------
     // إعادة ضبط التقرير
     // -------------------------
 
     resetReport() {
-        
+
 
         set({
 
