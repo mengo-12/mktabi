@@ -33,6 +33,9 @@ export default function QueryCanvas() {
         selectedRelations,
         toggleRelation,
         dataSources,
+        addFilter,
+        updateFilter,
+        removeFilter,
     } = useReportStore();
 
     // لا يوجد جدول محدد
@@ -86,6 +89,9 @@ export default function QueryCanvas() {
     const selectedColumns =
         report.query.columns || [];
 
+    const filters =
+        report.query.filters || [];
+
 
     const isSelected = (columnId) => {
         return selectedColumns.some(
@@ -137,11 +143,15 @@ export default function QueryCanvas() {
                         relation.column.relation?.table_id,
                 })),
 
+
+
             };
+
 
             const result = await reportBuilderService.runQuery(payload);
 
-            setReportResult(result);
+            filters,
+                setReportResult(result);
             setPreviewRows(result.rows || []);
         } catch (error) {
             console.error(error);
@@ -179,7 +189,9 @@ export default function QueryCanvas() {
             };
             await reportBuilderService.createReport(payload);
 
-            setSaveModalOpen(false);
+            filters,
+
+                setSaveModalOpen(false);
             setReportName("");
             setReportDescription("");
 
@@ -418,11 +430,100 @@ export default function QueryCanvas() {
 
                 <SectionCard
                     title="Filters"
-                    description="سيتم هنا إنشاء شروط البحث الخاصة بالتقرير."
+                    description="إنشاء شروط البحث للتقرير."
                 >
-                    <div className="text-slate-500 text-sm">
-                        لا توجد فلاتر حالياً.
+
+                    <div className="space-y-3">
+
+                        {filters.map(filter => (
+
+                            <div
+                                key={filter.id}
+                                className="grid grid-cols-12 gap-2"
+                            >
+
+                                <select
+                                    className="col-span-4 rounded-lg bg-slate-950 border border-slate-700 p-2"
+                                    value={filter.column}
+                                    onChange={(e) =>
+                                        updateFilter(filter.id, {
+                                            column: e.target.value,
+                                        })
+                                    }
+                                >
+
+                                    <option value="">
+                                        اختر العمود
+                                    </option>
+
+                                    {selectedColumns.map(col => (
+
+                                        <option
+                                            key={col.id}
+                                            value={col.id}
+                                        >
+                                            {col.name}
+                                        </option>
+
+                                    ))}
+
+                                </select>
+
+                                <select
+                                    className="col-span-3 rounded-lg bg-slate-950 border border-slate-700 p-2"
+                                    value={filter.operator}
+                                    onChange={(e) =>
+                                        updateFilter(filter.id, {
+                                            operator: e.target.value,
+                                        })
+                                    }
+                                >
+
+                                    <option value="=">=</option>
+                                    <option value="!=">!=</option>
+                                    <option value="contains">contains</option>
+                                    <option value="starts_with">starts with</option>
+                                    <option value="ends_with">ends with</option>
+                                    <option value=">">{">"}</option>
+                                    <option value="<">{"<"}</option>
+                                    <option value=">=">{">="}</option>
+                                    <option value="<=">{"<="}</option>
+
+                                </select>
+
+                                <input
+                                    className="col-span-4 rounded-lg bg-slate-950 border border-slate-700 p-2"
+                                    value={filter.value}
+                                    onChange={(e) =>
+                                        updateFilter(filter.id, {
+                                            value: e.target.value,
+                                        })
+                                    }
+                                    placeholder="القيمة"
+                                />
+
+                                <button
+                                    className="col-span-1 rounded-lg bg-red-600"
+                                    onClick={() =>
+                                        removeFilter(filter.id)
+                                    }
+                                >
+                                    ✕
+                                </button>
+
+                            </div>
+
+                        ))}
+
+                        <button
+                            onClick={addFilter}
+                            className="px-4 py-2 rounded-lg bg-blue-600 text-white"
+                        >
+                            + إضافة فلتر
+                        </button>
+
                     </div>
+
                 </SectionCard>
 
                 {/* ================= relations ================= */}

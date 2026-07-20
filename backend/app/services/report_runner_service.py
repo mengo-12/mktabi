@@ -39,6 +39,11 @@ class ReportRunnerService:
 
         rows = result.scalars().all()
 
+        filters = payload.get("filters", [])
+
+        if filters:
+            rows = ReportRunnerService.apply_filters(rows, filters)
+
         response_columns = []
 
         for column in selected_columns:
@@ -293,6 +298,85 @@ class ReportRunnerService:
             i += 2
 
         return None
+    
+
+    @staticmethod
+    def apply_filters(rows, filters):
+
+        def check(value, operator, expected):
+
+            if value is None:
+                value = ""
+
+            value = str(value)
+            expected = str(expected)
+
+            if operator == "=":
+                return value == expected
+
+            if operator == "!=":
+                return value != expected
+
+            if operator == "contains":
+                return expected.lower() in value.lower()
+
+            if operator == "starts_with":
+                return value.lower().startswith(expected.lower())
+
+            if operator == "ends_with":
+                return value.lower().endswith(expected.lower())
+
+            if operator == ">":
+                try:
+                    return float(value) > float(expected)
+                except:
+                    return False
+
+            if operator == "<":
+                try:
+                    return float(value) < float(expected)
+                except:
+                    return False
+
+            if operator == ">=":
+                try:
+                    return float(value) >= float(expected)
+                except:
+                    return False
+
+            if operator == "<=":
+                try:
+                    return float(value) <= float(expected)
+                except:
+                    return False
+
+            return True
+
+        filtered = []
+
+        for row in rows:
+
+            cells = row.cells_data or {}
+
+            passed = True
+
+            for f in filters:
+
+                column = f.get("column")
+                operator = f.get("operator", "=")
+                expected = f.get("value")
+
+                value = cells.get(column)
+
+                if not check(value, operator, expected):
+                    passed = False
+                    break
+
+            if passed:
+                filtered.append(row)
+
+        return filtered
+
     
     @staticmethod
     def build_chart(rows, visualization):

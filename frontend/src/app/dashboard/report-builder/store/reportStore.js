@@ -19,22 +19,6 @@ const initialReport = {
         calculatedFields: []
     },
 
-    // visualization: {
-    //     type: "table",
-
-    //     xAxis: "",
-
-    //     yAxis: "",
-
-    //     aggregation: "count",
-
-    //     groupBy: "",
-
-    //     sortBy: "",
-
-    //     sortDirection: "asc",
-    // },
-
     view: {
         type: "table",
         hiddenColumns: [],
@@ -263,6 +247,105 @@ const useReportStore = create((set) => ({
 
     },
 
+
+    // -------------------------
+    // تغيير نوع الفلتر
+    // -------------------------
+
+
+    addFilter() {
+
+        set((state) => ({
+
+            report: {
+
+                ...state.report,
+
+                query: {
+
+                    ...state.report.query,
+
+                    filters: [
+
+                        ...(state.report.query.filters || []),
+
+                        {
+                            id: crypto.randomUUID(),
+                            column: "",
+                            operator: "=",
+                            value: "",
+                        },
+
+                    ],
+
+                },
+
+            },
+
+        }));
+
+    },
+
+    updateFilter(id, values) {
+
+        set((state) => ({
+
+            report: {
+
+                ...state.report,
+
+                query: {
+
+                    ...state.report.query,
+
+                    filters:
+
+                        state.report.query.filters.map(filter =>
+
+                            filter.id === id
+                                ? { ...filter, ...values }
+                                : filter
+
+                        ),
+
+                },
+
+            },
+
+        }));
+
+    },
+
+    removeFilter(id) {
+
+        set((state) => ({
+
+            report: {
+
+                ...state.report,
+
+                query: {
+
+                    ...state.report.query,
+
+                    filters:
+
+                        state.report.query.filters.filter(
+
+                            filter => filter.id !== id
+
+                        ),
+
+                },
+
+            },
+
+        }));
+
+    },
+
+
+
     // -------------------------
     // تغيير نوع العرض
     // -------------------------
@@ -288,32 +371,6 @@ const useReportStore = create((set) => ({
         }));
 
     },
-
-    // // -------------------------
-    // // Visualization
-    // // -------------------------
-
-    // setVisualization(values) {
-
-    //     set((state) => ({
-
-    //         report: {
-
-    //             ...state.report,
-
-    //             visualization: {
-
-    //                 ...state.report.visualization,
-
-    //                 ...values,
-
-    //             },
-
-    //         },
-
-    //     }));
-
-    // },
 
 
 
