@@ -44,6 +44,11 @@ class ReportRunnerService:
         if filters:
             rows = ReportRunnerService.apply_filters(rows, filters)
 
+        sorting = payload.get("sorting", [])
+
+        if sorting:
+            rows = ReportRunnerService.apply_sorting(rows, sorting)
+
         response_columns = []
 
         for column in selected_columns:
@@ -376,6 +381,29 @@ class ReportRunnerService:
                 filtered.append(row)
 
         return filtered
+    
+
+    @staticmethod
+    def apply_sorting(rows, sorting):
+
+        for sort in reversed(sorting):
+
+            column = sort.get("column")
+
+            if not column:
+                continue
+
+            reverse = sort.get("direction") == "desc"
+
+            rows = sorted(
+                rows,
+                key=lambda row: (
+                    row.cells_data or {}
+                ).get(column, ""),
+                reverse=reverse,
+            )
+
+        return rows
 
     
     @staticmethod

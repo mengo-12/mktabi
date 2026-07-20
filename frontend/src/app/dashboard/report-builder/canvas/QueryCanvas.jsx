@@ -36,6 +36,9 @@ export default function QueryCanvas() {
         addFilter,
         updateFilter,
         removeFilter,
+        addSorting,
+        updateSorting,
+        removeSorting,
     } = useReportStore();
 
     // لا يوجد جدول محدد
@@ -92,6 +95,9 @@ export default function QueryCanvas() {
     const filters =
         report.query.filters || [];
 
+    const sorting =
+        report.query.sorting || [];
+
 
     const isSelected = (columnId) => {
         return selectedColumns.some(
@@ -144,14 +150,17 @@ export default function QueryCanvas() {
                 })),
 
 
+                filters: report.query.filters || [],
+
+                sorting: report.query.sorting || [],
+
+
 
             };
 
 
             const result = await reportBuilderService.runQuery(payload);
-
-            filters,
-                setReportResult(result);
+            setReportResult(result);
             setPreviewRows(result.rows || []);
         } catch (error) {
             console.error(error);
@@ -186,12 +195,15 @@ export default function QueryCanvas() {
                         relation.column.relatedTableId ??
                         relation.column.relation?.table_id,
                 })),
+
+                filters: report.query.filters || [],
+
+                sorting: report.query.sorting || [],
+
             };
             await reportBuilderService.createReport(payload);
 
-            filters,
-
-                setSaveModalOpen(false);
+            setSaveModalOpen(false);
             setReportName("");
             setReportDescription("");
 
@@ -671,9 +683,85 @@ export default function QueryCanvas() {
                     title="Sorting"
                     description="ترتيب نتائج التقرير."
                 >
-                    <div className="text-slate-500 text-sm">
-                        لا يوجد ترتيب.
+
+                    <div className="space-y-4">
+
+                        {sorting.map((sort) => (
+
+                            <div
+                                key={sort.id}
+                                className="grid grid-cols-12 gap-3 items-center"
+                            >
+
+                                <select
+                                    className="col-span-6 rounded bg-slate-900 border border-slate-700 p-2"
+                                    value={sort.column}
+                                    onChange={(e) =>
+                                        updateSorting(sort.id, {
+                                            column: e.target.value,
+                                        })
+                                    }
+                                >
+
+                                    <option value="">
+                                        اختر عمود
+                                    </option>
+
+                                    {selectedColumns.map((column) => (
+
+                                        <option
+                                            key={column.id}
+                                            value={column.id}
+                                        >
+                                            {column.label || column.name}
+                                        </option>
+
+                                    ))}
+
+                                </select>
+
+                                <select
+                                    className="col-span-4 rounded bg-slate-900 border border-slate-700 p-2"
+                                    value={sort.direction}
+                                    onChange={(e) =>
+                                        updateSorting(sort.id, {
+                                            direction: e.target.value,
+                                        })
+                                    }
+                                >
+
+                                    <option value="asc">
+                                        تصاعدي
+                                    </option>
+
+                                    <option value="desc">
+                                        تنازلي
+                                    </option>
+
+                                </select>
+
+                                <button
+                                    className="col-span-2 rounded bg-red-600 px-3 py-2"
+                                    onClick={() =>
+                                        removeSorting(sort.id)
+                                    }
+                                >
+                                    حذف
+                                </button>
+
+                            </div>
+
+                        ))}
+
+                        <button
+                            onClick={addSorting}
+                            className="rounded bg-cyan-600 px-4 py-2 text-white"
+                        >
+                            + إضافة ترتيب
+                        </button>
+
                     </div>
+
                 </SectionCard>
 
 

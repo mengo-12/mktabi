@@ -347,6 +347,56 @@ const useReportStore = create((set) => ({
 
 
     // -------------------------
+    // Sorting
+    // -------------------------
+
+    addSorting: () =>
+        set((state) => ({
+            report: {
+                ...state.report,
+                query: {
+                    ...state.report.query,
+                    sorting: [
+                        ...(state.report.query.sorting || []),
+                        {
+                            id: crypto.randomUUID(),
+                            column: "",
+                            direction: "asc",
+                        },
+                    ],
+                },
+            },
+        })),
+
+    updateSorting: (id, values) =>
+        set((state) => ({
+            report: {
+                ...state.report,
+                query: {
+                    ...state.report.query,
+                    sorting: state.report.query.sorting.map((s) =>
+                        s.id === id
+                            ? { ...s, ...values }
+                            : s
+                    ),
+                },
+            },
+        })),
+
+    removeSorting: (id) =>
+        set((state) => ({
+            report: {
+                ...state.report,
+                query: {
+                    ...state.report.query,
+                    sorting: state.report.query.sorting.filter(
+                        (s) => s.id !== id
+                    ),
+                },
+            },
+        })),
+
+    // -------------------------
     // تغيير نوع العرض
     // -------------------------
 
