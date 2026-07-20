@@ -49,6 +49,13 @@ class ReportRunnerService:
         if sorting:
             rows = ReportRunnerService.apply_sorting(rows, sorting)
 
+        group_by = payload.get("groupBy")
+
+        if group_by:
+            rows = ReportRunnerService.apply_group_by(rows, group_by)
+
+        calculated_fields = payload.get("calculatedFields", [])
+
         response_columns = []
 
         for column in selected_columns:
@@ -123,6 +130,12 @@ class ReportRunnerService:
             response_rows,
             visualization,
         )
+
+        if calculated_fields:
+            response_rows = ReportRunnerService.apply_calculated_fields(
+                response_rows,
+                calculated_fields,
+            )
 
         return {
 
@@ -402,6 +415,67 @@ class ReportRunnerService:
                 ).get(column, ""),
                 reverse=reverse,
             )
+
+        return rows
+    
+
+    @staticmethod
+    def apply_group_by(rows, group_by):
+
+        groups = {}
+
+        for row in rows:
+
+            cells = row.cells_data or {}
+
+            key = cells.get(group_by)
+
+            if key not in groups:
+                groups[key] = row
+
+        return list(groups.values())
+    
+
+    @staticmethod
+    def apply_calculated_fields(rows, calculated_fields):
+
+        for field in calculated_fields:
+
+            field_name = field.get("name")
+            operation = field.get("operation")
+            column = field.get("column")
+
+            values = []
+
+            for row in rows:
+
+                value = row.get(column)
+
+                try:
+                    values.append(float(value))
+                except:
+                    pass
+
+            if operation == "sum":
+                result = sum(values)
+
+            elif operation == "avg":
+                result = sum(values) / len(values) if values else 0
+
+            elif operation == "count":
+                result = len(values)
+
+            elif operation == "min":
+                result = min(values) if values else 0
+
+            elif operation == "max":
+                result = max(values) if values else 0
+
+            else:
+                result = None
+
+            for row in rows:
+                row[field_name] = result
 
         return rows
 

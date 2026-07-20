@@ -39,6 +39,11 @@ export default function QueryCanvas() {
         addSorting,
         updateSorting,
         removeSorting,
+        setGroupBy,
+        clearGroupBy,
+        addCalculatedField,
+        updateCalculatedField,
+        removeCalculatedField,
     } = useReportStore();
 
     // لا يوجد جدول محدد
@@ -98,6 +103,12 @@ export default function QueryCanvas() {
     const sorting =
         report.query.sorting || [];
 
+    const groupBy =
+        report.query.groupBy || "";
+
+    const calculatedFields =
+        report.query.calculatedFields || [];
+
 
     const isSelected = (columnId) => {
         return selectedColumns.some(
@@ -154,6 +165,10 @@ export default function QueryCanvas() {
 
                 sorting: report.query.sorting || [],
 
+                groupBy: report.query.groupBy || "",
+
+                calculatedFields:report.query.calculatedFields || [],
+
 
 
             };
@@ -199,6 +214,10 @@ export default function QueryCanvas() {
                 filters: report.query.filters || [],
 
                 sorting: report.query.sorting || [],
+
+                groupBy: report.query.groupBy || "",
+
+                calculatedFields:report.query.calculatedFields || [],
 
             };
             await reportBuilderService.createReport(payload);
@@ -669,11 +688,45 @@ export default function QueryCanvas() {
 
                 <SectionCard
                     title="Group By"
-                    description="تجميع النتائج حسب أحد الأعمدة."
+                    description="تجميع النتائج حسب عمود."
                 >
-                    <div className="text-slate-500 text-sm">
-                        لا يوجد تجميع.
+
+                    <div className="flex gap-3">
+
+                        <select
+                            className="flex-1 rounded bg-slate-900 border border-slate-700 p-2"
+                            value={groupBy}
+                            onChange={(e) =>
+                                setGroupBy(e.target.value)
+                            }
+                        >
+
+                            <option value="">
+                                بدون تجميع
+                            </option>
+
+                            {selectedColumns.map(column => (
+
+                                <option
+                                    key={column.id}
+                                    value={column.id}
+                                >
+                                    {column.label || column.name}
+                                </option>
+
+                            ))}
+
+                        </select>
+
+                        <button
+                            onClick={clearGroupBy}
+                            className="rounded bg-red-600 px-4"
+                        >
+                            حذف
+                        </button>
+
                     </div>
+
                 </SectionCard>
 
                 {/* ================= sorting ================= */}
@@ -770,11 +823,90 @@ export default function QueryCanvas() {
 
                 <SectionCard
                     title="Calculated Fields"
-                    description="إنشاء حقول محسوبة مثل SUM و COUNT و AVG."
+                    description="إنشاء حقول محسوبة."
                 >
-                    <div className="text-slate-500 text-sm">
-                        لا توجد حقول محسوبة.
+
+                    <div className="space-y-4">
+
+                        {calculatedFields.map(field => (
+
+                            <div
+                                key={field.id}
+                                className="grid grid-cols-12 gap-3"
+                            >
+
+                                <input
+                                    className="col-span-3 rounded bg-slate-900 border border-slate-700 p-2"
+                                    placeholder="اسم الحقل"
+                                    value={field.name}
+                                    onChange={(e) =>
+                                        updateCalculatedField(field.id, {
+                                            name: e.target.value,
+                                        })
+                                    }
+                                />
+
+                                <select
+                                    className="col-span-3 rounded bg-slate-900 border border-slate-700 p-2"
+                                    value={field.operation}
+                                    onChange={(e) =>
+                                        updateCalculatedField(field.id, {
+                                            operation: e.target.value,
+                                        })
+                                    }
+                                >
+                                    <option value="sum">SUM</option>
+                                    <option value="avg">AVG</option>
+                                    <option value="count">COUNT</option>
+                                    <option value="min">MIN</option>
+                                    <option value="max">MAX</option>
+                                </select>
+
+                                <select
+                                    className="col-span-4 rounded bg-slate-900 border border-slate-700 p-2"
+                                    value={field.column}
+                                    onChange={(e) =>
+                                        updateCalculatedField(field.id, {
+                                            column: e.target.value,
+                                        })
+                                    }
+                                >
+                                    <option value="">
+                                        اختر عمود
+                                    </option>
+
+                                    {selectedColumns.map(column => (
+                                        <option
+                                            key={column.id}
+                                            value={column.id}
+                                        >
+                                            {column.label || column.name}
+                                        </option>
+                                    ))}
+                                </select>
+
+                                <button
+                                    className="col-span-2 rounded bg-red-600"
+                                    onClick={() =>
+                                        removeCalculatedField(field.id)
+                                    }
+                                >
+                                    حذف
+                                </button>
+
+                            </div>
+
+                        ))}
+
+                        <button
+                            onClick={addCalculatedField}
+                            className="rounded bg-cyan-600 px-4 py-2"
+                        >
+                            + إضافة حقل محسوب
+                        </button>
+
                     </div>
+
                 </SectionCard>
 
                 {/* ================= preview ================= */}

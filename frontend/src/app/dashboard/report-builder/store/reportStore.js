@@ -422,6 +422,85 @@ const useReportStore = create((set) => ({
 
     },
 
+    // -------------------------
+    // group by
+    // -------------------------
+
+    setGroupBy: (columnId) =>
+        set(state => ({
+            report: {
+                ...state.report,
+                query: {
+                    ...state.report.query,
+                    groupBy: columnId,
+                },
+            },
+        })),
+
+    clearGroupBy: () =>
+        set(state => ({
+            report: {
+                ...state.report,
+                query: {
+                    ...state.report.query,
+                    groupBy: "",
+                },
+            },
+        })),
+
+
+    // -------------------------
+    // calculatedFields
+    // -------------------------
+
+    addCalculatedField: () =>
+        set(state => ({
+            report: {
+                ...state.report,
+                query: {
+                    ...state.report.query,
+                    calculatedFields: [
+                        ...(state.report.query.calculatedFields || []),
+                        {
+                            id: crypto.randomUUID(),
+                            name: "",
+                            operation: "sum",
+                            column: "",
+                        },
+                    ],
+                },
+            },
+        })),
+
+    updateCalculatedField: (id, values) =>
+        set(state => ({
+            report: {
+                ...state.report,
+                query: {
+                    ...state.report.query,
+                    calculatedFields:
+                        state.report.query.calculatedFields.map(field =>
+                            field.id === id
+                                ? { ...field, ...values }
+                                : field
+                        ),
+                },
+            },
+        })),
+
+    removeCalculatedField: (id) =>
+        set(state => ({
+            report: {
+                ...state.report,
+                query: {
+                    ...state.report.query,
+                    calculatedFields:
+                        state.report.query.calculatedFields.filter(
+                            field => field.id !== id
+                        ),
+                },
+            },
+        })),
 
 
     // -------------------------
