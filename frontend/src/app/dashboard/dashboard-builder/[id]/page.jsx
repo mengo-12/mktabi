@@ -11,6 +11,13 @@ import { Plus, ArrowRight, } from "lucide-react";
 import dashboardWidgetService from "../services/dashboardWidgetService";
 import dashboardService from "../services/dashboardService";
 
+import { Responsive, WidthProvider } from "react-grid-layout";
+
+const ResponsiveGridLayout = WidthProvider(Responsive);
+
+import "react-grid-layout/css/styles.css";
+import "react-resizable/css/styles.css";
+
 import {
     BarChart,
     Bar,
@@ -26,6 +33,8 @@ import {
     ResponsiveContainer
 } from "recharts";
 
+import { X, Pencil } from "lucide-react";
+
 export default function DashboardCanvasPage() {
 
     const [isWidgetModalOpen, setIsWidgetModalOpen] = useState(false);
@@ -33,6 +42,8 @@ export default function DashboardCanvasPage() {
     const [reports, setReports] = useState([]);
 
     const [widgetForm, setWidgetForm] = useState({ title: "", widget_type: "table", report_id: "", });
+
+    const [editingWidget, setEditingWidget] = useState(null);
 
     const { id } = useParams();
 
@@ -42,6 +53,23 @@ export default function DashboardCanvasPage() {
 
     const [widgets, setWidgets] = useState([]);
 
+
+    const [layouts, setLayouts] = useState({ lg: [], });
+
+    useEffect(() => {
+        setLayouts({
+            lg: widgets.map(widget => ({
+                i: String(widget.id),
+                x: widget.x,
+                y: widget.y,
+                w: widget.w,
+                h: widget.h,
+            })),
+        });
+    }, [widgets]);
+
+
+
     useEffect(() => {
 
         loadDashboard();
@@ -49,22 +77,13 @@ export default function DashboardCanvasPage() {
     }, [id]);
 
 
-    const loadWidgets = async () => {
+    const loadWidgets = async (dashboardId) => {
 
-        try {
+        const data =
+            await dashboardWidgetService.getWidgets(dashboardId);
 
-            const data =
-                await dashboardWidgetService.getWidgets(
-                    dashboard.id
-                );
 
-            setWidgets(data);
-
-        } catch (err) {
-
-            console.error(err);
-
-        }
+        setWidgets(data);
 
     };
 
@@ -87,9 +106,7 @@ export default function DashboardCanvasPage() {
 
             setDashboard(data);
 
-        } catch (err) {
-
-            console.error(err);
+            await loadWidgets(data.id);
 
         } finally {
 
@@ -103,22 +120,75 @@ export default function DashboardCanvasPage() {
 
         try {
 
-            await dashboardWidgetService.createWidget({
-                dashboard_id: dashboard.id,
-                title: widgetForm.title,
-                widget_type: widgetForm.widget_type,
-                report_id: Number(widgetForm.report_id),
-            });
+            if (editingWidget) {
+
+                await dashboardWidgetService.updateWidget(
+                    editingWidget.id,
+                    {
+                        title: widgetForm.title,
+                        widget_type: widgetForm.widget_type,
+                        report_id: Number(widgetForm.report_id),
+                    }
+                );
+
+            } else {
+
+                await dashboardWidgetService.createWidget({
+                    dashboard_id: dashboard.id,
+                    title: widgetForm.title,
+                    widget_type: widgetForm.widget_type,
+                    report_id: Number(widgetForm.report_id),
+
+                    x: 0,
+                    y: 0,
+                    w: 4,
+                    h: 3,
+                });
+
+            }
+
+            setEditingWidget(null);
 
             setIsWidgetModalOpen(false);
 
-            loadWidgets();
+            loadWidgets(dashboard.id);
 
         } catch (err) {
 
             console.error(err);
 
         }
+
+    };
+
+    const saveLayout = async (layout) => {
+
+        for (const item of layout) {
+
+            await dashboardWidgetService.updateWidget(item.i, {
+                x: item.x,
+                y: item.y,
+                w: item.w,
+                h: item.h,
+            });
+
+        }
+
+    };
+
+    const editWidget = async (widget) => {
+
+        await loadReports();
+
+        setEditingWidget(widget);
+
+        setWidgetForm({
+            title: widget.title,
+            widget_type: widget.widget_type,
+            report_id: String(widget.report_id),
+        });
+
+        setIsWidgetModalOpen(true);
 
     };
 
@@ -141,6 +211,8 @@ export default function DashboardCanvasPage() {
         );
 
     }
+
+    const layoutReady = layouts.lg.length === widgets.length;
 
 
     return (
@@ -186,6 +258,8 @@ export default function DashboardCanvasPage() {
 
                     await loadReports();
 
+                    setEditingWidget(null);
+
                     setWidgetForm({
                         title: "",
                         widget_type: "table",
@@ -203,12 +277,64 @@ export default function DashboardCanvasPage() {
 
         </div>
 
-            <div className="grid grid-cols-12 gap-5">
+            <div className="w-full">
 
-                {widgets.length === 0 && (
+                {layoutReady && (
 
-                    <div
-                        className="
+                    <ResponsiveGridLayout
+
+                        // layouts={layouts}
+
+                        layouts={{
+                            lg: layouts.lg,
+                            md: layouts.lg,
+                            sm: layouts.lg,
+                            xs: layouts.lg,
+                        }}
+
+                        breakpoints={{
+                            lg: 1200,
+                            md: 996,
+                            sm: 768,
+                            xs: 480,
+                        }}
+
+                        cols={{
+                            lg: 12,
+                            md: 10,
+                            sm: 6,
+                            xs: 2,
+                        }}
+
+                        rowHeight={35}
+
+                        isDraggable
+
+                        isResizable
+
+                        compactType={null}
+
+                        useCSSTransforms={false}
+
+                        preventCollision={false}
+
+                        draggableHandle=".widget-header"
+                        draggableCancel=".no-drag"
+
+                        onLayoutChange={(layout) => {
+                            setLayouts({ lg: layout });
+                        }}
+
+                        onResizeStop={(layout) => saveLayout(layout)}
+
+                        onDragStop={(layout) => saveLayout(layout)}
+
+                    >
+
+                        {widgets.length === 0 && (
+
+                            <div
+                                className="
                 col-span-12
                 rounded-xl
                 border-2
@@ -219,87 +345,102 @@ export default function DashboardCanvasPage() {
                 items-center
                 justify-center
             "
-                    >
+                            >
 
-                        <div className="text-center">
+                                <div className="text-center">
 
-                            <div className="text-6xl mb-5">
-                                📊
+                                    <div className="text-6xl mb-5">
+                                        📊
+                                    </div>
+
+                                    <h2 className="text-xl font-semibold">
+                                        Dashboard Canvas
+                                    </h2>
+
+                                    <p className="text-slate-500 mt-2">
+                                        لا توجد Widgets حتى الآن
+                                    </p>
+
+                                </div>
+
                             </div>
 
-                            <h2 className="text-xl font-semibold">
-                                Dashboard Canvas
-                            </h2>
+                        )}
 
-                            <p className="text-slate-500 mt-2">
-                                لا توجد Widgets حتى الآن
-                            </p>
+                        {widgets.map(widget => (
 
-                        </div>
+                            <div
+                                key={widget.id}
+                                className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden"
+                            >
 
-                    </div>
+                                <div className="widget-header flex items-center justify-between px-5 py-3 cursor-move border-b border-slate-800">
 
+                                    <div className="font-semibold">
+                                        {widget.title}
+                                    </div>
+
+                                    <button
+                                        onClick={async () => {
+
+                                            if (!confirm("حذف الـ Widget؟"))
+                                                return;
+
+                                            await dashboardWidgetService.deleteWidget(widget.id);
+
+                                            loadWidgets(dashboard.id);
+
+                                        }}
+                                        className="p-2 rounded hover:bg-red-600/20 text-red-400"
+                                    >
+                                        <X size={18} />
+                                    </button>
+
+                                    <button
+                                        onClick={() => editWidget(widget)}
+                                        className="no-drag p-2 rounded hover:bg-slate-800"
+                                    >
+                                        <Pencil size={18} />
+                                    </button>
+
+                                </div>
+
+                                <div className="p-5">
+
+                                    {widget.widget_type === "table" ? (
+
+                                        <TableWidget widget={widget} />
+
+                                    ) : (
+
+                                        <ChartLoader widget={widget} />
+
+                                    )}
+
+                                </div>
+
+                            </div>
+
+                        ))}
+
+                    </ResponsiveGridLayout>
                 )}
-
-                {widgets.map(widget => (
-
-                    <div
-                        key={widget.id}
-                        className="col-span-12 rounded-xl border border-slate-800 bg-slate-900"
-                    >
-
-                        <div className="px-5 py-3 border-b border-slate-800 font-semibold">
-
-                            {widget.title}
-
-                        </div>
-
-                        <div className="p-5">
-
-                            {widget.widget_type === "table" ? (
-
-                                <TableWidget widget={widget} />
-
-                            ) : (
-
-                                <ChartLoader widget={widget} />
-
-                            )}
-                            {/*                             
-                            {widget.widget_type === "bar" && (
-                                <BarWidget widget={widget} />
-                            )}
-
-                            {widget.widget_type === "line" && (
-                                <LineWidget widget={widget} />
-                            )}
-
-                            {widget.widget_type === "pie" && (
-                                <PieWidget widget={widget} />
-                            )}
-
-                            {widget.widget_type === "kpi" && (
-                                <KPIWidget widget={widget} />
-                            )} */}
-
-                        </div>
-
-                    </div>
-
-                ))}
-
             </div>
 
             <AddWidgetModal
                 open={isWidgetModalOpen}
-                onClose={() => setIsWidgetModalOpen(false)}
+                onClose={() => {
+                    setEditingWidget(null);
+                    setIsWidgetModalOpen(false);
+                }}
                 reports={reports}
                 widgetForm={widgetForm}
                 setWidgetForm={setWidgetForm}
                 onCreate={createWidget}
+                editingWidget={editingWidget}
             />
 
-        </div>
+        </div >
 
 
     );
@@ -313,6 +454,7 @@ function AddWidgetModal({
     widgetForm,
     setWidgetForm,
     onCreate,
+    editingWidget,
 }) {
 
     if (!open) return null;
@@ -324,9 +466,7 @@ function AddWidgetModal({
             <div className="w-full max-w-lg rounded-xl bg-slate-900 border border-slate-800 p-6">
 
                 <h2 className="text-xl font-bold mb-6">
-
-                    إضافة Widget
-
+                    {editingWidget ? "تعديل Widget" : "إضافة Widget"}
                 </h2>
 
                 <div className="space-y-4">
@@ -614,9 +754,9 @@ function ChartLoader({ widget }) {
 
     const [result, setResult] = useState(null);
 
-    console.log(result);
-    console.log(widget.widget_type);
-    console.log(result?.chart?.type);
+    // console.log(result);
+    // console.log(widget.widget_type);
+    // console.log(result?.chart?.type);
 
     useEffect(() => {
         load();
@@ -789,7 +929,7 @@ function ChartLoader({ widget }) {
 
         );
 
-}
+    }
 
-return null;
+    return null;
 }

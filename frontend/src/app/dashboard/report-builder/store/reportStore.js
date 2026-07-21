@@ -27,7 +27,8 @@ const initialReport = {
 
     dashboard: {
         widgets: [],
-        layout: []
+        layout: [],
+        selectedWidget: null,
     }
 };
 
@@ -396,6 +397,79 @@ const useReportStore = create((set) => ({
             },
         })),
 
+
+    // -------------------------
+    // addWidget
+    // -------------------------
+
+
+    addWidget: () =>
+        set((state) => ({
+            report: {
+                ...state.report,
+                dashboard: {
+                    ...state.report.dashboard,
+                    widgets: [
+                        ...state.report.dashboard.widgets,
+                        {
+                            id: crypto.randomUUID(),
+                            reportId: null,
+                            title: "",
+                            type: "table",
+                            config: {},
+                            layout: {
+                                x: 0,
+                                y: 0,
+                                w: 6,
+                                h: 8,
+                            },
+                        },
+                    ],
+                },
+            },
+        })),
+
+    updateWidget: (id, values) =>
+        set((state) => ({
+            report: {
+                ...state.report,
+                dashboard: {
+                    ...state.report.dashboard,
+                    widgets: state.report.dashboard.widgets.map(widget =>
+                        widget.id === id
+                            ? { ...widget, ...values }
+                            : widget
+                    ),
+                },
+            },
+        })),
+
+
+    removeWidget: (id) =>
+        set((state) => ({
+            report: {
+                ...state.report,
+                dashboard: {
+                    ...state.report.dashboard,
+                    widgets: state.report.dashboard.widgets.filter(
+                        widget => widget.id !== id
+                    ),
+                },
+            },
+        })),
+
+    selectWidget: (id) =>
+        set((state) => ({
+            report: {
+                ...state.report,
+                dashboard: {
+                    ...state.report.dashboard,
+                    selectedWidget: id,
+                },
+            },
+        })),
+
+        
     // -------------------------
     // تغيير نوع العرض
     // -------------------------
