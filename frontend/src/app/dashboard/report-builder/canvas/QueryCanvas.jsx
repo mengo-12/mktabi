@@ -82,7 +82,7 @@ export default function QueryCanvas() {
             result.push({
                 ...column,
                 label: prefix
-                    ? `${prefix} → ${column.label || column.name}}`
+                    ? `${prefix} → ${column.label || column.name}`
                     : column.name,
             });
 
@@ -192,9 +192,7 @@ export default function QueryCanvas() {
 
 
             const result = await reportBuilderService.runQuery(payload);
-            console.log("payload", payload);
-            console.log("result", result);
-            console.log("result.columns", result.columns);
+            console.table(result.rows);
             setReportResult(result);
             setPreviewRows(result.rows || []);
         } catch (error) {

@@ -500,26 +500,47 @@ class ReportRunnerService:
 
         for sort in reversed(sorting):
 
-            column = column_lookup.get(
-                str(sort["column"])
-            )
+            column = column_lookup.get(str(sort["column"]))
 
             if not column:
                 continue
 
-            reverse = (
-                sort.get("direction") == "desc"
-            )
+            reverse = sort.get("direction") == "desc"
+
+            def sort_key(row):
+
+                value = ReportRunnerService.extract_value(
+                    row,
+                    column,
+                    relation_cache,
+                )
+
+                if isinstance(value, dict):
+                    value = value.get("display")
+
+                if isinstance(value, list):
+                    value = ", ".join(str(v) for v in value)
+
+                if value is None:
+                    return ""
+
+                # إذا كان العمود رقمياً رتب كرقم
+                if column.get("type") == "number":
+                    try:
+                        return float(value)
+                    except Exception:
+                        return 0
+
+                # إذا كان تاريخاً
+                if column.get("type") == "date":
+                    return str(value)
+
+                # باقي الأنواع
+                return str(value).lower()
 
             rows = sorted(
                 rows,
-                key=lambda row: str(
-                    ReportRunnerService.extract_value(
-                        row,
-                        column,
-                        relation_cache,
-                    ) or ""
-                ),
+                key=sort_key,
                 reverse=reverse,
             )
 
