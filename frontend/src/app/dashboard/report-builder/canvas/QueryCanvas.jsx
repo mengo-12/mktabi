@@ -13,6 +13,27 @@ import {
     Save
 } from "lucide-react";
 
+
+const SectionCard = ({ title, description, children }) => (
+    <div className="border border-slate-800 rounded-xl bg-slate-900/40 overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-800">
+            <h3 className="text-sm font-semibold text-white">
+                {title}
+            </h3>
+
+            {description && (
+                <p className="text-xs text-slate-500 mt-1">
+                    {description}
+                </p>
+            )}
+        </div>
+
+        <div className="p-4">
+            {children}
+        </div>
+    </div>
+);
+
 export default function QueryCanvas() {
 
     const [previewRows, setPreviewRows] = useState([]);
@@ -109,6 +130,20 @@ export default function QueryCanvas() {
     const calculatedFields =
         report.query.calculatedFields || [];
 
+    const selectableColumns = selectedColumns;
+
+    const previewColumns =
+        reportResult?.columns?.length
+            ? reportResult.columns
+            : [
+                ...selectedColumns,
+                ...calculatedFields.map(field => ({
+                    id: field.name,
+                    name: field.name,
+                    type: "calculated",
+                })),
+            ];
+
 
     const isSelected = (columnId) => {
         return selectedColumns.some(
@@ -116,25 +151,6 @@ export default function QueryCanvas() {
         );
     };
 
-    const SectionCard = ({ title, description, children }) => (
-        <div className="border border-slate-800 rounded-xl bg-slate-900/40 overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-800">
-                <h3 className="text-sm font-semibold text-white">
-                    {title}
-                </h3>
-
-                {description && (
-                    <p className="text-xs text-slate-500 mt-1">
-                        {description}
-                    </p>
-                )}
-            </div>
-
-            <div className="p-4">
-                {children}
-            </div>
-        </div>
-    );
 
     const runQuery = async () => {
         if (!selectedTable) return;
@@ -145,20 +161,21 @@ export default function QueryCanvas() {
             const payload = {
                 table_id: selectedTable.id,
 
-                columns: selectedColumns.map((column) => ({
+                columns: selectedColumns.map(column => ({
                     id: column.id,
                     name: column.name,
                     type: column.type,
                     path: column.path || [],
                 })),
 
-                relations: selectedRelations.map((relation) => ({
-                    column_id: relation.column.id,
-                    table_id:
-                        relation.table?.id ??
-                        relation.column.relatedTableId ??
-                        relation.column.relation?.table_id,
-                })),
+                relations: selectedColumns
+                    .filter(column => column.type === "relation")
+                    .map(column => ({
+                        column_id: column.id,
+                        table_id:
+                            column.relatedTableId ??
+                            column.relation?.table_id,
+                    })),
 
 
                 filters: report.query.filters || [],
@@ -167,7 +184,7 @@ export default function QueryCanvas() {
 
                 groupBy: report.query.groupBy || "",
 
-                calculatedFields:report.query.calculatedFields || [],
+                calculatedFields: report.query.calculatedFields || [],
 
 
 
@@ -175,6 +192,9 @@ export default function QueryCanvas() {
 
 
             const result = await reportBuilderService.runQuery(payload);
+            console.log("payload", payload);
+            console.log("result", result);
+            console.log("result.columns", result.columns);
             setReportResult(result);
             setPreviewRows(result.rows || []);
         } catch (error) {
@@ -197,7 +217,7 @@ export default function QueryCanvas() {
 
             const payload = {
                 table_id: selectedTable.id,
-                columns: selectedColumns.map(column => ({
+                columns: previewColumns.map(column => ({
                     id: column.id,
                     name: column.name,
                     type: column.type,
@@ -217,7 +237,7 @@ export default function QueryCanvas() {
 
                 groupBy: report.query.groupBy || "",
 
-                calculatedFields:report.query.calculatedFields || [],
+                calculatedFields: report.query.calculatedFields || [],
 
             };
             await reportBuilderService.createReport(payload);
@@ -428,7 +448,7 @@ export default function QueryCanvas() {
 
                         <div className="flex flex-wrap gap-2">
 
-                            {selectedColumns.map((column) => (
+                            {previewColumns.map((column) => (
 
                                 <div
                                     key={`${column.id}-${JSON.stringify(column.path || [])}`}
@@ -487,7 +507,7 @@ export default function QueryCanvas() {
                                         اختر العمود
                                     </option>
 
-                                    {selectedColumns.map(col => (
+                                    {selectableColumns.map(col => (
 
                                         <option
                                             key={col.id}
@@ -705,7 +725,7 @@ export default function QueryCanvas() {
                                 بدون تجميع
                             </option>
 
-                            {selectedColumns.map(column => (
+                            {selectableColumns.map(column => (
 
                                 <option
                                     key={column.id}
@@ -760,7 +780,7 @@ export default function QueryCanvas() {
                                         اختر عمود
                                     </option>
 
-                                    {selectedColumns.map((column) => (
+                                    {selectableColumns.map((column) => (
 
                                         <option
                                             key={column.id}
@@ -875,7 +895,7 @@ export default function QueryCanvas() {
                                         اختر عمود
                                     </option>
 
-                                    {selectedColumns.map(column => (
+                                    {selectableColumns.map(column => (
                                         <option
                                             key={column.id}
                                             value={column.id}
@@ -944,7 +964,7 @@ export default function QueryCanvas() {
 
                                     <tr>
 
-                                        {selectedColumns.map(col => (
+                                        {previewColumns.map(col => (
 
                                             <th
                                                 key={`${col.id}-${JSON.stringify(col.path || [])}`}
@@ -968,7 +988,7 @@ export default function QueryCanvas() {
                                             className="hover:bg-slate-900/40"
                                         >
 
-                                            {selectedColumns.map(col => (
+                                            {previewColumns.map(col => (
 
                                                 <td
                                                     key={`${col.id}-${JSON.stringify(col.path || [])}`}
@@ -1008,7 +1028,7 @@ export default function QueryCanvas() {
 
                                 <thead>
                                     <tr>
-                                        {selectedColumns.map(col => (
+                                        {previewColumns.map(col => (
                                             <th
                                                 key={`${col.id}-${JSON.stringify(col.path || [])}`}
                                                 className="border px-2 py-1 text-left"
@@ -1025,7 +1045,7 @@ export default function QueryCanvas() {
 
                                         <tr key={row.id}>
 
-                                            {selectedColumns.map(col => (
+                                            {previewColumns.map(col => (
 
                                                 <td
                                                     key={`${col.id}-${JSON.stringify(col.path || [])}`}

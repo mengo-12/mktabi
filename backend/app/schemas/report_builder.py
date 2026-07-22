@@ -57,10 +57,38 @@ class RelationRequest(BaseModel):
     table_id: int
 
 
+class ReportFilter(BaseModel):
+    id: str | None = None
+    column: str
+    operator: str = "="
+    value: Any
+
+
+class ReportSorting(BaseModel):
+    id: str | None = None
+    column: str
+    direction: str = "asc"
+
+
+class CalculatedField(BaseModel):
+    id: str | None = None
+    name: str
+    operation: str
+    column: str
+
+
 class ReportRunRequest(BaseModel):
     table_id: int
     columns: List[ReportColumn]
     relations: List[RelationRequest] = []
+    filters: List[ReportFilter] = []
+
+    sorting: List[ReportSorting] = []
+
+    groupBy: str | None = None
+
+    calculatedFields: List[CalculatedField] = []
+
     visualization: dict[str, Any] | None = None
 
 class ReportBuilderResponse(BaseModel):

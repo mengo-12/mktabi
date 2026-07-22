@@ -15,6 +15,7 @@ class ReportRunnerService:
             for relation in payload.get("relations", [])
         }
 
+
         table_id = payload.get("table_id")
 
         table = await db.get(CustomTable, table_id)
@@ -31,6 +32,7 @@ class ReportRunnerService:
         relation_cache = await ReportRunnerService.preload_relation_tables(
             db,
             selected_columns,
+            payload.get("relations", []),
         )
 
         result = await db.execute(
@@ -42,19 +44,51 @@ class ReportRunnerService:
         filters = payload.get("filters", [])
 
         if filters:
-            rows = ReportRunnerService.apply_filters(rows, filters)
+            rows = ReportRunnerService.apply_filters(
+                rows,
+                filters,
+                selected_columns,
+                relation_cache,
+            )
 
         sorting = payload.get("sorting", [])
 
         if sorting:
-            rows = ReportRunnerService.apply_sorting(rows, sorting)
+            rows = ReportRunnerService.apply_sorting(
+                rows,
+                sorting,
+                selected_columns,
+                relation_cache,
+            )
+
+        # ----------------------------
+        # Build Groups
+        # ----------------------------
 
         group_by = payload.get("groupBy")
 
         if group_by:
-            rows = ReportRunnerService.apply_group_by(rows, group_by)
 
-        calculated_fields = payload.get("calculatedFields", [])
+            groups = ReportRunnerService.build_groups(
+                rows,
+                group_by,
+                selected_columns,
+                relation_cache,
+            )
+
+        else:
+
+            groups = [
+                {
+                    "rows": [row],
+                }
+                for row in rows
+            ]
+
+        calculated_fields = payload.get(
+            "calculatedFields",
+            [],
+        )
 
         response_columns = []
 
@@ -69,58 +103,80 @@ class ReportRunnerService:
                 }
             )
 
+        for field in calculated_fields:
+
+            response_columns.append(
+                {
+                    "id": field["name"],
+                    "name": field["name"],
+                    "type": "number",
+                }
+            )
+
         response_rows = []
 
-        for row in rows:
-            item = {"id": row.id}
-            cells = row.cells_data or {}
+        for group in groups:
 
-            # تم إصلاح المسافات هنا لتدخل داخل حلقة الـ rows والدالة بشكل سليم
-            for column in response_columns:
-                if column.get("path"):
-                    value = ReportRunnerService.get_value_by_path(
-                        row,
-                        column["path"],
-                        relation_cache,
-                    )
-                else:
-                    value = cells.get(column["id"])
+            source = group["rows"][0]
 
-                # ===========================
-                # Relation Join
-                # ===========================
+            item = {
+                "id": getattr(source, "id", None)
+            }
+
+            for column in selected_columns:
+
+                # item[column["id"]] = ReportRunnerService.extract_value(
+                #     source,
+                #     column,
+                #     relation_cache,
+                # )
+                
+                value = ReportRunnerService.extract_value(
+                    source,
+                    column,
+                    relation_cache,
+                )
 
                 if column["type"] == "relation":
 
-                    relation_table_id = None
-
-                    path = column.get("path", [])
-
-                    if len(path) >= 2:
-                        relation_table_id = path[-2].get("relation_table_id")
+                    relation_table_id = selected_relations.get(column["id"])
 
                     if relation_table_id is None:
-                        relation_table_id = selected_relations.get(column["id"])
 
-                    if value is None:
+                        path = column.get("path", [])
 
-                        item[column["id"]] = []
+                        for step in reversed(path):
 
-                    else:
+                            if step.get("relation_table_id"):
+
+                                relation_table_id = step["relation_table_id"]
+                                break
+
+                    if relation_table_id and value is not None:
 
                         relation_ids = value if isinstance(value, list) else [value]
 
-                        if relation_table_id:
-                            item[column["id"]] = ReportRunnerService.resolve_relation(
-                                relation_cache,
-                                int(relation_table_id),
-                                relation_ids,
-                            )
-                        else:
-                            item[column["id"]] = relation_ids
+                        item[column["id"]] = ReportRunnerService.resolve_relation(
+                            relation_cache,
+                            int(relation_table_id),
+                            relation_ids,
+                        )
+
+                    else:
+
+                        item[column["id"]] = value
 
                 else:
+
                     item[column["id"]] = value
+
+            ReportRunnerService.apply_aggregations(
+                item,
+                group["rows"],
+                calculated_fields,
+                selected_columns,
+                relation_cache,
+            )
 
             response_rows.append(item)
 
@@ -131,11 +187,11 @@ class ReportRunnerService:
             visualization,
         )
 
-        if calculated_fields:
-            response_rows = ReportRunnerService.apply_calculated_fields(
-                response_rows,
-                calculated_fields,
-            )
+        # if calculated_fields:
+        #     response_rows = ReportRunnerService.apply_calculated_fields(
+        #         response_rows,
+        #         calculated_fields,
+        #     )
 
         return {
 
@@ -210,12 +266,15 @@ class ReportRunnerService:
     async def preload_relation_tables(
         db: AsyncSession,
         selected_columns: list,
+        selected_relations: list,
     ):
-        """
-        تحميل جميع الجداول المرتبطة مرة واحدة.
-        """
-
         relation_cache = {}
+
+        table_ids = set()
+
+        for relation in selected_relations:
+            if relation.get("table_id"):
+                table_ids.add(int(relation["table_id"]))
 
         for column in selected_columns:
 
@@ -223,21 +282,18 @@ class ReportRunnerService:
 
                 relation_table_id = step.get("relation_table_id")
 
-                if not relation_table_id:
-                    continue
+                if relation_table_id:
+                    table_ids.add(int(relation_table_id))
 
-                relation_table_id = int(relation_table_id)
+        for table_id in table_ids:
 
-                if relation_table_id in relation_cache:
-                    continue
+            cache = await ReportRunnerService.load_relation_table(
+                db,
+                table_id,
+            )
 
-                cache = await ReportRunnerService.load_relation_table(
-                    db,
-                    relation_table_id,
-                )
-
-                if cache:
-                    relation_cache[relation_table_id] = cache
+            if cache:
+                relation_cache[table_id] = cache
 
         return relation_cache
 
@@ -319,9 +375,33 @@ class ReportRunnerService:
     
 
     @staticmethod
-    def apply_filters(rows, filters):
+    def apply_filters(
+        rows,
+        filters,
+        selected_columns,
+        relation_cache,
+    ):
 
-        def check(value, operator, expected):
+        if not filters:
+            return rows
+
+        column_lookup = {
+            str(column["id"]): column
+            for column in selected_columns
+        }
+
+        def compare(value, operator, expected):
+
+            if isinstance(value, list):
+
+                return any(
+                    compare(v, operator, expected)
+                    for v in value
+                )
+
+            if isinstance(value, dict):
+
+                value = value.get("display")
 
             if value is None:
                 value = ""
@@ -344,75 +424,102 @@ class ReportRunnerService:
             if operator == "ends_with":
                 return value.lower().endswith(expected.lower())
 
-            if operator == ">":
+            if operator in (">", "<", ">=", "<="):
+
                 try:
-                    return float(value) > float(expected)
+
+                    left = float(value)
+                    right = float(expected)
+
                 except:
+
                     return False
 
-            if operator == "<":
-                try:
-                    return float(value) < float(expected)
-                except:
-                    return False
+                if operator == ">":
+                    return left > right
 
-            if operator == ">=":
-                try:
-                    return float(value) >= float(expected)
-                except:
-                    return False
+                if operator == "<":
+                    return left < right
 
-            if operator == "<=":
-                try:
-                    return float(value) <= float(expected)
-                except:
-                    return False
+                if operator == ">=":
+                    return left >= right
+
+                if operator == "<=":
+                    return left <= right
 
             return True
 
-        filtered = []
+        output = []
 
         for row in rows:
 
-            cells = row.cells_data or {}
-
             passed = True
 
-            for f in filters:
+            for flt in filters:
 
-                column = f.get("column")
-                operator = f.get("operator", "=")
-                expected = f.get("value")
+                column = column_lookup.get(str(flt["column"]))
 
-                value = cells.get(column)
+                if not column:
+                    continue
 
-                if not check(value, operator, expected):
+                value = ReportRunnerService.extract_value(
+                    row,
+                    column,
+                    relation_cache,
+                )
+
+                if not compare(
+                    value,
+                    flt["operator"],
+                    flt["value"],
+                ):
                     passed = False
                     break
 
             if passed:
-                filtered.append(row)
+                output.append(row)
 
-        return filtered
+        return output
     
 
     @staticmethod
-    def apply_sorting(rows, sorting):
+    def apply_sorting(
+        rows,
+        sorting,
+        selected_columns,
+        relation_cache,
+    ):
+
+        if not sorting:
+            return rows
+
+        column_lookup = {
+            str(column["id"]): column
+            for column in selected_columns
+        }
 
         for sort in reversed(sorting):
 
-            column = sort.get("column")
+            column = column_lookup.get(
+                str(sort["column"])
+            )
 
             if not column:
                 continue
 
-            reverse = sort.get("direction") == "desc"
+            reverse = (
+                sort.get("direction") == "desc"
+            )
 
             rows = sorted(
                 rows,
-                key=lambda row: (
-                    row.cells_data or {}
-                ).get(column, ""),
+                key=lambda row: str(
+                    ReportRunnerService.extract_value(
+                        row,
+                        column,
+                        relation_cache,
+                    ) or ""
+                ),
                 reverse=reverse,
             )
 
@@ -420,64 +527,130 @@ class ReportRunnerService:
     
 
     @staticmethod
-    def apply_group_by(rows, group_by):
+    def build_groups(
+        rows,
+        group_by,
+        selected_columns,
+        relation_cache,
+    ):
+
+        lookup = {
+            str(c["id"]): c
+            for c in selected_columns
+        }
+
+        column = lookup.get(str(group_by))
+
+        if not column:
+            return [{"rows": rows}]
 
         groups = {}
 
         for row in rows:
 
-            cells = row.cells_data or {}
+            key = ReportRunnerService.extract_value(
+                row,
+                column,
+                relation_cache,
+            )
 
-            key = cells.get(group_by)
+            if isinstance(key, dict):
+                key = key.get("display")
 
-            if key not in groups:
-                groups[key] = row
+            if isinstance(key, list):
+                key = tuple(
+                    str(v)
+                    for v in key
+                )
 
-        return list(groups.values())
-    
+            groups.setdefault(
+                key,
+                [],
+            ).append(row)
+
+        return [
+
+            {
+                "key": key,
+                "rows": value,
+            }
+
+            for key, value in groups.items()
+
+        ]
+        
 
     @staticmethod
-    def apply_calculated_fields(rows, calculated_fields):
+    def apply_aggregations(
+        target,
+        rows,
+        calculated_fields,
+        selected_columns,
+        relation_cache,
+    ):
+
+        lookup = {
+            str(c["id"]): c
+            for c in selected_columns
+        }
 
         for field in calculated_fields:
 
-            field_name = field.get("name")
-            operation = field.get("operation")
-            column = field.get("column")
+            column = lookup.get(str(field["column"]))
 
             values = []
 
-            for row in rows:
+            if column:
 
-                value = row.get(column)
+                for row in rows:
 
-                try:
-                    values.append(float(value))
-                except:
-                    pass
+                    value = ReportRunnerService.extract_value(
+                        row,
+                        column,
+                        relation_cache,
+                    )
 
-            if operation == "sum":
+                    if isinstance(value, dict):
+                        value = value.get("display")
+
+                    if isinstance(value, list):
+                        continue
+
+                    try:
+                        values.append(float(value))
+                    except:
+                        pass
+
+            op = field["operation"].lower()
+
+            if op == "sum":
                 result = sum(values)
 
-            elif operation == "avg":
-                result = sum(values) / len(values) if values else 0
+            elif op == "avg":
+                result = (
+                    sum(values) / len(values)
+                    if values else 0
+                )
 
-            elif operation == "count":
-                result = len(values)
+            elif op == "count":
+                result = len(rows)
 
-            elif operation == "min":
-                result = min(values) if values else 0
+            elif op == "min":
+                result = (
+                    min(values)
+                    if values else None
+                )
 
-            elif operation == "max":
-                result = max(values) if values else 0
+            elif op == "max":
+                result = (
+                    max(values)
+                    if values else None
+                )
 
             else:
                 result = None
 
-            for row in rows:
-                row[field_name] = result
-
-        return rows
+            target[field["name"]] = result
 
     
     @staticmethod
@@ -579,3 +752,24 @@ class ReportRunnerService:
             ]
 
         }
+    
+    @staticmethod
+    def extract_value(
+        row,
+        column,
+        relation_cache,
+    ):
+        if isinstance(row, dict):
+
+            return row.get(column["id"])
+        
+        path = column.get("path") or []
+
+        if path:
+            return ReportRunnerService.get_value_by_path(
+                row,
+                path,
+                relation_cache,
+            )
+
+        return (row.cells_data or {}).get(column["id"])

@@ -15,7 +15,7 @@ const initialReport = {
         columns: [],
         filters: [],
         sorting: [],
-        groupBy: [],
+        groupBy: "",
         calculatedFields: []
     },
 
