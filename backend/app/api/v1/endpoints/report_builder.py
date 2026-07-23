@@ -69,3 +69,46 @@ async def create_report(
         db,
         payload
     )
+
+@router.put("/{report_id}", response_model=ReportBuilderResponse)
+async def update_report(
+    report_id: int,
+    payload: ReportBuilderCreate,
+    db: AsyncSession = Depends(get_db),
+):
+
+    report = await ReportBuilderService.update_report(
+        db,
+        report_id,
+        payload,
+    )
+
+    if not report:
+        raise HTTPException(
+            status_code=404,
+            detail="Report not found",
+        )
+
+    return report
+
+
+@router.delete("/{report_id}")
+async def delete_report(
+    report_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+
+    deleted = await ReportBuilderService.delete_report(
+        db,
+        report_id,
+    )
+
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail="Report not found",
+        )
+
+    return {
+        "success": True
+    }

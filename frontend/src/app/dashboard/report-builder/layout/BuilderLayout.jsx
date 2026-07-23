@@ -3,8 +3,11 @@
 import LeftSidebar from "./LeftSidebar";
 import CenterCanvas from "./CenterCanvas";
 import RightProperties from "./RightProperties";
+import useDataSources from "../hooks/useDataSources";
 
 export default function BuilderLayout() {
+
+    useDataSources();
 
     return (
 

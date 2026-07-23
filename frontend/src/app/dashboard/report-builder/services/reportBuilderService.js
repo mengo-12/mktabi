@@ -24,7 +24,32 @@ const reportBuilderService = {
 
         return data;
 
-    }
+    },
+
+    async getReports() {
+        const { data } = await apiClient.get("/report-builder");
+        return data;
+    },
+
+    async getReport(id) {
+        const { data } = await apiClient.get(`/report-builder/${id}`);
+        return data;
+    },
+
+    async updateReport(id, payload) {
+        const { data } = await apiClient.put(
+            `/report-builder/${id}`,
+            payload
+        );
+        return data;
+    },
+
+    async deleteReport(id) {
+        const { data } = await apiClient.delete(
+            `/report-builder/${id}`
+        );
+        return data;
+    },
 };
 
 export default reportBuilderService;

@@ -186,3 +186,36 @@ class ReportBuilderService:
         )
 
         return result.scalar_one_or_none()
+    
+    @staticmethod
+    async def update_report(db, report_id: int, payload):
+
+        report = await db.get(ReportBuilder, report_id)
+
+        if not report:
+            return None
+
+        report.name = payload.name
+        report.description = payload.description
+        report.section_id = payload.section_id
+        report.base_table_id = payload.base_table_id
+        report.config = payload.config
+
+        await db.commit()
+        await db.refresh(report)
+
+        return report
+
+
+    @staticmethod
+    async def delete_report(db, report_id: int):
+
+        report = await db.get(ReportBuilder, report_id)
+
+        if not report:
+            return False
+
+        await db.delete(report)
+        await db.commit()
+
+        return True

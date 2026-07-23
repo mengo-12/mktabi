@@ -118,7 +118,8 @@ const useReportStore = create((set) => ({
 
                     ...state.report.query,
 
-                    columns: []
+                    columns:
+                        state.report.query.columns || [],
 
                 }
 
@@ -469,7 +470,7 @@ const useReportStore = create((set) => ({
             },
         })),
 
-        
+
     // -------------------------
     // تغيير نوع العرض
     // -------------------------
@@ -576,6 +577,27 @@ const useReportStore = create((set) => ({
             },
         })),
 
+    setSelectedTable: (table) =>
+        set((state) => ({
+            selectedTable: table,
+            report: {
+                ...state.report,
+                dataSource: {
+                    ...state.report.dataSource,
+                    table,
+                },
+            },
+        })),
+
+    // loadReport: (config) =>
+    //     set((state) => ({
+    //         report: {
+    //             ...state.report,
+    //             ...config,
+    //         },
+    //         selectedRelations: config.relations || [],
+    //     })),
+
 
     // -------------------------
     // إعادة ضبط التقرير
@@ -605,6 +627,68 @@ const useReportStore = create((set) => ({
         set({
             reportResult: result
         }),
+
+    // -------------------------
+    // تحميل تقرير محفوظ
+    // -------------------------
+
+    loadReport(reportData) {
+
+        set(() => ({
+
+            report: {
+
+                id: reportData.id,
+                name: reportData.name,
+                description: reportData.description,
+
+                dataSource: {
+                    section: reportData.section_id,
+                    table: reportData.base_table_id,
+                    joins: [],
+                },
+
+                query: {
+
+                    columns:
+                        reportData.config?.query?.columns || [],
+
+                    filters:
+                        reportData.config?.query?.filters || [],
+
+                    sorting:
+                        reportData.config?.query?.sorting || [],
+
+                    groupBy:
+                        reportData.config?.query?.groupBy || "",
+
+                    calculatedFields:
+                        reportData.config?.query?.calculatedFields || [],
+
+                },
+
+                view: {
+
+                    type:
+                        reportData.config?.visualization?.type || "table",
+
+                    hiddenColumns: [],
+
+                    columnOrder: [],
+
+                },
+
+                dashboard: reportData.config?.dashboard || {
+                    widgets: [],
+                    layout: [],
+                    selectedWidget: null,
+                },
+
+            },
+
+        }));
+
+    },
 
 }));
 

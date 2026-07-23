@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import useReportStore from "../store/reportStore";
 import EmptyCanvas from "./EmptyCanvas";
 import reportBuilderService from "../services/reportBuilderService";
@@ -38,16 +39,16 @@ export default function QueryCanvas() {
 
     const [previewRows, setPreviewRows] = useState([]);
     const [loadingPreview, setLoadingPreview] = useState(false);
-
     const [saveModalOpen, setSaveModalOpen] = useState(false);
     const [reportName, setReportName] = useState("");
     const [reportDescription, setReportDescription] = useState("");
     const [saving, setSaving] = useState(false);
 
-
     const {
         selectedTable,
         report,
+        loadReport,
+        setSelectedTable,
         toggleColumn,
         reportResult,
         setReportResult,
@@ -66,6 +67,58 @@ export default function QueryCanvas() {
         updateCalculatedField,
         removeCalculatedField,
     } = useReportStore();
+
+    const searchParams = useSearchParams();
+    const reportId = searchParams.get("report");
+
+    useEffect(() => {
+
+        if (!reportId || dataSources.length === 0) return;
+
+        const loadSavedReport = async () => {
+
+            const reportData =
+                await reportBuilderService.getReport(reportId);
+
+            //  تم نقل الـ console.log إلى هنا بعد تعريف reportData بنجاح
+            console.log("reportId", reportId);
+            console.log("dataSources", dataSources);
+            console.log("reportData", reportData);
+
+            const table =
+                dataSources
+                    .flatMap(section => section.tables || [])
+                    .find(
+                        t => String(t.id) === String(reportData.base_table_id)
+                    );
+
+            console.log("table", table);
+
+            console.log(
+                dataSources.flatMap(section =>
+                    (section.tables || []).map(table => ({
+                        id: table.id,
+                        name: table.name,
+                    }))
+                )
+            );
+
+            if (!table) return;
+
+            setSelectedTable(table);
+
+            loadReport(reportData);
+
+            setTimeout(() => {
+                console.log("report after load", useReportStore.getState().report);
+            }, 100);
+
+
+        };
+
+        loadSavedReport();
+
+    }, [reportId, dataSources]);
 
     // لا يوجد جدول محدد
     if (!selectedTable) {
@@ -168,14 +221,31 @@ export default function QueryCanvas() {
                     path: column.path || [],
                 })),
 
+                // relations: selectedColumns
+                //     .filter(column => column.type === "relation")
+                //     .map(column => ({
+                //         column_id: column.id,
+                //         table_id:
+                //             column.relatedTableId ??
+                //             column.relation?.table_id,
+                //     })),
+
                 relations: selectedColumns
                     .filter(column => column.type === "relation")
-                    .map(column => ({
-                        column_id: column.id,
-                        table_id:
-                            column.relatedTableId ??
-                            column.relation?.table_id,
-                    })),
+                    .map(column => {
+
+                        const relation = selectedTable.relations.find(
+                            r => String(r.column_id) === String(column.id)
+                        );
+
+                        return {
+                            column_id: column.id,
+                            table_id:
+                                column.relatedTableId ??
+                                column.relation?.table_id ??
+                                relation?.table?.id,
+                        };
+                    }),
 
 
                 filters: report.query.filters || [],
@@ -189,6 +259,8 @@ export default function QueryCanvas() {
 
 
             };
+
+            console.log("RUN PAYLOAD", payload);
 
 
             const result = await reportBuilderService.runQuery(payload);
@@ -214,29 +286,42 @@ export default function QueryCanvas() {
         try {
 
             const payload = {
-                table_id: selectedTable.id,
-                columns: previewColumns.map(column => ({
-                    id: column.id,
-                    name: column.name,
-                    type: column.type,
-                    path: column.path || [],
-                })),
-                relations: selectedRelations.map(relation => ({
-                    column_id: relation.column.id,
-                    table_id:
-                        relation.table?.id ??
-                        relation.column.relatedTableId ??
-                        relation.column.relation?.table_id,
-                })),
+                name: reportName,
+                description: reportDescription,
 
-                filters: report.query.filters || [],
+                base_table_id: selectedTable.id,
 
-                sorting: report.query.sorting || [],
+                config: {
+                    query: {
+                        table_id: selectedTable.id,
 
-                groupBy: report.query.groupBy || "",
+                        columns: previewColumns.map(column => ({
+                            id: column.id,
+                            name: column.name,
+                            type: column.type,
+                            path: column.path || [],
+                        })),
 
-                calculatedFields: report.query.calculatedFields || [],
+                        relations: selectedRelations.map(relation => ({
+                            column_id: relation.column.id,
+                            table_id:
+                                relation.table?.id ??
+                                relation.column.relatedTableId ??
+                                relation.column.relation?.table_id,
+                        })),
 
+                        filters: report.query.filters || [],
+
+                        sorting: report.query.sorting || [],
+
+                        groupBy: report.query.groupBy || "",
+
+                        calculatedFields:
+                            report.query.calculatedFields || [],
+                    },
+
+                    visualization: report.visualization,
+                },
             };
             await reportBuilderService.createReport(payload);
 

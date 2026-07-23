@@ -1,8 +1,12 @@
 "use client";
 
 import DataSourceTree from "../datasource/DataSourceTree";
+import useDataSources from "../hooks/useDataSources";
 
 export default function LeftSidebar() {
+
+    useDataSources();
+
 
     return (
 
