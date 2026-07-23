@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import apiClient from "@/services/apiClient";
@@ -12,6 +12,10 @@ import dashboardWidgetService from "../services/dashboardWidgetService";
 import dashboardService from "../services/dashboardService";
 
 import { Responsive, WidthProvider } from "react-grid-layout";
+
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -33,7 +37,17 @@ import {
     ResponsiveContainer
 } from "recharts";
 
-import { X, Pencil } from "lucide-react";
+import {
+    X,
+    Pencil,
+    Search,
+    ChevronLeft,
+    ChevronRight,
+    ArrowUpDown,
+    FileSpreadsheet,
+    FileText,
+    FileDown,
+} from "lucide-react";
 
 export default function DashboardCanvasPage() {
 
@@ -572,6 +586,16 @@ function TableWidget({ widget }) {
 
     const [result, setResult] = useState(null);
 
+    const [search, setSearch] = useState("");
+
+    const [page, setPage] = useState(1);
+
+    const [sortColumn, setSortColumn] = useState("");
+
+    const [sortDirection, setSortDirection] = useState("asc");
+
+    const pageSize = 10;
+
     useEffect(() => {
 
         load();
@@ -607,6 +631,8 @@ function TableWidget({ widget }) {
 
             setResult(data);
 
+            console.log(report.config.query);
+
         } catch (err) {
 
             console.error(err);
@@ -618,18 +644,6 @@ function TableWidget({ widget }) {
         }
 
     };
-
-    if (loading) {
-
-        return <div>Loading...</div>;
-
-    }
-
-    if (!result) {
-
-        return <div>No Data</div>;
-
-    }
 
     const renderCell = (value) => {
 
@@ -660,57 +674,356 @@ function TableWidget({ widget }) {
 
     };
 
+
+    const filteredRows = useMemo(() => {
+
+        if (!result) return [];
+
+        return result.rows.filter(row =>
+            result.columns.some(col =>
+                String(renderCell(row[col.id]))
+                    .toLowerCase()
+                    .includes(search.toLowerCase())
+            )
+        );
+
+    }, [result, search]);
+
+    const sortedRows = useMemo(() => {
+
+        if (!sortColumn) return filteredRows;
+
+        return [...filteredRows].sort((a, b) => {
+
+            const av = String(renderCell(a[sortColumn]) ?? "");
+
+            const bv = String(renderCell(b[sortColumn]) ?? "");
+
+            return sortDirection === "asc"
+                ? av.localeCompare(bv)
+                : bv.localeCompare(av);
+
+        });
+
+    }, [filteredRows, sortColumn, sortDirection]);
+
+    const totalPages =
+        Math.max(1, Math.ceil(sortedRows.length / pageSize));
+
+    const pageRows =
+        sortedRows.slice(
+            (page - 1) * pageSize,
+            page * pageSize
+        );
+
+    const sortBy = (id) => {
+
+        if (sortColumn === id) {
+
+            setSortDirection(
+                sortDirection === "asc"
+                    ? "desc"
+                    : "asc"
+            );
+
+        } else {
+
+            setSortColumn(id);
+
+            setSortDirection("asc");
+
+        }
+
+    };
+
+    const exportCSV = () => {
+
+        const headers =
+            result.columns.map(c => c.name);
+
+        const rows =
+            sortedRows.map(row =>
+                result.columns.map(col =>
+                    `"${renderCell(row[col.id])}"`
+                )
+            );
+
+        const csv =
+            [headers, ...rows]
+                .map(r => r.join(","))
+                .join("\n");
+
+        const blob =
+            new Blob([csv], {
+                type: "text/csv;charset=utf-8;"
+            });
+
+        const url =
+            URL.createObjectURL(blob);
+
+        const a =
+            document.createElement("a");
+
+        a.href = url;
+
+        a.download = `${widget.title}.csv`;
+
+        a.click();
+
+        URL.revokeObjectURL(url);
+
+    };
+
+    const exportExcel = () => {
+
+        const data =
+            sortedRows.map(row => {
+
+                const obj = {};
+
+                result.columns.forEach(col => {
+
+                    obj[col.name] =
+                        renderCell(row[col.id]);
+
+                });
+
+                return obj;
+
+            });
+
+        const ws =
+            XLSX.utils.json_to_sheet(data);
+
+        const wb =
+            XLSX.utils.book_new();
+
+        XLSX.utils.book_append_sheet(
+            wb,
+            ws,
+            "Report"
+        );
+
+        XLSX.writeFile(
+            wb,
+            `${widget.title}.xlsx`
+        );
+
+    };
+
+    const exportPDF = () => {
+
+        const doc =
+            new jsPDF();
+
+        autoTable(doc, {
+
+            head: [
+                result.columns.map(c => c.name)
+            ],
+
+            body:
+                sortedRows.map(row =>
+                    result.columns.map(col =>
+                        renderCell(row[col.id])
+                    )
+                ),
+
+            styles: {
+                fontSize: 8,
+            },
+
+        });
+
+        doc.save(`${widget.title}.pdf`);
+
+    };
+
+    if (loading) {
+
+        return <div>Loading...</div>;
+
+    }
+
+    if (!result) {
+
+        return <div>No Data</div>;
+
+    }
+
+
     return (
 
-        <table className="w-full border-collapse">
+        <div className="space-y-3 h-full flex flex-col">
 
-            <thead>
+            <div className="flex items-center justify-between gap-3">
 
-                <tr>
+                <div className="relative w-full">
 
-                    {result.columns.map(col => (
+                    <Search
+                        size={16}
+                        className="absolute left-3 top-3 text-slate-400"
+                    />
 
-                        <th
-                            key={col.id}
-                            className="border px-3 py-2 text-right"
-                        >
+                    <input
+                        value={search}
+                        onChange={(e) => {
 
-                            {col.name}
+                            setSearch(e.target.value);
 
-                        </th>
+                            setPage(1);
 
-                    ))}
+                        }}
+                        placeholder="بحث..."
+                        className="w-full rounded-lg bg-slate-950 border border-slate-700 pl-10 pr-3 py-2"
+                    />
 
-                </tr>
+                </div>
 
-            </thead>
+                <div className="text-sm text-slate-400 whitespace-nowrap">
 
-            <tbody>
+                    {sortedRows.length} نتيجة
 
-                {result.rows.map((row, index) => (
+                </div>
 
-                    <tr key={index}>
+            </div>
 
-                        {result.columns.map(col => (
+            <div className="overflow-auto rounded-lg border border-slate-800 flex-1 max-h-[420px]">
 
-                            <td
-                                key={col.id}
-                                className="border px-3 py-2"
+                <table className="w-full border-collapse">
+
+                    <thead className="sticky top-0 bg-slate-900 z-20">
+
+                        <tr>
+
+                            <th className="border px-3 py-2 w-14">
+
+                                #
+
+                            </th>
+
+                            {result.columns.map(col => (
+
+                                <th
+                                    key={col.id}
+                                    onClick={() => sortBy(col.id)}
+                                    className="border px-3 py-2 text-right cursor-pointer hover:bg-slate-800"
+                                >
+
+                                    <div className="flex items-center gap-2">
+
+                                        {col.name}
+
+                                        <ArrowUpDown size={14} />
+
+                                    </div>
+
+                                </th>
+
+                            ))}
+
+                        </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                        {pageRows.map((row, index) => (
+
+                            <tr
+                                key={index}
+                                className="odd:bg-slate-900 even:bg-slate-950 hover:bg-slate-800"
                             >
 
-                                {renderCell(row[col.id])}
+                                <td className="border px-3 py-2">
 
-                            </td>
+                                    {(page - 1) * pageSize + index + 1}
+
+                                </td>
+
+                                {result.columns.map(col => (
+
+                                    <td
+                                        key={col.id}
+                                        className="border px-3 py-2"
+                                    >
+
+                                        {renderCell(row[col.id])}
+
+                                    </td>
+
+                                ))}
+
+                            </tr>
 
                         ))}
 
-                    </tr>
+                    </tbody>
 
-                ))}
+                </table>
 
-            </tbody>
+            </div>
 
-        </table>
+            <div className="flex items-center justify-between">
+
+                <div className="flex gap-2">
+
+                    <button
+                        onClick={exportExcel}
+                        className="border rounded px-2 py-1 hover:bg-slate-800"
+                    >
+                        <FileSpreadsheet size={16} />
+                    </button>
+
+                    <button
+                        onClick={exportCSV}
+                        className="border rounded px-2 py-1 hover:bg-slate-800"
+                    >
+                        <FileText size={16} />
+                    </button>
+
+                    <button
+                        onClick={exportPDF}
+                        className="border rounded px-2 py-1 hover:bg-slate-800"
+                    >
+                        <FileDown size={16} />
+                    </button>
+
+                </div>
+
+                <div className="flex items-center gap-2">
+
+                    <button
+                        disabled={page === 1}
+                        onClick={() => setPage(page - 1)}
+                        className="border rounded p-2 disabled:opacity-40"
+                    >
+
+                        <ChevronRight size={16} />
+
+                    </button>
+
+                    <span>
+
+                        {page} / {totalPages}
+
+                    </span>
+
+                    <button
+                        disabled={page === totalPages}
+                        onClick={() => setPage(page + 1)}
+                        className="border rounded p-2 disabled:opacity-40"
+                    >
+
+                        <ChevronLeft size={16} />
+
+                    </button>
+
+                </div>
+
+            </div>
+
+        </div>
 
     );
 

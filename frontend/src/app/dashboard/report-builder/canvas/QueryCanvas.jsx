@@ -311,13 +311,47 @@ export default function QueryCanvas() {
                             path: column.path || [],
                         })),
 
-                        relations: selectedRelations.map(relation => ({
-                            column_id: relation.column.id,
-                            table_id:
-                                relation.table?.id ??
-                                relation.column.relatedTableId ??
-                                relation.column.relation?.table_id,
-                        })),
+                        relations: [
+
+                            // العلاقات التي اختارها المستخدم يدوياً
+                            ...selectedRelations.map(relation => ({
+                                column_id: relation.column.id,
+                                table_id:
+                                    relation.table?.id ??
+                                    relation.column.relatedTableId ??
+                                    relation.column.relation?.table_id,
+                            })),
+
+                            // العلاقات التي تم اختيار أعمدتها تلقائياً
+                            ...previewColumns
+                                .filter(column => column.type === "relation")
+                                .map(column => {
+
+                                    const relation =
+                                        selectedTable.relations?.find(
+                                            r => String(r.column_id) === String(column.id)
+                                        );
+
+                                    return {
+                                        column_id: column.id,
+                                        table_id:
+                                            relation?.table?.id ??
+                                            column.relatedTableId ??
+                                            column.relation?.table_id,
+                                    };
+
+                                })
+
+                        ]
+                            .filter(r => r.table_id)
+                            .filter(
+                                (relation, index, array) =>
+                                    index ===
+                                    array.findIndex(
+                                        item =>
+                                            item.column_id === relation.column_id
+                                    )
+                            ),
 
                         filters: report.query.filters || [],
 
