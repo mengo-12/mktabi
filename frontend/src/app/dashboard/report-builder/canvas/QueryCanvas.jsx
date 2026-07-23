@@ -204,6 +204,15 @@ export default function QueryCanvas() {
         );
     };
 
+    const openSaveModal = () => {
+
+        setReportName(report.name || "");
+        setReportDescription(report.description || "");
+
+        setSaveModalOpen(true);
+
+    };
+
 
     const runQuery = async () => {
         if (!selectedTable) return;
@@ -323,13 +332,21 @@ export default function QueryCanvas() {
                     visualization: report.visualization,
                 },
             };
-            await reportBuilderService.createReport(payload);
+            if (report.id) {
+                await reportBuilderService.updateReport(report.id, payload);
+            } else {
+                await reportBuilderService.createReport(payload);
+            }
 
             setSaveModalOpen(false);
             setReportName("");
             setReportDescription("");
 
-            alert("تم حفظ التقرير");
+            alert(
+                report.id
+                    ? "تم تحديث التقرير"
+                    : "تم حفظ التقرير"
+            );
 
         } catch (e) {
             console.error(e);
@@ -405,11 +422,11 @@ export default function QueryCanvas() {
                     </button>
 
                     <button
-                        onClick={() => setSaveModalOpen(true)}
+                        onClick={openSaveModal}
                         className="px-4 py-2 rounded bg-green-600 text-white flex items-center gap-2"
                     >
                         <Save size={18} />
-                        حفظ التقرير
+                        {report.id ? "تحديث التقرير" : "حفظ التقرير"}
                     </button>
 
                 </div>
@@ -1202,7 +1219,11 @@ export default function QueryCanvas() {
                                     onClick={saveReport}
                                     className="px-4 py-2 rounded bg-green-600 text-white"
                                 >
-                                    {saving ? "جاري الحفظ..." : "حفظ"}
+                                    {saving
+                                        ? "جاري الحفظ..."
+                                        : report.id
+                                            ? "تحديث"
+                                            : "حفظ"}
                                 </button>
 
                             </div>

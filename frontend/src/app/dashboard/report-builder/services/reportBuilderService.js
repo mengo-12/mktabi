@@ -50,6 +50,15 @@ const reportBuilderService = {
         );
         return data;
     },
+
+    async updateReport(reportId, payload) {
+        const { data } = await apiClient.put(
+            `/report-builder/${reportId}`,
+            payload
+        );
+
+        return data;
+    },
 };
 
 export default reportBuilderService;
