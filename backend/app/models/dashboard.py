@@ -43,3 +43,9 @@ class Dashboard(Base):
         onupdate=func.now(),
         nullable=False,
     )
+
+    global_filter_mapping = Column(
+    JSON,
+    nullable=False,
+    default=dict,
+    )

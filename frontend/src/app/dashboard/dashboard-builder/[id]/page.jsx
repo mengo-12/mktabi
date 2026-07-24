@@ -73,6 +73,25 @@ export default function DashboardCanvasPage() {
         display: "default",
     });
 
+    const [globalFilters, setGlobalFilters] = useState({
+        dateFrom: "",
+        dateTo: "",
+        lawyer: "",
+        client: "",
+        caseType: "",
+        status: "",
+    });
+
+    const [isGlobalFilterOpen, setIsGlobalFilterOpen] =
+        useState(false);
+
+    const [tables, setTables] =
+        useState([]);
+
+    const [filterMapping, setFilterMapping] = useState({});
+
+    const [filterOptions, setFilterOptions] = useState({});
+
     const { id } = useParams();
 
     const [dashboard, setDashboard] = useState(null);
@@ -82,6 +101,13 @@ export default function DashboardCanvasPage() {
     const [widgets, setWidgets] = useState([]);
 
     const [layouts, setLayouts] = useState({ lg: [], });
+
+    const [datasources, setDatasources] = useState([]);
+
+    const [dashboardFilters, setDashboardFilters] = useState([]);
+
+    const [filterModalOpen, setFilterModalOpen] =
+        useState(false);
 
     useEffect(() => {
         setLayouts({
@@ -131,9 +157,23 @@ export default function DashboardCanvasPage() {
             const data =
                 await dashboardService.getDashboard(id);
 
+
+            const mapping =
+                data.global_filter_mapping || {};
+
+
             setDashboard(data);
 
+            setFilterMapping(mapping);
+
+
+            await loadGlobalFilterOptions(mapping);
+
+
             await loadWidgets(data.id);
+
+            await loadDatasources();
+
 
         } finally {
 
@@ -198,7 +238,7 @@ export default function DashboardCanvasPage() {
         }
 
     };
-    
+
 
     const saveLayout = async (layout) => {
 
@@ -212,6 +252,17 @@ export default function DashboardCanvasPage() {
             });
 
         }
+
+    };
+
+    const loadDatasources = async () => {
+
+        const { data } =
+            await apiClient.get(
+                "/report-builder/datasources"
+            );
+
+        setDatasources(data);
 
     };
 
@@ -248,6 +299,125 @@ export default function DashboardCanvasPage() {
 
     };
 
+    const openGlobalFilters = async () => {
+
+        const data =
+            await apiClient.get(
+                "/report-builder/datasources"
+            );
+
+        setTables(data.data);
+
+        setIsGlobalFilterOpen(true);
+
+    };
+
+    const loadGlobalFilterOptions = async (mapping) => {
+
+        const options = {};
+
+        const filters = mapping?.filters || [];
+
+        for (const filter of (mapping.filters || [])) {
+
+
+            if (!filter.table_id || !filter.column_id)
+                continue;
+
+            const tableId = filter.table_id;
+            const columnId = filter.column_id;
+
+
+
+            try {
+
+
+                const { data } = await apiClient.post(
+                    "/report-builder/run",
+                    {
+                        table_id: Number(tableId),
+
+                        columns: [
+                            {
+                                id: columnId,
+                                name: filter.label,
+                                type: filter.type || "text",
+                                path: filter.path || [],
+                            }
+                        ],
+
+                        relations: filter.relation
+                            ? [
+                                {
+                                    column_id: columnId,
+                                    table_id: filter.relation.table_id,
+                                }
+                            ]
+                            : [],
+
+                        filters: [],
+
+                        global_filters: {},
+
+                        global_filter_mapping: {
+                            filters: [],
+                        },
+
+                        groupBy: "",
+
+                        sorting: [],
+
+                        visualization: {
+                            type: "table"
+                        }
+                    }
+                );
+
+
+
+                options[filter.id] = [
+                    ...new Set(
+
+                        data.rows.map(row => {
+
+                            const val =
+                                row[columnId];
+
+
+                            if (Array.isArray(val)) {
+
+                                return val[0]?.display;
+
+                            }
+
+
+                            return val;
+
+                        })
+
+                    )
+                ];
+
+
+            }
+            catch (error) {
+
+                console.error(
+                    "Filter loading error",
+                    filter.id,
+                    error
+                );
+
+            }
+
+        }
+
+
+
+        setFilterOptions(options);
+
+    };
+
     if (loading) {
 
         return (
@@ -269,7 +439,6 @@ export default function DashboardCanvasPage() {
     }
 
     const layoutReady = layouts.lg.length === widgets.length;
-
 
     return (
 
@@ -330,6 +499,72 @@ export default function DashboardCanvasPage() {
                 <Plus size={18} />
                 Add Widget
             </button>
+
+            <button
+                onClick={() => setFilterModalOpen(true)}
+                className="px-4 py-2 rounded-lg border border-slate-700"
+            >
+
+                Configure Filters
+
+            </button>
+
+            <div className="flex gap-3 flex-wrap">
+
+                {(filterMapping.filters || []).map((filter) => (
+
+                    <select
+                        key={filter.id}
+                        value={globalFilters[filter.id] || ""}
+                        // onChange={(e) => {
+
+                        //     setGlobalFilters({
+                        //         ...globalFilters,
+                        //         [filter.id]: e.target.value,
+                        //     });
+
+                        // }}
+
+                        onChange={(e) => {
+
+                            const newFilters = {
+                                ...globalFilters,
+                                [filter.id]: e.target.value,
+                            };
+
+                            setGlobalFilters(newFilters);
+
+                        }}
+                        className="
+                rounded-lg
+                bg-slate-950
+                border
+                border-slate-700
+                px-3
+                py-2
+            "
+                    >
+
+                        <option value="">
+                            {filter.label || "الكل"}
+                        </option>
+
+                        {(filterOptions[filter.id] || []).map((item, index) => (
+
+                            <option
+                                key={index}
+                                value={item}
+                            >
+                                {item}
+                            </option>
+
+                        ))}
+
+                    </select>
+
+                ))}
+
+            </div>
 
         </div>
 
@@ -501,14 +736,21 @@ export default function DashboardCanvasPage() {
                                 )}
 
                                 <div className="p-5">
-
                                     {widget.widget_type === "table" ? (
 
-                                        <TableWidget widget={widget} />
+                                        <TableWidget
+                                            widget={widget}
+                                            globalFilters={globalFilters}
+                                            filterMapping={filterMapping}
+                                        />
 
                                     ) : (
 
-                                        <ChartLoader widget={widget} />
+                                        <ChartLoader
+                                            widget={widget}
+                                            globalFilters={globalFilters}
+                                            filterMapping={filterMapping}
+                                        />
 
                                     )}
 
@@ -543,6 +785,26 @@ export default function DashboardCanvasPage() {
                 widget={editingWidget}
                 dashboardId={dashboard.id}
                 reload={() => loadWidgets(dashboard.id)}
+            />
+
+            <ConfigureDashboardFiltersModal
+
+                open={filterModalOpen}
+
+                onClose={() =>
+                    setFilterModalOpen(false)
+                }
+
+                datasources={datasources}
+
+                mapping={filterMapping}
+
+                setMapping={setFilterMapping}
+
+                dashboard={dashboard}
+
+                reload={loadDashboard}
+
             />
 
         </div >
@@ -880,7 +1142,11 @@ function AddWidgetModal({
 
 }
 
-function TableWidget({ widget }) {
+function TableWidget({
+    widget,
+    globalFilters,
+    filterMapping,
+}) {
 
     const [loading, setLoading] = useState(true);
 
@@ -903,17 +1169,11 @@ function TableWidget({ widget }) {
         if (!widget.config?.autoRefresh)
             return;
 
-        const interval = setInterval(() => {
-
-            load();
-
-        }, widget.config.autoRefresh * 1000);
-
-        return () => clearInterval(interval);
 
     }, [
         widget.report_id,
         widget.config?.autoRefresh,
+        globalFilters
     ]);
 
     const load = async () => {
@@ -930,11 +1190,29 @@ function TableWidget({ widget }) {
                 throw new Error("Report query not found");
             }
 
+            const requestBody = {
+                ...report.config.query,
+
+                global_filters: globalFilters,
+
+                global_filter_mapping: filterMapping,
+
+                visualization: {
+                    ...report.config.visualization,
+                    type: widget.widget_type,
+                },
+            };
+
 
             const { data } = await apiClient.post(
                 "/report-builder/run",
                 {
                     ...report.config.query,
+
+                    global_filters: globalFilters,
+
+                    global_filter_mapping: filterMapping,
+
                     visualization: {
                         ...report.config.visualization,
                         type: widget.widget_type,
@@ -945,7 +1223,6 @@ function TableWidget({ widget }) {
 
             setResult(data);
 
-            console.log(report.config.query);
 
         } catch (err) {
 
@@ -1216,22 +1493,17 @@ function TableWidget({ widget }) {
 
                             </th>
 
-                            {result.columns.map(col => (
+                            {result.columns.map((col, index) => (
 
                                 <th
-                                    key={col.id}
+                                    key={`header-${col.id}-${index}`}
                                     onClick={() => sortBy(col.id)}
                                     className="border px-3 py-2 text-right cursor-pointer hover:bg-slate-800"
                                 >
-
                                     <div className="flex items-center gap-2">
-
                                         {col.name}
-
                                         <ArrowUpDown size={14} />
-
                                     </div>
-
                                 </th>
 
                             ))}
@@ -1255,10 +1527,10 @@ function TableWidget({ widget }) {
 
                                 </td>
 
-                                {result.columns.map(col => (
+                                {result.columns.map((col, colIndex) => (
 
                                     <td
-                                        key={col.id}
+                                        key={`cell-${col.id}-${colIndex}`}
                                         className="border px-3 py-2"
                                     >
 
@@ -1392,15 +1664,15 @@ const COLORS = [
     "#84cc16",
 ];
 
-function ChartLoader({ widget }) {
+function ChartLoader({
+    widget,
+    globalFilters,
+    filterMapping,
+}) {
 
     const [loading, setLoading] = useState(true);
 
     const [result, setResult] = useState(null);
-
-    // console.log(result);
-    // console.log(widget.widget_type);
-    // console.log(result?.chart?.type);
 
     useEffect(() => {
 
@@ -1421,6 +1693,7 @@ function ChartLoader({ widget }) {
         widget.report_id,
         widget.widget_type,
         widget.config?.autoRefresh,
+        globalFilters
     ]);
 
     const load = async () => {
@@ -1433,14 +1706,17 @@ function ChartLoader({ widget }) {
             "/report-builder/run",
             {
                 ...report.config.query,
+
+                global_filters: globalFilters,
+
+                global_filter_mapping: filterMapping,
+
                 visualization: {
                     ...report.config.visualization,
                     type: widget.widget_type,
                 },
             }
         );
-
-        console.log(data);
 
         setResult(data);
 
@@ -1727,96 +2003,335 @@ function ChartLoader({ widget }) {
 
     }
 
-    // if (chartType === "kpi") {
-
-    //     const total = result.rows.length;
-
-    //     const preview = result.rows.slice(0, 3);
-
-    //     return (
-
-    //         <div className="h-full flex flex-col justify-between">
-
-    //             <div className="flex items-center justify-between">
-
-    //                 <div>
-
-    //                     <div className="text-slate-400 text-sm">
-
-    //                         إجمالي السجلات
-
-    //                     </div>
-
-    //                     <div className="text-5xl font-bold mt-2">
-
-    //                         {total}
-
-    //                     </div>
-
-    //                 </div>
-
-    //                 <ResponsiveContainer
-    //                     width={120}
-    //                     height={120}
-    //                 >
-
-    //                     <RadialBarChart
-    //                         innerRadius="70%"
-    //                         outerRadius="100%"
-    //                         data={[
-    //                             {
-    //                                 name: "Rows",
-    //                                 value: total,
-    //                                 fill: "#3b82f6",
-    //                             },
-    //                         ]}
-    //                         startAngle={90}
-    //                         endAngle={-270}
-    //                     >
-
-    //                         <RadialBar
-    //                             dataKey="value"
-    //                             cornerRadius={10}
-    //                         />
-
-    //                     </RadialBarChart>
-
-    //                 </ResponsiveContainer>
-
-    //             </div>
-
-    //             <div className="mt-6 border-t border-slate-800 pt-4">
-
-    //                 <div className="text-xs text-slate-400 mb-3">
-
-    //                     أول السجلات
-
-    //                 </div>
-
-    //                 <div className="space-y-2">
-
-    //                     {preview.map((row, index) => (
-
-    //                         <div
-    //                             key={index}
-    //                             className="rounded-lg bg-slate-800 px-3 py-2 text-sm"
-    //                         >
-
-    //                             #{index + 1}
-
-    //                         </div>
-
-    //                     ))}
-
-    //                 </div>
-
-    //             </div>
-
-    //         </div>
-
-    //     );
-
-    // }
-
     return null;
+}
+
+function ConfigureDashboardFiltersModal({
+
+    open,
+
+    onClose,
+
+    datasources,
+
+    mapping,
+
+    setMapping,
+
+    dashboard,
+
+    reload,
+
+}) {
+
+    if (!open)
+        return null;
+
+    const filters = mapping.filters || [];
+
+
+    const addFilter = () => {
+
+        setMapping({
+
+            ...mapping,
+
+            filters: [
+
+                ...filters,
+
+                {
+                    id: `filter_${Date.now()}`,
+                    label: "",
+                    table_id: "",
+                    column_id: "",
+                    type: "select"
+                }
+
+            ]
+
+        });
+
+    };
+
+    const getRelation = (tableId, columnId) => {
+        const table = datasources
+            .flatMap(section => section.tables)
+            .find(t => t.id === Number(tableId));
+
+        if (!table) return null;
+
+        return table.relations.find(r => r.column_id === columnId);
+    };
+
+    const save = async () => {
+
+        await dashboardService.updateDashboard(
+
+            dashboard.id,
+
+            {
+
+                global_filter_mapping:
+
+                    mapping,
+
+            }
+
+        );
+
+        reload();
+
+        onClose();
+
+    };
+
+    return (
+
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center">
+
+            <div className="bg-slate-900 rounded-xl p-6 w-[700px]">
+
+                <h2 className="text-xl font-bold mb-6">
+
+                    Configure Global Filters
+
+                </h2>
+
+                <div className="space-y-4">
+
+
+                    {
+                        filters.map((filter, index) => (
+
+                            <div
+                                key={filter.id}
+                                className="border border-slate-700 rounded-lg p-4 space-y-3"
+                            >
+
+
+                                <input
+
+                                    value={filter.label}
+
+                                    placeholder="اسم الفلتر"
+
+                                    onChange={(e) => {
+
+                                        const newFilters = [...filters];
+
+                                        const columnId = e.target.value;
+
+                                        newFilters[index].column_id = columnId;
+
+                                        const relation = getRelation(
+                                            newFilters[index].table_id,
+                                            columnId
+                                        );
+
+                                        if (relation) {
+
+                                            newFilters[index].relation = {
+                                                table_id: relation.table.id,
+                                                table_name: relation.table.name,
+                                            };
+
+                                        } else {
+
+                                            delete newFilters[index].relation;
+
+                                        }
+
+                                        setMapping({
+                                            ...mapping,
+                                            filters: newFilters
+                                        });
+
+                                    }}
+
+                                    className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
+
+                                />
+
+
+
+                                <select
+
+                                    value={filter.table_id}
+
+                                    onChange={(e) => {
+
+
+                                        const newFilters = [...filters];
+
+                                        newFilters[index].table_id =
+                                            Number(e.target.value);
+
+                                        newFilters[index].column_id = "";
+
+
+                                        setMapping({
+
+                                            ...mapping,
+
+                                            filters: newFilters
+
+                                        });
+
+
+                                    }}
+
+                                    className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
+
+                                >
+
+                                    <option value="">
+                                        اختر الجدول
+                                    </option>
+
+
+                                    {
+
+                                        datasources.map(section =>
+
+                                            section.tables.map(table => (
+
+                                                <option
+
+                                                    key={table.id}
+
+                                                    value={table.id}
+
+                                                >
+
+                                                    {table.name}
+
+                                                </option>
+
+                                            ))
+
+                                        )
+
+                                    }
+
+                                </select>
+
+
+
+                                <select
+
+                                    value={filter.column_id}
+
+                                    onChange={(e) => {
+
+
+                                        const newFilters = [...filters];
+
+                                        newFilters[index].column_id = e.target.value;
+
+
+                                        setMapping({
+
+                                            ...mapping,
+
+                                            filters: newFilters
+
+                                        });
+
+
+                                    }}
+
+                                    className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
+
+                                >
+
+                                    <option value="">
+                                        اختر العمود
+                                    </option>
+
+
+                                    {
+
+                                        datasources
+
+                                            .flatMap(section => section.tables)
+
+                                            .filter(table =>
+                                                table.id === Number(filter.table_id)
+                                            )
+
+                                            .flatMap(table => table.columns)
+
+                                            .map(column => (
+
+                                                <option
+
+                                                    key={column.id}
+
+                                                    value={column.id}
+
+                                                >
+
+                                                    {column.name}
+
+                                                </option>
+
+                                            ))
+
+                                    }
+
+
+                                </select>
+
+
+
+                            </div>
+
+
+                        ))
+                    }
+
+
+                    <button
+
+                        onClick={addFilter}
+
+                        className="border rounded px-4 py-2"
+
+                    >
+
+                        + إضافة فلتر
+
+                    </button>
+
+
+                </div>
+
+                <div className="flex justify-end gap-3 mt-8">
+
+                    <button
+                        onClick={onClose}
+                    >
+
+                        Cancel
+
+                    </button>
+
+                    <button
+                        onClick={save}
+                        className="bg-blue-600 rounded px-4 py-2"
+                    >
+
+                        Save
+
+                    </button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    );
+
 }

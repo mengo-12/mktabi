@@ -29,10 +29,52 @@ class ReportRunnerService:
 
         selected_columns = payload.get("columns", [])
 
+        dashboard_filters = (
+            payload.get("global_filter_mapping") or {}
+        ).get("filters", [])
+
+        for flt in dashboard_filters:
+
+            if any(c["id"] == flt["column_id"] for c in selected_columns):
+                continue
+
+            selected_columns.append({
+                "id": flt["column_id"],
+                "name": flt.get("label", ""),
+                "type": flt.get("type", "text"),
+                "path": flt.get("path", []),
+            })
+
+        relations = list(payload.get("relations", []))
+
+        for flt in dashboard_filters:
+
+            for step in flt.get("path", []):
+
+                if step.get("relation_table_id"):
+
+                    relations.append({
+                        "column_id": step["column_id"],
+                        "table_id": step["relation_table_id"],
+                    })
+
+        relations = list(payload.get("relations", []))
+
+        for flt in dashboard_filters:
+
+            for step in flt.get("path", []):
+
+                if step.get("relation_table_id"):
+
+                    relations.append({
+                        "column_id": step["column_id"],
+                        "table_id": step["relation_table_id"],
+                    })
+
         relation_cache = await ReportRunnerService.preload_relation_tables(
             db,
             selected_columns,
-            payload.get("relations", []),
+            relations,
         )
 
         result = await db.execute(
@@ -41,7 +83,11 @@ class ReportRunnerService:
 
         rows = result.scalars().all()
 
-        filters = payload.get("filters", [])
+        filters = ReportRunnerService.apply_global_filters(
+            payload.get("filters", []),
+            payload.get("global_filters"),
+            payload.get("global_filter_mapping"),
+        )
 
         if filters:
             rows = ReportRunnerService.apply_filters(
@@ -372,6 +418,40 @@ class ReportRunnerService:
             i += 2
 
         return None
+
+    @staticmethod
+    def apply_global_filters(
+        filters,
+        global_filters,
+        dashboard_filters,
+    ):
+
+        filters = list(filters)
+
+        if not global_filters:
+            return filters
+
+        dashboard_filters = (dashboard_filters or {}).get("filters", [])
+
+        for config in dashboard_filters:
+
+            value = global_filters.get(config["id"])
+
+            if value in ("", None):
+                continue
+
+            filter_item = {
+                "column": config["column_id"],
+                "operator": "=",
+                "value": value,
+            }
+
+            if config.get("path"):
+                filter_item["path"] = config["path"]
+
+            filters.append(filter_item)
+
+        return filters
     
 
     @staticmethod
@@ -384,6 +464,7 @@ class ReportRunnerService:
 
         if not filters:
             return rows
+
 
         column_lookup = {
             str(column["id"]): column
@@ -462,9 +543,14 @@ class ReportRunnerService:
                 if not column:
                     continue
 
+                filter_column = dict(column)
+
+                if flt.get("path"):
+                    filter_column["path"] = flt["path"]
+
                 value = ReportRunnerService.extract_value(
                     row,
-                    column,
+                    filter_column,
                     relation_cache,
                 )
 

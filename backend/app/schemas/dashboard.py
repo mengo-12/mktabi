@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DashboardBase(BaseModel):
@@ -13,6 +13,7 @@ class DashboardBase(BaseModel):
 
 class DashboardCreate(DashboardBase):
     is_default: bool = False
+    global_filter_mapping: dict = Field(default_factory=dict)
 
 
 class DashboardUpdate(BaseModel):
@@ -22,6 +23,7 @@ class DashboardUpdate(BaseModel):
     color: Optional[str] = None
     layout: Optional[Any] = None
     is_default: Optional[bool] = None
+    global_filter_mapping: dict | None = None
 
 
 class DashboardResponse(DashboardBase):
@@ -36,3 +38,4 @@ class DashboardResponse(DashboardBase):
 
     created_at: datetime
     updated_at: datetime
+    global_filter_mapping: dict = Field(default_factory=dict)

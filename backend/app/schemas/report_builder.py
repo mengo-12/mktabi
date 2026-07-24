@@ -76,6 +76,9 @@ class CalculatedField(BaseModel):
     operation: str
     column: str
 
+class GlobalFilters(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
 
 class ReportRunRequest(BaseModel):
     table_id: int
@@ -90,6 +93,10 @@ class ReportRunRequest(BaseModel):
     calculatedFields: List[CalculatedField] = []
 
     visualization: dict[str, Any] | None = None
+
+    global_filters: GlobalFilters | None = None
+
+    global_filter_mapping: Dict[str, Any] | None = None
 
 class ReportBuilderResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)

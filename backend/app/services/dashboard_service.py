@@ -45,6 +45,7 @@ class DashboardService:
             icon=payload.icon,
             color=payload.color,
             layout=[],
+            global_filter_mapping=payload.global_filter_mapping,
             is_default=payload.is_default,
         )
 
