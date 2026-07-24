@@ -62,6 +62,17 @@ export default function DashboardCanvasPage() {
 
     const [editingWidget, setEditingWidget] = useState(null);
 
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+    const [widgetSettings, setWidgetSettings] = useState({
+        showTitle: true,
+        showExport: true,
+        pageSize: 10,
+        autoRefresh: 0,
+        color: "#3b82f6",
+        display: "default",
+    });
+
     const { id } = useParams();
 
     const [dashboard, setDashboard] = useState(null);
@@ -69,7 +80,6 @@ export default function DashboardCanvasPage() {
     const [loading, setLoading] = useState(true);
 
     const [widgets, setWidgets] = useState([]);
-
 
     const [layouts, setLayouts] = useState({ lg: [], });
 
@@ -145,6 +155,8 @@ export default function DashboardCanvasPage() {
                         title: widgetForm.title,
                         widget_type: widgetForm.widget_type,
                         report_id: Number(widgetForm.report_id),
+
+                        config: editingWidget.config,
                     }
                 );
 
@@ -155,6 +167,15 @@ export default function DashboardCanvasPage() {
                     title: widgetForm.title,
                     widget_type: widgetForm.widget_type,
                     report_id: Number(widgetForm.report_id),
+
+                    config: {
+                        showTitle: true,
+                        color: "#3b82f6",
+                        pageSize: 10,
+                        autoRefresh: 0,
+                        showExport: true,
+                        display: "default",
+                    },
 
                     x: 0,
                     y: 0,
@@ -177,6 +198,7 @@ export default function DashboardCanvasPage() {
         }
 
     };
+    
 
     const saveLayout = async (layout) => {
 
@@ -206,6 +228,23 @@ export default function DashboardCanvasPage() {
         });
 
         setIsWidgetModalOpen(true);
+
+    };
+
+    const openWidgetSettings = (widget) => {
+
+        setEditingWidget(widget);
+
+        setWidgetSettings({
+            showTitle: widget.config?.showTitle ?? true,
+            showExport: widget.config?.showExport ?? true,
+            pageSize: widget.config?.pageSize ?? 10,
+            autoRefresh: widget.config?.autoRefresh ?? 0,
+            color: widget.config?.color ?? "#3b82f6",
+            display: widget.config?.display ?? "default",
+        });
+
+        setIsSettingsOpen(true);
 
     };
 
@@ -400,36 +439,66 @@ export default function DashboardCanvasPage() {
                                 "
                             >
 
-                                <div className="widget-header flex items-center justify-between px-5 py-3 cursor-move border-b border-slate-800">
+                                {widget.config?.showTitle !== false && (
+                                    <div className="widget-header flex items-center justify-between px-5 py-3 cursor-move border-b border-slate-800">
 
-                                    <div className="font-semibold">
-                                        {widget.title}
+                                        <div className="font-semibold">
+                                            {widget.title}
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+
+                                            <button
+                                                onClick={() => openWidgetSettings(widget)}
+                                                className="no-drag p-2 rounded hover:bg-slate-800"
+                                            >
+                                                ⚙️
+                                            </button>
+
+                                            <button
+                                                onClick={() => editWidget(widget)}
+                                                className="no-drag p-2 rounded hover:bg-slate-800"
+                                            >
+                                                <Pencil size={18} />
+                                            </button>
+
+                                            <button
+                                                onClick={async () => {
+
+                                                    await dashboardWidgetService.duplicateWidget(
+                                                        widget.id
+                                                    );
+
+                                                    loadWidgets(dashboard.id);
+
+                                                }}
+                                                className="no-drag p-2 rounded hover:bg-slate-800"
+                                            >
+
+                                                📄
+
+                                            </button>
+
+                                            <button
+                                                onClick={async () => {
+
+                                                    if (!confirm("حذف الـ Widget؟"))
+                                                        return;
+
+                                                    await dashboardWidgetService.deleteWidget(widget.id);
+
+                                                    loadWidgets(dashboard.id);
+
+                                                }}
+                                                className="no-drag p-2 rounded hover:bg-red-600/20 text-red-400"
+                                            >
+                                                <X size={18} />
+                                            </button>
+
+                                        </div>
+
                                     </div>
-
-                                    <button
-                                        onClick={async () => {
-
-                                            if (!confirm("حذف الـ Widget؟"))
-                                                return;
-
-                                            await dashboardWidgetService.deleteWidget(widget.id);
-
-                                            loadWidgets(dashboard.id);
-
-                                        }}
-                                        className="p-2 rounded hover:bg-red-600/20 text-red-400"
-                                    >
-                                        <X size={18} />
-                                    </button>
-
-                                    <button
-                                        onClick={() => editWidget(widget)}
-                                        className="no-drag p-2 rounded hover:bg-slate-800"
-                                    >
-                                        <Pencil size={18} />
-                                    </button>
-
-                                </div>
+                                )}
 
                                 <div className="p-5">
 
@@ -466,12 +535,231 @@ export default function DashboardCanvasPage() {
                 editingWidget={editingWidget}
             />
 
+            <WidgetSettingsModal
+                open={isSettingsOpen}
+                onClose={() => setIsSettingsOpen(false)}
+                settings={widgetSettings}
+                setSettings={setWidgetSettings}
+                widget={editingWidget}
+                dashboardId={dashboard.id}
+                reload={() => loadWidgets(dashboard.id)}
+            />
+
         </div >
 
 
     );
 
 }
+
+function WidgetSettingsModal({
+
+    open,
+
+    onClose,
+
+    settings,
+
+    setSettings,
+
+    widget,
+
+    reload,
+
+}) {
+
+    if (!open || !widget)
+        return null;
+
+    const save = async () => {
+
+        await dashboardWidgetService.updateWidget(
+            widget.id,
+            {
+                config: settings,
+            }
+        );
+
+        reload();
+
+        onClose();
+
+    };
+
+    return (
+
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+
+            <div className="w-[500px] rounded-xl bg-slate-900 border border-slate-700 p-6">
+
+                <h2 className="text-xl font-bold mb-6">
+
+                    Widget Settings
+
+                </h2>
+
+                <div className="space-y-5">
+
+                    <label className="flex items-center justify-between">
+
+                        <span>Show Title</span>
+
+                        <input
+                            type="checkbox"
+                            checked={settings.showTitle}
+                            onChange={(e) =>
+
+                                setSettings({
+                                    ...settings,
+                                    showTitle: e.target.checked
+                                })
+
+                            }
+                        />
+
+                    </label>
+
+                    <label className="flex items-center justify-between">
+
+                        <span>Show Export</span>
+
+                        <input
+                            type="checkbox"
+                            checked={settings.showExport}
+                            onChange={(e) =>
+
+                                setSettings({
+                                    ...settings,
+                                    showExport: e.target.checked
+                                })
+
+                            }
+                        />
+
+                    </label>
+
+                    <div>
+
+                        <div className="mb-2">
+
+                            Page Size
+
+                        </div>
+
+                        <input
+                            type="number"
+                            value={settings.pageSize}
+                            onChange={(e) =>
+
+                                setSettings({
+
+                                    ...settings,
+
+                                    pageSize: Number(e.target.value)
+
+                                })
+
+                            }
+                            className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
+                        />
+
+                    </div>
+
+                    <div>
+
+                        <div className="mb-2">
+
+                            Auto Refresh
+
+                        </div>
+
+                        <select
+                            value={settings.autoRefresh}
+                            onChange={(e) =>
+
+                                setSettings({
+
+                                    ...settings,
+
+                                    autoRefresh: Number(e.target.value)
+
+                                })
+
+                            }
+                            className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
+                        >
+
+                            <option value={0}>Disabled</option>
+
+                            <option value={30}>30 sec</option>
+
+                            <option value={60}>1 min</option>
+
+                            <option value={300}>5 min</option>
+
+                        </select>
+
+                    </div>
+
+                    <div>
+
+                        <div className="mb-2">
+
+                            Color
+
+                        </div>
+
+                        <input
+                            type="color"
+                            value={settings.color}
+                            onChange={(e) =>
+
+                                setSettings({
+
+                                    ...settings,
+
+                                    color: e.target.value
+
+                                })
+
+                            }
+                        />
+
+                    </div>
+
+                </div>
+
+                <div className="flex justify-end gap-3 mt-8">
+
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 rounded border border-slate-700"
+                    >
+
+                        Cancel
+
+                    </button>
+
+                    <button
+                        onClick={save}
+                        className="px-4 py-2 rounded bg-blue-600"
+                    >
+
+                        Save
+
+                    </button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    );
+
+}
+
+
 
 function AddWidgetModal({
     open,
@@ -606,13 +894,27 @@ function TableWidget({ widget }) {
 
     const [sortDirection, setSortDirection] = useState("asc");
 
-    const pageSize = 10;
+    const pageSize = widget.config?.pageSize || 10;
 
     useEffect(() => {
 
         load();
 
-    }, [widget.report_id]);
+        if (!widget.config?.autoRefresh)
+            return;
+
+        const interval = setInterval(() => {
+
+            load();
+
+        }, widget.config.autoRefresh * 1000);
+
+        return () => clearInterval(interval);
+
+    }, [
+        widget.report_id,
+        widget.config?.autoRefresh,
+    ]);
 
     const load = async () => {
 
@@ -978,30 +1280,34 @@ function TableWidget({ widget }) {
 
             <div className="flex items-center justify-between">
 
-                <div className="flex gap-2">
+                {widget.config?.showExport !== false && (
 
-                    <button
-                        onClick={exportExcel}
-                        className="border rounded px-2 py-1 hover:bg-slate-800"
-                    >
-                        <FileSpreadsheet size={16} />
-                    </button>
+                    <div className="flex gap-2">
 
-                    <button
-                        onClick={exportCSV}
-                        className="border rounded px-2 py-1 hover:bg-slate-800"
-                    >
-                        <FileText size={16} />
-                    </button>
+                        <button
+                            onClick={exportExcel}
+                            className="border rounded px-2 py-1 hover:bg-slate-800"
+                        >
+                            <FileSpreadsheet size={16} />
+                        </button>
 
-                    <button
-                        onClick={exportPDF}
-                        className="border rounded px-2 py-1 hover:bg-slate-800"
-                    >
-                        <FileDown size={16} />
-                    </button>
+                        <button
+                            onClick={exportCSV}
+                            className="border rounded px-2 py-1 hover:bg-slate-800"
+                        >
+                            <FileText size={16} />
+                        </button>
 
-                </div>
+                        <button
+                            onClick={exportPDF}
+                            className="border rounded px-2 py-1 hover:bg-slate-800"
+                        >
+                            <FileDown size={16} />
+                        </button>
+
+                    </div>
+
+                )}
 
                 <div className="flex items-center gap-2">
 
@@ -1073,18 +1379,18 @@ function prepareChartData(result) {
 
 }
 
-    const COLORS = [
-        "#3b82f6",
-        "#22c55e",
-        "#f59e0b",
-        "#ef4444",
-        "#8b5cf6",
-        "#06b6d4",
-        "#14b8a6",
-        "#f97316",
-        "#ec4899",
-        "#84cc16",
-    ];
+const COLORS = [
+    "#3b82f6",
+    "#22c55e",
+    "#f59e0b",
+    "#ef4444",
+    "#8b5cf6",
+    "#06b6d4",
+    "#14b8a6",
+    "#f97316",
+    "#ec4899",
+    "#84cc16",
+];
 
 function ChartLoader({ widget }) {
 
@@ -1097,8 +1403,25 @@ function ChartLoader({ widget }) {
     // console.log(result?.chart?.type);
 
     useEffect(() => {
+
         load();
-    }, [widget.report_id, widget.widget_type]);
+
+        if (!widget.config?.autoRefresh)
+            return;
+
+        const interval = setInterval(() => {
+
+            load();
+
+        }, widget.config.autoRefresh * 1000);
+
+        return () => clearInterval(interval);
+
+    }, [
+        widget.report_id,
+        widget.widget_type,
+        widget.config?.autoRefresh,
+    ]);
 
     const load = async () => {
 
@@ -1129,6 +1452,8 @@ function ChartLoader({ widget }) {
         return <div>Loading...</div>;
 
     const chartType = widget.widget_type;
+
+    const chartColor = widget.config?.color || "#3b82f6";
 
     const CustomTooltip = ({ active, payload }) => {
 
@@ -1189,7 +1514,7 @@ function ChartLoader({ widget }) {
                                 {
                                     name: "Rows",
                                     value: total,
-                                    fill: "#3b82f6",
+                                    fill: chartColor
                                 },
                             ]}
                             startAngle={90}
@@ -1292,6 +1617,7 @@ function ChartLoader({ widget }) {
                     <Bar
                         dataKey="value"
                         radius={[8, 8, 0, 0]}
+                        fill={chartColor}
                     >
                         {chartData.map((entry, index) => (
                             <Cell
@@ -1347,9 +1673,9 @@ function ChartLoader({ widget }) {
                     <Line
                         type="monotone"
                         dataKey="value"
-                        stroke="#3b82f6"
+                        stroke={chartColor}
                         strokeWidth={3}
-                        dot={{ r: 5 }}
+                        dot={{ r: 4 }}
                         activeDot={{ r: 8 }}
                     />
 
@@ -1375,12 +1701,16 @@ function ChartLoader({ widget }) {
                         outerRadius={95}
                         paddingAngle={3}
                         label
+                        fill={chartColor}
                     >
 
                         {chartData.map((entry, index) => (
                             <Cell
                                 key={index}
-                                fill={COLORS[index % COLORS.length]}
+                                fill={
+                                    widget.config?.color
+                                    || COLORS[index % COLORS.length]
+                                }
                             />
                         ))}
 

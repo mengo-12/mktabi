@@ -48,6 +48,16 @@ const dashboardWidgetService = {
 
     },
 
+    async duplicateWidget(id) {
+
+        const { data } = await apiClient.post(
+            `/dashboard-widgets/${id}/duplicate`
+        );
+
+        return data;
+
+    },
+
 };
 
 export default dashboardWidgetService;

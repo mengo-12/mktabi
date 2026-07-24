@@ -10,7 +10,7 @@ class DashboardWidgetBase(BaseModel):
 
     report_id: Optional[int] = None
 
-    config: Any = {}
+    config: dict | None = {}
 
     x: int = 0
     y: int = 0
@@ -22,11 +22,13 @@ class DashboardWidgetBase(BaseModel):
 class DashboardWidgetCreate(DashboardWidgetBase):
     dashboard_id: int
 
+    config: dict | None = {}
 
 class DashboardWidgetUpdate(BaseModel):
     title: Optional[str] = None
     report_id: Optional[int] = None
-    config: Optional[Any] = None
+
+    config: dict | None = None
 
     x: Optional[int] = None
     y: Optional[int] = None
@@ -37,6 +39,8 @@ class DashboardWidgetUpdate(BaseModel):
 
 class DashboardWidgetResponse(DashboardWidgetBase):
     model_config = ConfigDict(from_attributes=True)
+
+    config: Optional[Any] = None
 
     id: int
     dashboard_id: int

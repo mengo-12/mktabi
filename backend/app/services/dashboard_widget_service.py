@@ -92,3 +92,28 @@ class DashboardWidgetService:
         return {
             "message": "Widget deleted successfully"
         }
+
+    @staticmethod
+    async def duplicate_widget(
+        db: AsyncSession,
+        widget: DashboardWidget,
+    ):
+        new_widget = DashboardWidget(
+            dashboard_id=widget.dashboard_id,
+            title=f"{widget.title} (Copy)",
+            widget_type=widget.widget_type,
+            report_id=widget.report_id,
+            config=widget.config,
+            x=widget.x + 1,
+            y=widget.y + 1,
+            w=widget.w,
+            h=widget.h,
+        )
+
+        db.add(new_widget)
+
+        await db.commit()
+
+        await db.refresh(new_widget)
+
+        return new_widget

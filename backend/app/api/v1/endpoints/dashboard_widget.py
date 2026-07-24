@@ -71,6 +71,30 @@ async def update_widget(
         payload,
     )
 
+@router.post(
+    "/{widget_id}/duplicate",
+    response_model=DashboardWidgetResponse,
+)
+async def duplicate_widget(
+    widget_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    widget = await DashboardWidgetService.get_widget(
+        db,
+        widget_id,
+    )
+
+    if not widget:
+        raise HTTPException(
+            status_code=404,
+            detail="Widget not found",
+        )
+
+    return await DashboardWidgetService.duplicate_widget(
+        db,
+        widget,
+    )
+
 
 @router.delete(
     "/{widget_id}",
