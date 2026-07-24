@@ -34,7 +34,10 @@ import {
     YAxis,
     CartesianGrid,
     Tooltip,
-    ResponsiveContainer
+    ResponsiveContainer,
+    RadialBarChart,
+    RadialBar,
+    Legend,
 } from "recharts";
 
 import {
@@ -385,7 +388,16 @@ export default function DashboardCanvasPage() {
 
                             <div
                                 key={widget.id}
-                                className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden"
+                                className="
+                                    rounded-2xl
+                                    border
+                                    border-slate-800
+                                    bg-slate-900
+                                    shadow-lg
+                                    overflow-hidden
+                                    transition-all
+                                    hover:border-blue-500/40
+                                "
                             >
 
                                 <div className="widget-header flex items-center justify-between px-5 py-3 cursor-move border-b border-slate-800">
@@ -1061,6 +1073,19 @@ function prepareChartData(result) {
 
 }
 
+    const COLORS = [
+        "#3b82f6",
+        "#22c55e",
+        "#f59e0b",
+        "#ef4444",
+        "#8b5cf6",
+        "#06b6d4",
+        "#14b8a6",
+        "#f97316",
+        "#ec4899",
+        "#84cc16",
+    ];
+
 function ChartLoader({ widget }) {
 
     const [loading, setLoading] = useState(true);
@@ -1092,6 +1117,8 @@ function ChartLoader({ widget }) {
             }
         );
 
+        console.log(data);
+
         setResult(data);
 
         setLoading(false);
@@ -1101,55 +1128,180 @@ function ChartLoader({ widget }) {
     if (loading)
         return <div>Loading...</div>;
 
-    const chartData = result.chart;
-
-    if (!chartData) {
-        return (
-            <div className="text-center py-10 text-slate-400">
-                هذا التقرير لا يحتوي على إعدادات رسم بياني.
-            </div>
-        );
-    }
-
     const chartType = widget.widget_type;
 
-    if (
-        !chartData.labels ||
-        !chartData.datasets?.length
-    ) {
+    const CustomTooltip = ({ active, payload }) => {
+
+        if (!active || !payload?.length) return null;
+
+        return (
+            <div className="rounded-xl bg-slate-900 border border-slate-700 px-4 py-3 shadow-xl">
+                <div className="font-semibold">
+                    {payload[0].name}
+                </div>
+
+                <div className="text-blue-400">
+                    {payload[0].value}
+                </div>
+            </div>
+        );
+
+    };
+
+
+    if (chartType === "kpi") {
+
+        const total = result.rows.length;
+
+        const preview = result.rows.slice(0, 3);
+
+        return (
+
+            <div className="h-full flex flex-col justify-between">
+
+                <div className="flex items-center justify-between">
+
+                    <div>
+
+                        <div className="text-slate-400 text-sm">
+
+                            إجمالي السجلات
+
+                        </div>
+
+                        <div className="text-5xl font-bold mt-2">
+
+                            {total}
+
+                        </div>
+
+                    </div>
+
+                    <ResponsiveContainer
+                        width={120}
+                        height={120}
+                    >
+
+                        <RadialBarChart
+                            innerRadius="70%"
+                            outerRadius="100%"
+                            data={[
+                                {
+                                    name: "Rows",
+                                    value: total,
+                                    fill: "#3b82f6",
+                                },
+                            ]}
+                            startAngle={90}
+                            endAngle={-270}
+                        >
+
+                            <RadialBar
+                                dataKey="value"
+                                cornerRadius={10}
+                            />
+
+                        </RadialBarChart>
+
+                    </ResponsiveContainer>
+
+                </div>
+
+                <div className="mt-6 border-t border-slate-800 pt-4">
+
+                    <div className="text-xs text-slate-400 mb-3">
+
+                        أول السجلات
+
+                    </div>
+
+                    <div className="space-y-2">
+
+                        {preview.map((row, index) => (
+
+                            <div
+                                key={index}
+                                className="rounded-lg bg-slate-800 px-3 py-2 text-sm"
+                            >
+
+                                #{index + 1}
+
+                            </div>
+
+                        ))}
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        );
+
+    }
+
+    const chartData = prepareChartData(result);
+
+    // const chartType = widget.widget_type;
+
+
+
+    if (!chartData.length) {
         return (
             <div className="text-center py-10">
-                لا توجد بيانات للرسم البياني
+                لا توجد بيانات
             </div>
         );
     }
-
 
     if (chartType === "bar") {
 
         return (
 
             <ResponsiveContainer width="100%" height={320}>
-
                 <BarChart
-                    data={chartData.labels.map((label, i) => ({
-                        name: label,
-                        value: chartData.datasets[0].data[i],
-                    }))}
+                    data={chartData}
+                    margin={{
+                        top: 20,
+                        right: 20,
+                        left: 0,
+                        bottom: 10,
+                    }}
                 >
+                    <CartesianGrid
+                        strokeDasharray="3 3"
+                        vertical={false}
+                        stroke="#334155"
+                    />
 
-                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                        dataKey="name"
+                        tick={{ fill: "#cbd5e1", fontSize: 12 }}
+                        axisLine={false}
+                        tickLine={false}
+                    />
 
-                    <XAxis dataKey="name" />
+                    <YAxis
+                        tick={{ fill: "#cbd5e1", fontSize: 12 }}
+                        axisLine={false}
+                        tickLine={false}
+                    />
 
-                    <YAxis />
+                    <Tooltip content={<CustomTooltip />} />
 
-                    <Tooltip />
-
-                    <Bar dataKey="value" />
+                    <Bar
+                        dataKey="value"
+                        radius={[8, 8, 0, 0]}
+                    >
+                        {chartData.map((entry, index) => (
+                            <Cell
+                                key={index}
+                                fill={COLORS[index % COLORS.length]}
+                            />
+                        ))}
+                    </Bar>
 
                 </BarChart>
-
             </ResponsiveContainer>
 
         );
@@ -1161,29 +1313,47 @@ function ChartLoader({ widget }) {
         return (
 
             <ResponsiveContainer width="100%" height={320}>
-
                 <LineChart
-                    data={chartData.labels.map((label, i) => ({
-                        name: label,
-                        value: chartData.datasets[0].data[i],
-                    }))}
+                    data={chartData}
+                    margin={{
+                        top: 20,
+                        right: 20,
+                        left: 0,
+                        bottom: 10,
+                    }}
                 >
 
-                    <CartesianGrid strokeDasharray="3 3" />
+                    <CartesianGrid
+                        strokeDasharray="3 3"
+                        vertical={false}
+                        stroke="#334155"
+                    />
 
-                    <XAxis dataKey="name" />
+                    <XAxis
+                        dataKey="name"
+                        tick={{ fill: "#cbd5e1" }}
+                        axisLine={false}
+                        tickLine={false}
+                    />
 
-                    <YAxis />
+                    <YAxis
+                        tick={{ fill: "#cbd5e1" }}
+                        axisLine={false}
+                        tickLine={false}
+                    />
 
-                    <Tooltip />
+                    <Tooltip content={<CustomTooltip />} />
 
                     <Line
-                        dataKey="value"
                         type="monotone"
+                        dataKey="value"
+                        stroke="#3b82f6"
+                        strokeWidth={3}
+                        dot={{ r: 5 }}
+                        activeDot={{ r: 8 }}
                     />
 
                 </LineChart>
-
             </ResponsiveContainer>
 
         );
@@ -1195,54 +1365,128 @@ function ChartLoader({ widget }) {
         return (
 
             <ResponsiveContainer width="100%" height={320}>
-
                 <PieChart>
 
                     <Pie
-                        data={chartData.labels.map((label, i) => ({
-                            name: label,
-                            value: chartData.datasets[0].data[i],
-                        }))}
+                        data={chartData}
                         dataKey="value"
                         nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={90}
+                        innerRadius={60}
+                        outerRadius={95}
+                        paddingAngle={3}
                         label
-                    />
+                    >
 
-                    <Tooltip />
+                        {chartData.map((entry, index) => (
+                            <Cell
+                                key={index}
+                                fill={COLORS[index % COLORS.length]}
+                            />
+                        ))}
+
+                    </Pie>
+
+                    <Tooltip content={<CustomTooltip />} />
+
+                    <Legend />
 
                 </PieChart>
-
             </ResponsiveContainer>
 
         );
 
     }
 
-    if (chartType === "kpi") {
-        return (
+    // if (chartType === "kpi") {
 
-            <div className="text-center py-12">
+    //     const total = result.rows.length;
 
-                <div className="text-6xl font-bold">
+    //     const preview = result.rows.slice(0, 3);
 
-                    {result.rows.length}
+    //     return (
 
-                </div>
+    //         <div className="h-full flex flex-col justify-between">
 
-                <div className="text-slate-400 mt-3">
+    //             <div className="flex items-center justify-between">
 
-                    إجمالي السجلات
+    //                 <div>
 
-                </div>
+    //                     <div className="text-slate-400 text-sm">
 
-            </div>
+    //                         إجمالي السجلات
 
-        );
+    //                     </div>
 
-    }
+    //                     <div className="text-5xl font-bold mt-2">
+
+    //                         {total}
+
+    //                     </div>
+
+    //                 </div>
+
+    //                 <ResponsiveContainer
+    //                     width={120}
+    //                     height={120}
+    //                 >
+
+    //                     <RadialBarChart
+    //                         innerRadius="70%"
+    //                         outerRadius="100%"
+    //                         data={[
+    //                             {
+    //                                 name: "Rows",
+    //                                 value: total,
+    //                                 fill: "#3b82f6",
+    //                             },
+    //                         ]}
+    //                         startAngle={90}
+    //                         endAngle={-270}
+    //                     >
+
+    //                         <RadialBar
+    //                             dataKey="value"
+    //                             cornerRadius={10}
+    //                         />
+
+    //                     </RadialBarChart>
+
+    //                 </ResponsiveContainer>
+
+    //             </div>
+
+    //             <div className="mt-6 border-t border-slate-800 pt-4">
+
+    //                 <div className="text-xs text-slate-400 mb-3">
+
+    //                     أول السجلات
+
+    //                 </div>
+
+    //                 <div className="space-y-2">
+
+    //                     {preview.map((row, index) => (
+
+    //                         <div
+    //                             key={index}
+    //                             className="rounded-lg bg-slate-800 px-3 py-2 text-sm"
+    //                         >
+
+    //                             #{index + 1}
+
+    //                         </div>
+
+    //                     ))}
+
+    //                 </div>
+
+    //             </div>
+
+    //         </div>
+
+    //     );
+
+    // }
 
     return null;
 }
