@@ -11,7 +11,7 @@ import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import listPlugin from "@fullcalendar/list";
-
+import { useAuth } from "@/context/AuthContext";
 import arLocale from "@fullcalendar/core/locales/ar";
 
 import DynamicFormRenderer from "@/components/dynamic/DynamicFormRenderer";
@@ -33,6 +33,8 @@ export default function CalendarPage() {
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+
+    const { user } = useAuth();
 
     const [sections, setSections] = useState([]);
     const [tables, setTables] = useState([]);
@@ -64,8 +66,40 @@ export default function CalendarPage() {
 
     const [eventDetailsError, setEventDetailsError] = useState("");
 
-    const openEditEvent = async () => {
+    const pagePermission = useMemo(() => {
+        if (
+            user?.role?.toLowerCase() === "admin" ||
+            user?.is_superuser
+        ) {
+            return "write";
+        }
 
+        return user?.system_pages?.calendar || "no_access";
+    }, [user]);
+
+    const hasPermission = (type) => {
+        if (user?.role === "ADMIN" || user?.is_superuser) {
+            return true;
+        }
+
+        if (type === "read") {
+            return pagePermission === "read" || pagePermission === "write";
+        }
+
+        if (type === "write") {
+            return pagePermission === "write";
+        }
+
+        return false;
+    };
+
+    console.log("User:", user);
+    console.log("Permissions:", user?.permissions);
+    console.log("Calendar Permission:", pagePermission);
+
+
+    const openEditEvent = async () => {
+        if (!hasPermission("write")) return;
         setEditingEvent(selectedEvent);
 
         try {
@@ -131,6 +165,7 @@ export default function CalendarPage() {
     };
 
     const saveEditedEvent = async () => {
+        if (!hasPermission("write")) return;
         try {
 
             setEditEventModal((prev) => ({
@@ -179,6 +214,7 @@ export default function CalendarPage() {
     };
 
     const deleteEvent = async () => {
+        if (!hasPermission("write")) return;
 
         const event = editingEvent || selectedEvent;
 
@@ -445,6 +481,7 @@ export default function CalendarPage() {
     };
 
     const createCalendarEvent = async () => {
+        if (!hasPermission("write")) return;
         try {
 
             setCreateEventError("");
@@ -492,6 +529,10 @@ export default function CalendarPage() {
     };
 
     const updateEventAndPersist = async (info, revert) => {
+        if (!hasPermission("write")) {
+            revert();
+            return;
+        }
         try {
             setCalendarSaving(true);
 
@@ -572,6 +613,7 @@ export default function CalendarPage() {
     // dateClick: إنشاء سجل جديد بالضغط المزدوج فقط
     //-------------------------------------------------
     const handleDateClick = async (info) => {
+        if (!hasPermission("write")) return;
         const now = Date.now();
         const prevClick = lastClickRef.current;
 
@@ -642,6 +684,14 @@ export default function CalendarPage() {
                         إعادة المحاولة
                     </button>
                 </div>
+            </div>
+        );
+    }
+
+    if (!hasPermission("read")) {
+        return (
+            <div className="flex items-center justify-center h-screen">
+                ليس لديك صلاحية للوصول إلى صفحة التقويم
             </div>
         );
     }

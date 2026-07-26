@@ -5,10 +5,25 @@ import dashboardService from "./services/dashboardService";
 import { FolderOpen, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 
 export default function DashboardBuilderPage() {
 
     const router = useRouter();
+
+    const { user } = useAuth();
+
+    const pagePermission =
+        user?.role?.toLowerCase() === "admin" || user?.is_superuser
+            ? "write"
+            : (user?.system_pages?.["dashboard-builder"] || "no_access");
+
+    const canRead =
+        pagePermission === "read" ||
+        pagePermission === "write";
+
+    const canWrite =
+        pagePermission === "write";
 
     const [dashboards, setDashboards] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -29,6 +44,14 @@ export default function DashboardBuilderPage() {
         loadDashboards();
     }, []);
 
+    useEffect(() => {
+        if (!user) return;
+
+        if (!canRead) {
+            router.replace("/dashboard");
+        }
+    }, [user, canRead, router]);
+
     const loadDashboards = async () => {
         try {
             setLoading(true);
@@ -46,6 +69,7 @@ export default function DashboardBuilderPage() {
     };
 
     const openCreateModal = () => {
+        if (!canWrite) return;
 
         setEditingDashboard(null);
 
@@ -61,6 +85,7 @@ export default function DashboardBuilderPage() {
     };
 
     const openEditModal = (dashboard) => {
+        if (!canWrite) return;
 
         setEditingDashboard(dashboard);
 
@@ -76,6 +101,7 @@ export default function DashboardBuilderPage() {
     };
 
     const saveDashboard = async () => {
+        if (!canWrite) return;
 
         try {
 
@@ -105,6 +131,7 @@ export default function DashboardBuilderPage() {
     };
 
     const deleteDashboard = async (dashboard) => {
+        if (!canWrite) return;
 
         if (!confirm("حذف اللوحة؟")) return;
 
@@ -161,14 +188,16 @@ export default function DashboardBuilderPage() {
                 </Link>
 
                 <button
-                    onClick={() => openEditModal(dashboard)}
+                    disabled={!canWrite}
+                    onClick={() => canWrite && openEditModal(dashboard)}
                     className="px-3 rounded-lg border border-slate-700"
                 >
                     <Pencil size={16} />
                 </button>
 
                 <button
-                    onClick={() => deleteDashboard(dashboard)}
+                    disabled={!canWrite}
+                    onClick={() => canWrite && deleteDashboard(dashboard)}
                     className="px-3 rounded-lg border border-red-700 text-red-400"
                 >
                     <Trash2 size={16} />
@@ -178,6 +207,14 @@ export default function DashboardBuilderPage() {
 
         </div>
     );
+
+    if (!canRead) {
+        return (
+            <div className="flex items-center justify-center h-screen">
+                ليس لديك صلاحية للوصول إلى Dashboard Builder
+            </div>
+        );
+    }
 
     return (
         <div className="mr-0 lg:mr-64 p-6">
@@ -189,7 +226,8 @@ export default function DashboardBuilderPage() {
                 </h1>
 
                 <button
-                    onClick={openCreateModal}
+                    disabled={!canWrite}
+                    onClick={() => canWrite && openCreateModal()}
                     className="px-4 py-2 rounded bg-blue-600 text-white"
                 >
                     + لوحة جديدة
@@ -300,7 +338,8 @@ export default function DashboardBuilderPage() {
                                 </button>
 
                                 <button
-                                    onClick={saveDashboard}
+                                    disabled={!canWrite}
+                                    onClick={() => canWrite && saveDashboard()}
                                     className="bg-blue-600 rounded-lg px-4 py-2 text-white"
                                 >
                                     حفظ

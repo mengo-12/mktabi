@@ -895,6 +895,8 @@ import {
     fieldSupportsRelation,
 } from "@/constants/fieldTypes";
 
+import { SYSTEM_PAGES } from "@/constants/systemPages";
+
 export default function DynamicSectionPage() {
     const { id: sectionId } = useParams();
     const searchParams = useSearchParams();
@@ -1506,7 +1508,25 @@ export default function DynamicSectionPage() {
 
         activeTable.columns_definition.forEach((col) => {
 
-            if (col.type === 'relation') {
+            if (col.type === "system_pages") {
+
+                try {
+
+                    if (typeof preparedData[col.id] === "string") {
+
+                        preparedData[col.id] = JSON.parse(preparedData[col.id]);
+
+                    }
+
+                } catch {
+
+                    preparedData[col.id] = {};
+
+                }
+
+            }
+
+            if (col.type === "relation") {
 
                 if (!preparedData[col.id]) {
 
@@ -1517,7 +1537,9 @@ export default function DynamicSectionPage() {
                     preparedData[col.id] = [preparedData[col.id]];
 
                 }
+
             }
+
         });
 
         setRowData(preparedData);
@@ -2514,7 +2536,41 @@ export default function DynamicSectionPage() {
                                                                     )}
 
                                                                     {col.type === 'dropdown' && cellValue && <span className="px-2 py-0.5 rounded bg-slate-950 text-amber-400 border border-slate-800 text-[10px]">{cellValue}</span>}
-                                                                    {col.type !== 'dropdown' && col.type !== 'relation' && col.type !== 'attachment' && (cellValue || <span className="text-slate-600 italic">فارغ</span>)}
+                                                                    {col.type === "system_pages" ? (
+                                                                        (() => {
+                                                                            let permissions = {};
+
+                                                                            try {
+                                                                                permissions =
+                                                                                    typeof cellValue === "string"
+                                                                                        ? JSON.parse(cellValue || "{}")
+                                                                                        : (cellValue || {});
+                                                                            } catch {
+                                                                                permissions = {};
+                                                                            }
+
+                                                                            return (
+                                                                                <div className="flex flex-wrap gap-1">
+                                                                                    {Object.entries(permissions).map(([page, permission]) => (
+                                                                                        <span
+                                                                                            key={page}
+                                                                                            className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-[10px]"
+                                                                                        >
+                                                                                            {page}: {permission}
+                                                                                        </span>
+                                                                                    ))}
+                                                                                </div>
+                                                                            );
+                                                                        })()
+                                                                    ) : (
+                                                                        col.type !== "dropdown" &&
+                                                                        col.type !== "relation" &&
+                                                                        col.type !== "attachment" &&
+                                                                        (
+                                                                            cellValue ||
+                                                                            <span className="text-slate-600 italic">فارغ</span>
+                                                                        )
+                                                                    )}
                                                                 </div>
                                                             )}
                                                         </td>
@@ -2935,6 +2991,102 @@ export default function DynamicSectionPage() {
                                                         <span className="block text-[10px] text-slate-500 mt-1">اضغط مع الاستمرار على Ctrl (أو Cmd في Mac) لاختيار أكثر من سجل.</span>
                                                     )}
                                                 </div>
+
+
+                                            ) : col.type === 'system_pages' ? (
+                                                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
+
+                                                    {(() => {
+                                                        let pagesPermissions = {};
+
+                                                        try {
+                                                            pagesPermissions =
+                                                                typeof rowData[col.id] === "string"
+                                                                    ? JSON.parse(rowData[col.id] || "{}")
+                                                                    : (rowData[col.id] || {});
+                                                        } catch {
+                                                            pagesPermissions = {};
+                                                        }
+
+                                                        return SYSTEM_PAGES.map((page) => {
+
+                                                            const currentPermission =
+                                                                pagesPermissions[page.id] || "no_access";
+
+                                                            const updatePermission = (permission) => {
+
+                                                                const updated = {
+                                                                    ...pagesPermissions,
+                                                                    [page.id]: permission,
+                                                                };
+
+                                                                setRowData({
+                                                                    ...rowData,
+                                                                    [col.id]: JSON.stringify(updated),
+                                                                });
+                                                            };
+
+                                                            return (
+                                                                <div
+                                                                    key={page.id}
+                                                                    className="flex justify-between items-center bg-slate-900 p-2 rounded-lg border border-slate-800"
+                                                                >
+                                                                    <div>
+                                                                        <div className="text-xs text-white">
+                                                                            {page.name}
+                                                                        </div>
+
+                                                                        <div className="text-[10px] text-slate-500">
+                                                                            {page.category}
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div className="flex gap-1">
+
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => updatePermission("no_access")}
+                                                                            className={
+                                                                                currentPermission === "no_access"
+                                                                                    ? "px-2 py-1 bg-red-600 text-white rounded"
+                                                                                    : "px-2 py-1 bg-slate-800 rounded"
+                                                                            }
+                                                                        >
+                                                                            منع
+                                                                        </button>
+
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => updatePermission("read")}
+                                                                            className={
+                                                                                currentPermission === "read"
+                                                                                    ? "px-2 py-1 bg-blue-600 text-white rounded"
+                                                                                    : "px-2 py-1 bg-slate-800 rounded"
+                                                                            }
+                                                                        >
+                                                                            قراءة
+                                                                        </button>
+
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => updatePermission("write")}
+                                                                            className={
+                                                                                currentPermission === "write"
+                                                                                    ? "px-2 py-1 bg-green-600 text-white rounded"
+                                                                                    : "px-2 py-1 bg-slate-800 rounded"
+                                                                            }
+                                                                        >
+                                                                            كاملة
+                                                                        </button>
+
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        });
+                                                    })()}
+                                                </div>
+
+
                                             ) : col.type === 'user_account' ? (
                                                 /* 👤 توليد مصفوفة الصلاحيات لجميع الجداول باستثناء جدول الموظفين الحالي */
                                                 <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-3 w-full text-right">

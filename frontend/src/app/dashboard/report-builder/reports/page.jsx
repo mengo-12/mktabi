@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import reportBuilderService from "../services/reportBuilderService";
 import { Eye, Pencil, Trash2, FileText } from "lucide-react";
+import usePagePermission from "@/hooks/usePagePermission";
 
 export default function ReportsPage() {
     const router = useRouter();
+    const { canRead, canWrite } = usePagePermission("report-builder");
 
     const [reports, setReports] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -34,10 +36,13 @@ export default function ReportsPage() {
     };
 
     const handleEdit = (report) => {
+        if (!canWrite) return;
+
         router.push(`/dashboard/report-builder?report=${report.id}&edit=1`);
     };
 
     const handleDelete = async (report) => {
+        if (!canWrite) return;
 
         if (!confirm(`هل تريد حذف التقرير "${report.name}" ؟`))
             return;
@@ -67,12 +72,14 @@ export default function ReportsPage() {
                     التقارير المحفوظة
                 </h1>
 
-                <button
-                    onClick={() => router.push("/dashboard/report-builder")}
-                    className="px-4 py-2 rounded-lg bg-cyan-600 text-white"
-                >
-                    تقرير جديد
-                </button>
+                {canWrite && (
+                    <button
+                        onClick={() => router.push("/dashboard/report-builder")}
+                        className="px-4 py-2 rounded-lg bg-cyan-600 text-white"
+                    >
+                        تقرير جديد
+                    </button>
+                )}
 
             </div>
 
@@ -155,19 +162,23 @@ export default function ReportsPage() {
                                                 <Eye size={18} />
                                             </button>
 
-                                            <button
-                                                onClick={() => handleEdit(report)}
-                                                className="rounded bg-amber-600 p-2"
-                                            >
-                                                <Pencil size={18} />
-                                            </button>
+                                            {canWrite && (
+                                                <button
+                                                    onClick={() => handleEdit(report)}
+                                                    className="rounded bg-amber-600 p-2"
+                                                >
+                                                    <Pencil size={18} />
+                                                </button>
+                                            )}
 
-                                            <button
-                                                onClick={() => handleDelete(report)}
-                                                className="rounded bg-red-600 p-2"
-                                            >
-                                                <Trash2 size={18} />
-                                            </button>
+                                            {canWrite && (
+                                                <button
+                                                    onClick={() => handleDelete(report)}
+                                                    className="rounded bg-red-600 p-2"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            )}
 
                                         </div>
 

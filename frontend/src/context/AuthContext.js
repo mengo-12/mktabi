@@ -58,7 +58,12 @@ export function AuthProvider({ children }) {
             const rawPermissions =
                 profileResponse.data.dynamic_permissions || {};
 
+            const rawSystemPages =
+                profileResponse.data.system_pages || {};
+
             let normalizedPermissions = rawPermissions;
+
+            let normalizedSystemPages = rawSystemPages;
 
 
             // إذا كانت الصلاحيات JSON string
@@ -70,6 +75,14 @@ export function AuthProvider({ children }) {
                 }
             }
 
+            if (typeof rawSystemPages === "string") {
+                try {
+                    normalizedSystemPages = JSON.parse(rawSystemPages);
+                } catch {
+                    normalizedSystemPages = {};
+                }
+            }
+
 
             const user_info = {
 
@@ -78,6 +91,8 @@ export function AuthProvider({ children }) {
 
                 // صلاحيات الجداول
                 dynamic_permissions: normalizedPermissions,
+
+                system_pages: normalizedSystemPages,
 
 
                 // توحيد الدور

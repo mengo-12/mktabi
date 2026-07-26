@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import useReportStore from "../store/reportStore";
+import { useAuth } from "@/context/AuthContext";
+import { useRouter } from "next/navigation";
 import EmptyCanvas from "./EmptyCanvas";
 import reportBuilderService from "../services/reportBuilderService";
 
@@ -43,6 +45,20 @@ export default function QueryCanvas() {
     const [reportName, setReportName] = useState("");
     const [reportDescription, setReportDescription] = useState("");
     const [saving, setSaving] = useState(false);
+
+    const { user } = useAuth();
+    const router = useRouter();
+
+    const pagePermission =
+        user?.role === "admin" || user?.is_superuser
+            ? "write"
+            : (user?.system_pages?.["report-builder"] || "no_access");
+
+    const canRead =
+        pagePermission === "read" || pagePermission === "write";
+
+    const canWrite =
+        pagePermission === "write";
 
     const {
         selectedTable,
@@ -119,6 +135,14 @@ export default function QueryCanvas() {
         loadSavedReport();
 
     }, [reportId, dataSources]);
+
+    useEffect(() => {
+        if (!user) return;
+
+        if (!canRead) {
+            router.replace("/dashboard");
+        }
+    }, [user, canRead, router]);
 
     // لا يوجد جدول محدد
     if (!selectedTable) {
@@ -215,6 +239,8 @@ export default function QueryCanvas() {
 
 
     const runQuery = async () => {
+
+        if (!canWrite) return;
         if (!selectedTable) return;
 
         setLoadingPreview(true);
@@ -284,6 +310,7 @@ export default function QueryCanvas() {
     };
 
     const saveReport = async () => {
+        if (!canWrite) return;
 
         if (!reportName.trim()) {
             alert("أدخل اسم التقرير");
@@ -449,6 +476,7 @@ export default function QueryCanvas() {
                     </div>
 
                     <button
+                        disabled={!canWrite}
                         onClick={runQuery}
                         className="px-4 py-2 rounded bg-blue-600 text-white"
                     >
@@ -456,6 +484,7 @@ export default function QueryCanvas() {
                     </button>
 
                     <button
+                        disabled={!canWrite}
                         onClick={openSaveModal}
                         className="px-4 py-2 rounded bg-green-600 text-white flex items-center gap-2"
                     >
@@ -495,8 +524,8 @@ export default function QueryCanvas() {
                                 <button
                                     key={`${column.id}-${JSON.stringify(column.path || [])}`}
                                     type="button"
-                                    onClick={() =>
-                                        toggleColumn(column)
+                                    disabled={!canWrite}
+                                    onClick={() => canWrite && toggleColumn(column)
                                     }
                                     className={`
                                         flex
@@ -628,6 +657,7 @@ export default function QueryCanvas() {
                             >
 
                                 <select
+                                    disabled={!canWrite}
                                     className="col-span-4 rounded-lg bg-slate-950 border border-slate-700 p-2"
                                     value={filter.column}
                                     onChange={(e) =>
@@ -655,6 +685,7 @@ export default function QueryCanvas() {
                                 </select>
 
                                 <select
+                                    disabled={!canWrite}
                                     className="col-span-3 rounded-lg bg-slate-950 border border-slate-700 p-2"
                                     value={filter.operator}
                                     onChange={(e) =>
@@ -677,6 +708,7 @@ export default function QueryCanvas() {
                                 </select>
 
                                 <input
+                                    disabled={!canWrite}
                                     className="col-span-4 rounded-lg bg-slate-950 border border-slate-700 p-2"
                                     value={filter.value}
                                     onChange={(e) =>
@@ -689,9 +721,8 @@ export default function QueryCanvas() {
 
                                 <button
                                     className="col-span-1 rounded-lg bg-red-600"
-                                    onClick={() =>
-                                        removeFilter(filter.id)
-                                    }
+                                    disabled={!canWrite}
+                                    onClick={() => canWrite && removeFilter(filter.id)}
                                 >
                                     ✕
                                 </button>
@@ -701,7 +732,8 @@ export default function QueryCanvas() {
                         ))}
 
                         <button
-                            onClick={addFilter}
+                            disabled={!canWrite}
+                            onClick={() => canWrite && addFilter()}
                             className="px-4 py-2 rounded-lg bg-blue-600 text-white"
                         >
                             + إضافة فلتر
@@ -807,11 +839,15 @@ export default function QueryCanvas() {
 
                                             <input
 
+                                                disabled={!canWrite}
+
                                                 type="checkbox"
 
                                                 checked={checked}
 
                                                 onChange={() =>
+
+                                                    canWrite &&
 
                                                     toggleRelation({
 
@@ -848,6 +884,7 @@ export default function QueryCanvas() {
                     <div className="flex gap-3">
 
                         <select
+                            disabled={!canWrite}
                             className="flex-1 rounded bg-slate-900 border border-slate-700 p-2"
                             value={groupBy}
                             onChange={(e) =>
@@ -873,7 +910,8 @@ export default function QueryCanvas() {
                         </select>
 
                         <button
-                            onClick={clearGroupBy}
+                            disabled={!canWrite}
+                            onClick={() => canWrite && clearGroupBy()}
                             className="rounded bg-red-600 px-4"
                         >
                             حذف
@@ -901,6 +939,7 @@ export default function QueryCanvas() {
                             >
 
                                 <select
+                                    disabled={!canWrite}
                                     className="col-span-6 rounded bg-slate-900 border border-slate-700 p-2"
                                     value={sort.column}
                                     onChange={(e) =>
@@ -928,6 +967,7 @@ export default function QueryCanvas() {
                                 </select>
 
                                 <select
+                                    disabled={!canWrite}
                                     className="col-span-4 rounded bg-slate-900 border border-slate-700 p-2"
                                     value={sort.direction}
                                     onChange={(e) =>
@@ -949,9 +989,8 @@ export default function QueryCanvas() {
 
                                 <button
                                     className="col-span-2 rounded bg-red-600 px-3 py-2"
-                                    onClick={() =>
-                                        removeSorting(sort.id)
-                                    }
+                                    disabled={!canWrite}
+                                    onClick={() => canWrite && removeSorting(sort.id)}
                                 >
                                     حذف
                                 </button>
@@ -961,7 +1000,8 @@ export default function QueryCanvas() {
                         ))}
 
                         <button
-                            onClick={addSorting}
+                            disabled={!canWrite}
+                            onClick={() => canWrite && addSorting()}
                             className="rounded bg-cyan-600 px-4 py-2 text-white"
                         >
                             + إضافة ترتيب
@@ -990,6 +1030,7 @@ export default function QueryCanvas() {
                             >
 
                                 <input
+                                    disabled={!canWrite}
                                     className="col-span-3 rounded bg-slate-900 border border-slate-700 p-2"
                                     placeholder="اسم الحقل"
                                     value={field.name}
@@ -1001,6 +1042,7 @@ export default function QueryCanvas() {
                                 />
 
                                 <select
+                                    disabled={!canWrite}
                                     className="col-span-3 rounded bg-slate-900 border border-slate-700 p-2"
                                     value={field.operation}
                                     onChange={(e) =>
@@ -1017,6 +1059,7 @@ export default function QueryCanvas() {
                                 </select>
 
                                 <select
+                                    disabled={!canWrite}
                                     className="col-span-4 rounded bg-slate-900 border border-slate-700 p-2"
                                     value={field.column}
                                     onChange={(e) =>
@@ -1041,9 +1084,8 @@ export default function QueryCanvas() {
 
                                 <button
                                     className="col-span-2 rounded bg-red-600"
-                                    onClick={() =>
-                                        removeCalculatedField(field.id)
-                                    }
+                                    disabled={!canWrite}
+                                    onClick={() => canWrite && removeCalculatedField(field.id)}
                                 >
                                     حذف
                                 </button>
@@ -1219,6 +1261,7 @@ export default function QueryCanvas() {
                             </h2>
 
                             <input
+                                disabled={!canWrite}
                                 className="w-full mb-4 rounded bg-slate-800 border border-slate-700 px-3 py-2 text-white"
                                 placeholder="اسم التقرير"
                                 value={reportName}
@@ -1228,6 +1271,7 @@ export default function QueryCanvas() {
                             />
 
                             <textarea
+                                disabled={!canWrite}
                                 className="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-white"
                                 rows={4}
                                 placeholder="وصف التقرير"
@@ -1249,7 +1293,8 @@ export default function QueryCanvas() {
                                 </button>
 
                                 <button
-                                    disabled={saving}
+
+                                    disabled={!canWrite || saving}
                                     onClick={saveReport}
                                     className="px-4 py-2 rounded bg-green-600 text-white"
                                 >

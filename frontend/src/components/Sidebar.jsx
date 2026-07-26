@@ -169,10 +169,48 @@ import {
 export default function Sidebar() {
     const pathname = usePathname();
     const { user } = useAuth();
+    console.log("USER", user);
+    console.log("SYSTEM PAGES", user?.system_pages);
+    const isAdmin = user?.role === "admin" || user?.is_superuser;
+    const systemPages = user?.system_pages || {};
     const [dynamicSections, setDynamicSections] = useState([]);
     const [expandedSections, setExpandedSections] = useState({});
     const searchParams = useSearchParams();
     const currentTableId = searchParams.get("table");
+    const pagePermissions = user?.system_pages || {};
+
+    // const canViewPage = (pageId) => {
+
+    //     if (
+    //         user?.role === "admin" ||
+    //         user?.role === "partner" ||
+    //         user?.is_superuser
+    //     ) {
+    //         return true;
+    //     }
+
+    //     let permissions = pagePermissions;
+
+    //     if (typeof permissions === "string") {
+
+    //         try {
+
+    //             permissions = JSON.parse(permissions);
+
+    //         } catch {
+
+    //             permissions = {};
+
+    //         }
+
+    //     }
+
+    //     return (
+    //         permissions?.[pageId] === "read_only" ||
+    //         permissions?.[pageId] === "read_write"
+    //     );
+
+    // };
     // جلب الصفحات والأقسام الديناميكية التي صممها المدير من الباك إند
     useEffect(() => {
         const fetchDynamicPages = async () => {
@@ -195,30 +233,81 @@ export default function Sidebar() {
         fetchDynamicPages();
     }, [pathname, user]);
 
+    // const canViewPage = (pageId) => {
+
+    //     if (isAdmin) {
+    //         return true;
+    //     }
+
+    //     const permission =
+    //         systemPages?.[pageId] || "no_access";
+
+    //     return (
+    //         permission === "read_only" ||
+    //         permission === "read_write"
+    //     );
+    // };
+
+    const canViewPage = (pageId) => {
+        if (isAdmin) return true;
+
+        return ["read", "write"].includes(
+            systemPages?.[pageId] || "no_access"
+        );
+    };
+
     // تنظيم الروابط الثابتة في مجموعات لتنسيق بصري مريح للعين
     const menuGroups = [
         {
             groupName: "النظام",
             items: [
                 {
+                    id: "dashboard",
                     name: "الرئيسية",
                     path: "/dashboard",
                     icon: LayoutDashboard
                 },
                 {
+                    id: "calendar",
                     name: "التقويم",
                     path: "/dashboard/calendar",
                     icon: CalendarDays
                 },
                 {
+                    id: "finance",
                     name: "المالية",
                     path: "/dashboard/finance",
                     icon: CircleDollarSign
                 },
                 {
+                    id: "reports",
                     name: "التقارير",
                     path: "/dashboard/analytics",
                     icon: BarChart3
+                },
+                {
+                    id: "dashboard-builder",
+                    name: "منشئ لوحة التحكم",
+                    path: "/dashboard/dashboard-builder",
+                    icon: LayoutDashboard
+                },
+                {
+                    id: "system-builder",
+                    name: "منشئ النظام",
+                    path: "/admin/settings/system-builder",
+                    icon: ClipboardList
+                },
+                {
+                    id: "report-builder",
+                    name: "منشئ التقارير",
+                    path: "/dashboard/report-builder",
+                    icon: BarChart3
+                },
+                {
+                    id: "saved-reports",
+                    name: "التقارير المحفوظة",
+                    path: "/dashboard/report-builder/reports",
+                    icon: FolderOpen
                 }
             ]
         }
@@ -261,39 +350,55 @@ export default function Sidebar() {
                             {group.groupName}
                         </p>
 
-                        {group.items.map((item) => {
+                        {group.items
+                            .filter(item => canViewPage(item.id))
+                            .map((item) => {
 
-                            const Icon = item.icon;
-                            const isActive = pathname === item.path;
+                                console.log(user)
 
-                            return (
-                                <Link
-                                    key={item.path}
-                                    href={item.path}
-                                    className={`flex items-center justify-between px-4 py-2 rounded-xl text-xs font-semibold transition-all
+                                // const pageId = item.path
+                                //     .replace("/dashboard", "")
+                                //     .replace("/", "") || "dashboard";
+
+                                // if (!canViewPage(pageId)) {
+                                //     return null;
+                                // }
+
+                                if (!canViewPage(item.id)) {
+                                    return null;
+                                }
+
+                                const Icon = item.icon;
+                                const isActive = pathname === item.path;
+
+                                return (
+                                    <Link
+                                        key={item.path}
+                                        href={item.path}
+                                        className={`flex items-center justify-between px-4 py-2 rounded-xl text-xs font-semibold transition-all
                         ${isActive
-                                            ? "bg-slate-800/50 text-amber-400 border border-slate-700/50"
-                                            : "hover:bg-slate-800/30 hover:text-slate-200"
-                                        }`}
-                                >
+                                                ? "bg-slate-800/50 text-amber-400 border border-slate-700/50"
+                                                : "hover:bg-slate-800/30 hover:text-slate-200"
+                                            }`}
+                                    >
 
-                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-3">
 
-                                        <Icon
-                                            className={`w-4 h-4 ${isActive
+                                            <Icon
+                                                className={`w-4 h-4 ${isActive
                                                     ? "text-amber-500"
                                                     : "text-slate-500"
-                                                }`}
-                                        />
+                                                    }`}
+                                            />
 
-                                        <span>{item.name}</span>
+                                            <span>{item.name}</span>
 
-                                    </div>
+                                        </div>
 
-                                </Link>
-                            );
+                                    </Link>
+                                );
 
-                        })}
+                            })}
 
                     </div>
                 ))}

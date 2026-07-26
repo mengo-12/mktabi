@@ -88,6 +88,15 @@ export const FIELD_TYPES = [
         supportsRelation: true,
         supportsPermissions: true,
     },
+
+    {
+        value: "system_pages",
+        label: "📄 صلاحيات صفحات النظام",
+        supportsOptions: false,
+        supportsRelation: false,
+        supportsPermissions: false,
+        supportsSystemPages: true,
+    },
 ];
 
 export const getFieldType = (value) => {
@@ -104,5 +113,9 @@ export const fieldSupportsRelation = (value) => {
 
 export const fieldSupportsPermissions = (value) => {
     return getFieldType(value)?.supportsPermissions ?? false;
+};
+
+export const fieldSupportsSystemPages = (value) => {
+    return getFieldType(value)?.supportsSystemPages ?? false;
 };
 

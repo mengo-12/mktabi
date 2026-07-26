@@ -304,6 +304,7 @@ async def get_my_profile(current_user: User = Depends(get_current_user)):
     
     if getattr(current_user, "is_dynamic_staff", False):
         user_data["dynamic_permissions"] = getattr(current_user, "dynamic_permissions", {})
+        user_data["system_pages"] = getattr(current_user, "system_pages", {})
         user_data["staff_table_id"] = getattr(current_user, "staff_table_id", None)
         
     return user_data

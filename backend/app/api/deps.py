@@ -140,19 +140,31 @@ async def get_current_user(
             
             # 🎯 استخراج الصلاحيات بشكل مرن وذكي
             permissions_dict = {}
-            for k, v in cells.items():
-                # إذا كانت الصلاحية مخزنة كـ قاموس جاهز
-                if isinstance(v, dict):
-                    if any(x in str(v) for x in ["read_only", "read_write", "no_access"]):
-                        permissions_dict = v
-                        break
-                # إذا كانت مخزنة كـ نص JSON
-                elif isinstance(v, str) and any(x in v for x in ["read_only", "read_write", "no_access"]):
+            system_pages = {}
+            for key, value in cells.items():
+
+                parsed = value
+
+                if isinstance(value, str):
                     try:
-                        permissions_dict = json.loads(v)
-                        break
+                        parsed = json.loads(value)
                     except:
-                        pass
+                        continue
+
+                if not isinstance(parsed, dict):
+                    continue
+
+                values = set(parsed.values())
+
+                # صلاحيات الجداول
+                if values.issubset({"read_only", "read_write", "no_access"}):
+                    permissions_dict = parsed
+
+                # صلاحيات الصفحات
+                page_levels = {"write", "read", "no_access"}
+
+                if set(parsed.values()).issubset(page_levels):
+                    system_pages = parsed
 
             # 🔒 [قفل الأمان الصارم]: حظر صلاحية التعديل على جدول الموظفين حتى لو تم التلاعب بقاعدة البيانات
             # نجبر النظام على جعل جدول الموظفين الحالي للقراءة فقط بالنسبة لهذا الموظف لمنع تصعيد الصلاحيات.
@@ -170,7 +182,8 @@ async def get_current_user(
             make_transient(fake_user)
             
             fake_user.is_dynamic_staff = True
-            fake_user.dynamic_permissions = permissions_dict  
+            fake_user.dynamic_permissions = permissions_dict
+            fake_user.system_pages = system_pages
             fake_user.staff_table_id = table_id
             
             return fake_user

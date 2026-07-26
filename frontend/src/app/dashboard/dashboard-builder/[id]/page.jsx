@@ -2,9 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import apiClient from "@/services/apiClient";
 import reportService from "../services/reportService";
+
+import { useAuth } from "@/context/AuthContext";
 
 import { Plus, ArrowRight, } from "lucide-react";
 
@@ -94,6 +97,21 @@ export default function DashboardCanvasPage() {
 
     const { id } = useParams();
 
+    const { user } = useAuth();
+
+    const pagePermission =
+        user?.role?.toLowerCase() === "admin" ||
+            user?.is_superuser
+            ? "write"
+            : (user?.system_pages?.["dashboard-builder"] || "no_access");
+
+    const canRead =
+        pagePermission === "read" ||
+        pagePermission === "write";
+
+    const canWrite =
+        pagePermission === "write";
+
     const [dashboard, setDashboard] = useState(null);
 
     const [loading, setLoading] = useState(true);
@@ -128,6 +146,16 @@ export default function DashboardCanvasPage() {
         loadDashboard();
 
     }, [id]);
+
+    const router = useRouter();
+
+    useEffect(() => {
+        if (!user) return;
+
+        if (!canRead) {
+            router.replace("/dashboard");
+        }
+    }, [user, canRead, router]);
 
 
     const loadWidgets = async (dashboardId) => {
@@ -184,6 +212,8 @@ export default function DashboardCanvasPage() {
     };
 
     const createWidget = async () => {
+
+        if (!canWrite) return;
 
         try {
 
@@ -242,6 +272,8 @@ export default function DashboardCanvasPage() {
 
     const saveLayout = async (layout) => {
 
+        if (!canWrite) return;
+
         for (const item of layout) {
 
             await dashboardWidgetService.updateWidget(item.i, {
@@ -268,6 +300,8 @@ export default function DashboardCanvasPage() {
 
     const editWidget = async (widget) => {
 
+        if (!canWrite) return;
+
         await loadReports();
 
         setEditingWidget(widget);
@@ -283,6 +317,9 @@ export default function DashboardCanvasPage() {
     };
 
     const openWidgetSettings = (widget) => {
+
+        if (!canWrite) return;
+
 
         setEditingWidget(widget);
 
@@ -418,6 +455,14 @@ export default function DashboardCanvasPage() {
 
     };
 
+    if (!canRead) {
+        return (
+            <div className="flex items-center justify-center h-screen">
+                ليس لديك صلاحية للوصول إلى Dashboard
+            </div>
+        );
+    }
+
     if (loading) {
 
         return (
@@ -479,7 +524,10 @@ export default function DashboardCanvasPage() {
             </div>
 
             <button
+                disabled={!canWrite}
                 onClick={async () => {
+
+                    if (!canWrite) return;
 
                     await loadReports();
 
@@ -492,7 +540,6 @@ export default function DashboardCanvasPage() {
                     });
 
                     setIsWidgetModalOpen(true);
-
                 }}
                 className="px-4 py-2 rounded-lg bg-blue-600 text-white flex items-center gap-2"
             >
@@ -501,7 +548,8 @@ export default function DashboardCanvasPage() {
             </button>
 
             <button
-                onClick={() => setFilterModalOpen(true)}
+                disabled={!canWrite}
+                onClick={() => canWrite && setFilterModalOpen(true)}
                 className="px-4 py-2 rounded-lg border border-slate-700"
             >
 
@@ -599,9 +647,9 @@ export default function DashboardCanvasPage() {
 
                         rowHeight={35}
 
-                        isDraggable
+                        isDraggable={canWrite}
 
-                        isResizable
+                        isResizable={canWrite}
 
                         compactType={null}
 
@@ -684,25 +732,28 @@ export default function DashboardCanvasPage() {
                                         <div className="flex items-center gap-2">
 
                                             <button
-                                                onClick={() => openWidgetSettings(widget)}
+                                                disabled={!canWrite}
+                                                onClick={() => canWrite && openWidgetSettings(widget)}
                                                 className="no-drag p-2 rounded hover:bg-slate-800"
                                             >
                                                 ⚙️
                                             </button>
 
                                             <button
-                                                onClick={() => editWidget(widget)}
+                                                disabled={!canWrite}
+                                                onClick={() => canWrite && editWidget(widget)}
                                                 className="no-drag p-2 rounded hover:bg-slate-800"
                                             >
                                                 <Pencil size={18} />
                                             </button>
 
                                             <button
+                                                disabled={!canWrite}
                                                 onClick={async () => {
 
-                                                    await dashboardWidgetService.duplicateWidget(
-                                                        widget.id
-                                                    );
+                                                    if (!canWrite) return;
+
+                                                    await dashboardWidgetService.duplicateWidget(widget.id);
 
                                                     loadWidgets(dashboard.id);
 
@@ -715,6 +766,7 @@ export default function DashboardCanvasPage() {
                                             </button>
 
                                             <button
+                                                disabled={!canWrite}
                                                 onClick={async () => {
 
                                                     if (!confirm("حذف الـ Widget؟"))
@@ -765,6 +817,7 @@ export default function DashboardCanvasPage() {
             </div>
 
             <AddWidgetModal
+                canWrite={canWrite}
                 open={isWidgetModalOpen}
                 onClose={() => {
                     setEditingWidget(null);
@@ -785,6 +838,7 @@ export default function DashboardCanvasPage() {
                 widget={editingWidget}
                 dashboardId={dashboard.id}
                 reload={() => loadWidgets(dashboard.id)}
+                canWrite={canWrite}
             />
 
             <ConfigureDashboardFiltersModal
@@ -804,6 +858,7 @@ export default function DashboardCanvasPage() {
                 dashboard={dashboard}
 
                 reload={loadDashboard}
+                canWrite={canWrite}
 
             />
 
@@ -828,12 +883,16 @@ function WidgetSettingsModal({
 
     reload,
 
+    canWrite,
+
 }) {
 
     if (!open || !widget)
         return null;
 
     const save = async () => {
+
+        if (!canWrite) return;
 
         await dashboardWidgetService.updateWidget(
             widget.id,
@@ -1003,7 +1062,8 @@ function WidgetSettingsModal({
                     </button>
 
                     <button
-                        onClick={save}
+                        disabled={!canWrite}
+                        onClick={() => canWrite && save()}
                         className="px-4 py-2 rounded bg-blue-600"
                     >
 
@@ -1031,6 +1091,7 @@ function AddWidgetModal({
     setWidgetForm,
     onCreate,
     editingWidget,
+    canWrite,
 }) {
 
     if (!open) return null;
@@ -1124,7 +1185,8 @@ function AddWidgetModal({
                     </button>
 
                     <button
-                        onClick={onCreate}
+                        disabled={!canWrite}
+                        onClick={() => canWrite && onCreate()}
                         className="px-4 py-2 bg-blue-600 rounded-lg text-white"
                     >
 
@@ -2022,6 +2084,8 @@ function ConfigureDashboardFiltersModal({
 
     reload,
 
+    canWrite,
+
 }) {
 
     if (!open)
@@ -2294,7 +2358,8 @@ function ConfigureDashboardFiltersModal({
 
                     <button
 
-                        onClick={addFilter}
+                        disabled={!canWrite}
+                        onClick={() => canWrite && addFilter()}
 
                         className="border rounded px-4 py-2"
 
@@ -2318,7 +2383,8 @@ function ConfigureDashboardFiltersModal({
                     </button>
 
                     <button
-                        onClick={save}
+                        disabled={!canWrite}
+                        onClick={() => canWrite && save()}
                         className="bg-blue-600 rounded px-4 py-2"
                     >
 
