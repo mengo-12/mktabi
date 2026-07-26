@@ -279,3 +279,35 @@ def sanitize_staff_permissions(cells_data: dict, staff_table_id: int) -> dict:
             break 
             
     return cleaned_cells
+
+class PagePermissionChecker:
+    def __init__(self, page_name: str, required: str = "read"):
+        self.page_name = page_name
+        self.required = required
+
+    def __call__(self, current_user: User = Depends(get_current_user)) -> User:
+
+        # الأدمن والسوبر يوزر
+        if (
+            current_user.role == UserRole.ADMIN
+            or getattr(current_user, "is_superuser", False)
+        ):
+            return current_user
+
+        system_pages = getattr(current_user, "system_pages", {}) or {}
+
+        permission = system_pages.get(self.page_name, "no_access")
+
+        if self.required == "read":
+            allowed = permission in ["read", "write"]
+
+        else:
+            allowed = permission == "write"
+
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="ليس لديك صلاحية للوصول لهذه الصفحة."
+            )
+
+        return current_user

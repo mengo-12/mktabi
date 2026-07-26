@@ -2,7 +2,10 @@ from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.api.deps import get_current_user
+from app.api.deps import (
+    get_current_user,
+    PagePermissionChecker,
+)
 
 from app.core.database import get_db
 
@@ -19,12 +22,20 @@ router = APIRouter()
 @router.get("/", response_model=list[ReportBuilderResponse])
 async def get_reports(
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(
+        PagePermissionChecker("report-builder", "read")
+    ),
 ):
     return await ReportBuilderService.get_reports(db)
 
 
 @router.get("/datasources")
-async def get_datasources(db: AsyncSession = Depends(get_db)):
+async def get_datasources(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(
+        PagePermissionChecker("report-builder", "read")
+    ),
+):
 
     return await ReportBuilderService.get_datasources(db)
 
@@ -34,6 +45,9 @@ async def get_datasources(db: AsyncSession = Depends(get_db)):
 async def get_report(
     report_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(
+        PagePermissionChecker("report-builder", "read")
+    ),
 ):
     report = await ReportBuilderService.get_report(
         db,
@@ -53,7 +67,9 @@ async def get_report(
 async def run_report(
     payload: ReportRunRequest,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(
+    PagePermissionChecker("report-builder", "read")
+),
 ):
 
     return await ReportRunnerService.run_query(db, payload.model_dump())
@@ -71,10 +87,12 @@ async def create_report(
     )
 
 @router.put("/{report_id}", response_model=ReportBuilderResponse)
-async def update_report(
-    report_id: int,
+async def create_report(
     payload: ReportBuilderCreate,
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(
+        PagePermissionChecker("report-builder", "write")
+    ),
 ):
 
     report = await ReportBuilderService.update_report(
@@ -96,6 +114,9 @@ async def update_report(
 async def delete_report(
     report_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(
+        PagePermissionChecker("report-builder", "write")
+    ),
 ):
 
     deleted = await ReportBuilderService.delete_report(

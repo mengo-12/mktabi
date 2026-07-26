@@ -10,6 +10,8 @@ from app.schemas.dashboard_widget import (
     DashboardWidgetResponse,
 )
 
+from app.api.deps import PagePermissionChecker
+
 from app.services.dashboard_widget_service import (
     DashboardWidgetService,
 )
@@ -24,6 +26,9 @@ router = APIRouter()
 async def get_widgets(
     dashboard_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(
+        PagePermissionChecker("dashboard-builder", "read")
+    ),
 ):
     return await DashboardWidgetService.get_widgets(
         db,
@@ -38,6 +43,9 @@ async def get_widgets(
 async def create_widget(
     payload: DashboardWidgetCreate,
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(
+        PagePermissionChecker("dashboard-builder", "write")
+    ),
 ):
     return await DashboardWidgetService.create_widget(
         db,
@@ -78,6 +86,9 @@ async def update_widget(
 async def duplicate_widget(
     widget_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(
+        PagePermissionChecker("dashboard-builder", "write")
+    ),
 ):
     widget = await DashboardWidgetService.get_widget(
         db,
@@ -102,6 +113,9 @@ async def duplicate_widget(
 async def delete_widget(
     widget_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user=Depends(
+        PagePermissionChecker("dashboard-builder", "write")
+    ),
 ):
     widget = await DashboardWidgetService.get_widget(
         db,

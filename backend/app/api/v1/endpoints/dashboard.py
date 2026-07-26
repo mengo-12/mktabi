@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, PagePermissionChecker
 from app.core.database import get_db
 
 from app.schemas.dashboard import (
@@ -21,7 +21,7 @@ router = APIRouter()
 )
 async def get_dashboards(
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(PagePermissionChecker("dashboard-builder", "read")),
 ):
     return await DashboardService.get_dashboards(
         db,
@@ -36,7 +36,7 @@ async def get_dashboards(
 async def get_dashboard(
     dashboard_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(PagePermissionChecker("dashboard-builder", "read")),
 ):
     dashboard = await DashboardService.get_dashboard(
         db,
@@ -61,7 +61,7 @@ async def get_dashboard(
 async def create_dashboard(
     payload: DashboardCreate,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(PagePermissionChecker("dashboard-builder", "write")),
 ):
     return await DashboardService.create_dashboard(
         db,
@@ -78,7 +78,7 @@ async def update_dashboard(
     dashboard_id: int,
     payload: DashboardUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(PagePermissionChecker("dashboard-builder", "write")),
 ):
     dashboard = await DashboardService.get_dashboard(
         db,
@@ -105,7 +105,7 @@ async def update_dashboard(
 async def delete_dashboard(
     dashboard_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(PagePermissionChecker("dashboard-builder", "write")),
 ):
     dashboard = await DashboardService.get_dashboard(
         db,
