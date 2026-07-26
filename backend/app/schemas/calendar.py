@@ -8,7 +8,7 @@ class CalendarEvent(BaseModel):
 
     table_id: int
     row_id: int
-    section_id: int
+    section_id: Optional[int] = None
 
     table_name: str
     section_name: str

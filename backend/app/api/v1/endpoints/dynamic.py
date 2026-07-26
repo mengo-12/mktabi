@@ -67,8 +67,12 @@ def build_calendar_event(table: CustomTable, row: CustomRow) -> Optional[Calenda
 
     mapping = table.calendar_mapping or {}
 
+    if table.section_id is None:
+        return None
+    
     if not mapping.get("enabled"):
         return None
+
 
     cells = row.cells_data or {}
 
@@ -629,6 +633,10 @@ async def get_calendar_events(
     tables = result.scalars().all()
 
     for table in tables:
+
+        # تجاهل أي جدول لا ينتمي لقسم
+        if table.section_id is None:
+            continue
 
         fresh_table = await db.get(CustomTable, table.id)
 
