@@ -89,6 +89,22 @@ def build_calendar_event(table: CustomTable, row: CustomRow) -> Optional[Calenda
     # عنوان اختياري
     title = cells.get(title_id) if title_id else None
 
+    # إذا كان العنوان عبارة عن قائمة نحوله إلى نص
+    if isinstance(title, list):
+        title = ", ".join(str(x) for x in title)
+
+    # إذا كان Dict نحوله إلى نص
+    elif isinstance(title, dict):
+        title = str(title)
+
+    # أي نوع آخر غير نص
+    elif title is not None and not isinstance(title, str):
+        title = str(title)
+
+    # إذا كان فارغاً
+    if not title:
+        title = table.name
+
     # إذا لم يتم اختيار عنوان أو كانت القيمة فارغة
     if not title:
         title = table.name
