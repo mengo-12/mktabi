@@ -4,6 +4,7 @@ export default function DynamicFormRenderer({
     columns = [],
     values = {},
     onChange,
+    theme = "dark",
 }) {
 
     const updateValue = (id, value) => {
@@ -15,13 +16,15 @@ export default function DynamicFormRenderer({
 
     const inputStyle = {
         width: "100%",
-        background: "#18181b",
-        color: "#fff",
-        border: "1px solid #3f3f46",
-        borderRadius: "10px",
+        background: theme === "light" ? "#ffffff" : "#18181b",
+        color: theme === "light" ? "#0f172a" : "#ffffff",
+        border: theme === "light"
+            ? "1px solid #cbd5e1"
+            : "1px solid #3f3f46",
+        borderRadius: "12px",
         padding: "12px 14px",
         outline: "none",
-        transition: "0.2s",
+        transition: "all .2s ease",
     };
 
     return (
@@ -31,7 +34,12 @@ export default function DynamicFormRenderer({
 
                 <div key={column.id} className="space-y-2">
 
-                    <label className="block text-sm font-medium text-zinc-300">
+                    <label
+                        className={`block text-sm font-medium ${theme === "light"
+                                ? "text-slate-700"
+                                : "text-zinc-300"
+                            }`}
+                    >
                         {column.name}
                     </label>
 

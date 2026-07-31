@@ -1,0 +1,288 @@
+/* الشكل العام */
+.fc {
+    font-family: inherit;
+    background: #ffffff;
+    color: #18181b;
+}
+
+.fc-theme-standard td,
+.fc-theme-standard th {
+    border-color: #ececec;
+}
+
+.fc-scrollgrid {
+    border: none !important;
+}
+
+.fc .fc-scrollgrid {
+    border-radius: 20px;
+    overflow: hidden;
+}
+
+/* 2) Toolbar الداخلي
+ */
+.fc-toolbar {
+    display: none !important;
+}
+
+.fc-col-header-cell {
+
+    background: #fafafa;
+
+    height: 56px;
+
+    font-weight: 600;
+
+    color: #71717a;
+
+    border-bottom: 1px solid #ececec !important;
+
+}
+
+/* 3) رؤوس الأيام */
+
+.fc-col-header-cell-cushion {
+
+    padding: 16px 0;
+
+    text-decoration: none;
+
+    color: #71717a;
+
+}
+
+/* أرقام الأيام */
+
+.fc-daygrid-day-number {
+
+    padding: 12px;
+
+    color: #52525b;
+
+    font-weight: 600;
+
+    text-decoration: none;
+
+}
+
+
+/* يوم اليوم (Today) */
+
+
+.fc-day-today {
+
+    background: rgba(59,130,246,.05) !important;
+
+}
+
+.fc-day-today .fc-daygrid-day-number{
+
+    background:#2563eb;
+
+    color:white;
+
+    width:34px;
+
+    height:34px;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    border-radius:999px;
+
+    margin:6px;
+
+}
+
+
+/* الخلايا */
+
+
+.fc-daygrid-day {
+
+    transition: .25s;
+
+}
+
+.fc-daygrid-day:hover {
+
+    background:#f8fafc;
+
+}
+
+/* الأحداث (Events) */
+
+.fc-modern-event {
+
+    border:none !important;
+
+    border-radius:10px !important;
+
+    padding:4px 8px !important;
+
+    font-size:13px !important;
+
+    font-weight:600 !important;
+
+    box-shadow:
+
+    0 2px 8px rgba(0,0,0,.08);
+
+}
+
+/* Hover على الحدث */
+
+.fc-event:hover{
+
+    transform:translateY(-1px);
+
+    transition:.18s;
+
+    box-shadow:
+
+    0 8px 18px rgba(0,0,0,.15);
+
+}
+
+/* More Events */
+
+.fc-daygrid-more-link{
+
+    color:#2563eb;
+
+    font-weight:600;
+
+}
+
+/* Popup */
+
+.fc-popover{
+
+    border:none;
+
+    border-radius:18px;
+
+    overflow:hidden;
+
+    box-shadow:
+
+    0 15px 40px rgba(0,0,0,.18);
+
+}
+
+.fc-popover-header{
+
+    background:#fafafa;
+
+    padding:12px;
+
+}
+
+
+/* Week View */
+
+.fc-timegrid-slot{
+
+    height:52px;
+
+}
+
+.fc-timegrid-slot-label{
+
+    color:#a1a1aa;
+
+    font-size:12px;
+
+}
+
+
+.fc-timegrid-now-indicator-line{
+
+    border-color:#ef4444;
+
+    border-width:2px;
+
+}
+
+/* الخط الحالي */
+
+.fc-timegrid-now-indicator-arrow{
+
+    border-color:#ef4444;
+
+}
+
+/* Drag & Drop */
+
+.fc-event-dragging{
+
+    opacity:.85;
+
+    transform:scale(1.03);
+
+}
+
+/* تحديد الأيام */
+
+.fc-highlight{
+
+    background:
+
+    rgba(59,130,246,.12) !important;
+
+}
+
+/* Scrollbar */
+
+.fc-scroller::-webkit-scrollbar{
+
+    width:8px;
+
+}
+
+.fc-scroller::-webkit-scrollbar-thumb{
+
+    background:#d4d4d8;
+
+    border-radius:999px;
+
+}
+
+.fc-scroller::-webkit-scrollbar-track{
+
+    background:transparent;
+
+}
+
+/* إزالة الحدود الزائدة */
+
+.fc-theme-standard td,
+
+.fc-theme-standard th{
+
+    border-color:#ececec;
+
+}
+
+.fc-scrollgrid-section-header th{
+
+    border-top:none;
+
+}
+
+/* Animation */
+
+.fc-event{
+
+    transition:
+
+    transform .18s,
+
+    box-shadow .18s,
+
+    opacity .18s;
+
+}
