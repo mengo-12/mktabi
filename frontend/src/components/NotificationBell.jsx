@@ -61,7 +61,7 @@
 
 //             // 2. تحديث التنبيهات الحالية في قاعدة البيانات لكي لا تعود عند الـ Refresh
 //             const token = localStorage.getItem('token');
-            
+
 //             // نمر حلقة لتحديث كل تنبيه غير مقروء في السيرفر
 //             const updatePromises = notifications.map((notif) =>
 //                 fetch(`http://localhost:8000/api/v1/notifications/${notif.id}/read`, {
@@ -133,44 +133,116 @@
 
 'use client';
 import { useEffect, useState, useRef } from 'react';
+
 import { Bell } from 'lucide-react'; // استيراد الأيقونة الفاخرة هنا
 
-export default function NotificationBell({ lawyerId }) {
+export default function NotificationBell() {
     const [notifications, setNotifications] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef(null);
+    const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+    const wsRef = useRef(null);
+    const reconnectTimeoutRef = useRef(null);
+
+    const WS_URL = API_URL
+        .replace("http://", "ws://")
+        .replace("https://", "wss://")
+        .replace("/api/v1", "");
 
     useEffect(() => {
-        if (!lawyerId) return;
 
-        // 1. جلب التنبيهات السابقة غير المقروءة عند تحميل الصفحة
-        fetch(`http://localhost:8000/api/v1/notifications/unread/${lawyerId}`)
-            .then((res) => res.json())
-            .then((data) => {
-                if (Array.isArray(data)) {
+        const connectWebSocket = () => {
+
+            const token = localStorage.getItem("token");
+
+            if (!token) return;
+
+            fetch("http://localhost:8000/api/v1/notifications/unread", {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            })
+                .then((res) => res.json())
+                .then((data) => {
                     setNotifications(data);
                     setUnreadCount(data.length);
+                })
+                .catch(console.error);
+
+            const ws = new WebSocket(
+                `${WS_URL}/api/v1/notifications/ws?token=${token}`
+            );
+
+            wsRef.current = ws;
+
+            ws.onopen = () => {
+
+                console.log("✅ WS Connected");
+
+                if (reconnectTimeoutRef.current) {
+                    clearTimeout(reconnectTimeoutRef.current);
+                    reconnectTimeoutRef.current = null;
                 }
-            })
-            .catch((err) => console.error("Error fetching notifications:", err));
 
-        // 2. الاتصال بالقناة الحية استقبال التنبيهات الفورية عبر الـ WebSocket
-        const ws = new WebSocket(`ws://localhost:8000/api/v1/notifications/ws/${lawyerId}`);
+            };
 
-        ws.onmessage = (event) => {
-            const newNotif = JSON.parse(event.data);
-            setNotifications((prev) => [newNotif, ...prev]);
-            setUnreadCount((prev) => prev + 1);
+            ws.onmessage = (event) => {
 
-            try {
-                const audio = new Audio('/sounds/notification.mp3');
-                audio.play();
-            } catch (e) { }
+                console.log("NEW MESSAGE", event.data);
+
+                const newNotif = JSON.parse(event.data);
+
+                setNotifications(prev => [newNotif, ...prev]);
+                setUnreadCount(prev => prev + 1);
+
+                try {
+                    const audio = new Audio("/sounds/notification.mp3");
+                    audio.play();
+                } catch { }
+
+            };
+
+            ws.onerror = (e) => {
+
+                console.log("WS ERROR", e);
+
+                ws.close();
+
+            };
+
+            ws.onclose = () => {
+
+                console.log("WS CLOSED");
+
+                reconnectTimeoutRef.current = setTimeout(() => {
+
+                    console.log("🔄 Reconnecting...");
+
+                    connectWebSocket();
+
+                }, 3000);
+
+            };
+
         };
 
-        return () => ws.close();
-    }, [lawyerId]);
+        connectWebSocket();
+
+        return () => {
+
+            if (reconnectTimeoutRef.current) {
+                clearTimeout(reconnectTimeoutRef.current);
+            }
+
+            if (wsRef.current) {
+                wsRef.current.close();
+            }
+
+        };
+        
+    }, []);
 
     // إغلاق القائمة المنسدلة عند الضغط خارج المكون
     useEffect(() => {
@@ -191,7 +263,7 @@ export default function NotificationBell({ lawyerId }) {
         if (nextOpenState && unreadCount > 0) {
             setUnreadCount(0);
             const token = localStorage.getItem('token');
-            
+
             const updatePromises = notifications.map((notif) =>
                 fetch(`http://localhost:8000/api/v1/notifications/${notif.id}/read`, {
                     method: 'PATCH',
@@ -215,10 +287,10 @@ export default function NotificationBell({ lawyerId }) {
             >
                 {/* تأثير الـ Hover الشعاعي الخلفي النبضي */}
                 <span className="absolute inset-0 rounded-xl bg-amber-500/0 group-hover:bg-amber-500/5 blur-sm transition-all duration-300 pointer-events-none" />
-                
+
                 {/* الأيقونة الفاخرة مع حركة الاهتزاز الذكية والتكبير الصغير عند الـ Hover */}
                 <Bell className="w-4.5 h-4.5 transition-all duration-300 group-hover:rotate-12 group-hover:scale-105 active:scale-95" />
-                
+
                 {/* 👈 نقطة التنبيه النابضة الذكية والمخصصة للنظام */}
                 {unreadCount > 0 && (
                     <span className="absolute top-1 left-1 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-[#0F172A] animate-pulse" />

@@ -2032,6 +2032,20 @@ export default function SystemBuilderPage() {
         editable: true,
     });
 
+    const [notificationMapping, setNotificationMapping] = useState({
+        enabled: false,
+
+        date_field: "",
+        responsible_field: "",
+
+        remind_before_minutes: 30,
+
+        title: "📅 تذكير",
+        message: "لديك موعد قريب: {title}",
+
+        category: "calendar",
+    });
+
     // جلب البيانات عند تحميل الصفحة كلياً
     useEffect(() => {
         loadSections();
@@ -2209,10 +2223,10 @@ export default function SystemBuilderPage() {
         try {
             // تضمين خاصية جدول الموظفين وحالة الصلاحيات بداخل الـ Payload المرسل للسيرفر
             if (editingTableId) {
-                await dynamicService.updateTable(editingTableId, tableName, columns, viewMode, { is_staff_table: isStaffTable, calendar_mapping: calendarMapping, display_column: displayColumn, });
+                await dynamicService.updateTable(editingTableId, tableName, columns, viewMode, { is_staff_table: isStaffTable, calendar_mapping: calendarMapping, notification_mapping: notificationMapping, display_column: displayColumn, });
                 alert("تم تحديث هيكل الجدول بنجاح! 🔄");
             } else {
-                await dynamicService.createTable(selectedSectionId, tableName, columns, viewMode, { is_staff_table: isStaffTable, calendar_mapping: calendarMapping, display_column: displayColumn, });
+                await dynamicService.createTable(selectedSectionId, tableName, columns, viewMode, { is_staff_table: isStaffTable, calendar_mapping: calendarMapping, notification_mapping: notificationMapping, display_column: displayColumn, });
                 alert("تم إنشاء وتثبيت الجدول الجديد بنجاح! 🚀");
             }
 
@@ -2262,6 +2276,16 @@ export default function SystemBuilderPage() {
                 color: "#3b82f6",
                 all_day: true,
                 editable: true,
+            });
+
+            setNotificationMapping({
+                enabled: false,
+                date_field: "",
+                responsible_field: "",
+                remind_before_minutes: 30,
+                title: "📅 تذكير",
+                message: "لديك موعد قريب: {title}",
+                category: "calendar",
             });
 
             loadSections();
@@ -2371,8 +2395,19 @@ export default function SystemBuilderPage() {
                 editable: true,
             }
         );
-    };
 
+        setNotificationMapping(
+            table.notification_mapping || {
+                enabled: false,
+                date_field: "",
+                responsible_field: "",
+                remind_before_minutes: 30,
+                title: "📅 تذكير",
+                message: "لديك موعد قريب: {title}",
+                category: "calendar",
+            }
+        );
+    };
     const handleDeleteTemplate = async (id) => {
         if (!currentUserPermissions.can_engineer_tables) {
             return alert("⛔ لا تمتلك صلاحيات كافية لحذف القوالب القانونية");
@@ -2558,8 +2593,8 @@ export default function SystemBuilderPage() {
             label: `${col.name} (${col.type})`
         }));
 
-    const dateFields = columns.filter(
-        col => col.type === "date"
+    const dateFields = columns.filter(col =>
+        ["date", "datetime"].includes(col.type)
     );
 
     const descriptionFields = columns.filter(
@@ -4412,7 +4447,7 @@ export default function SystemBuilderPage() {
                                                                                     onChange={(e) =>
                                                                                         setCalendarMapping({
                                                                                             ...calendarMapping,
-                                                                                             end_field: e.target.value
+                                                                                            end_field: e.target.value
                                                                                         })
                                                                                     }
                                                                                     className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-800 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:focus:ring-cyan-900/30"
@@ -4523,6 +4558,8 @@ export default function SystemBuilderPage() {
 
                                                                                         </div>
 
+
+
                                                                                     </div>
 
                                                                                 </div>
@@ -4625,6 +4662,144 @@ export default function SystemBuilderPage() {
                                                                                     سيستخدم هذا اللون والأيقونة في جميع أحداث هذا الجدول داخل التقويم.
 
                                                                                 </p>
+
+                                                                            </div>
+
+                                                                        </div>
+
+
+                                                                        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900 mt-8">
+
+                                                                            <div className="border-b border-slate-200 px-6 py-5 dark:border-zinc-700">
+                                                                                <h4 className="text-lg font-bold">
+                                                                                    🔔 إعدادات الإشعارات
+                                                                                </h4>
+                                                                            </div>
+
+                                                                            <div className="grid md:grid-cols-2 gap-6 p-6">
+
+                                                                                <div className="md:col-span-2">
+                                                                                    <label className="flex items-center gap-3">
+                                                                                        <input
+                                                                                            type="checkbox"
+                                                                                            checked={notificationMapping.enabled}
+                                                                                            onChange={(e) =>
+                                                                                                setNotificationMapping({
+                                                                                                    ...notificationMapping,
+                                                                                                    enabled: e.target.checked
+                                                                                                })
+                                                                                            }
+                                                                                        />
+                                                                                        تفعيل الإشعارات
+                                                                                    </label>
+                                                                                </div>
+
+                                                                                {notificationMapping.enabled && (
+                                                                                    <>
+                                                                                        <div>
+                                                                                            <label>حقل التاريخ</label>
+
+                                                                                            <select
+                                                                                                value={notificationMapping.date_field}
+                                                                                                onChange={(e) =>
+                                                                                                    setNotificationMapping({
+                                                                                                        ...notificationMapping,
+                                                                                                        date_field: e.target.value
+                                                                                                    })
+                                                                                                }
+                                                                                            >
+                                                                                                <option value="">اختر</option>
+
+                                                                                                {dateFields.map(field => (
+                                                                                                    <option
+                                                                                                        key={field.id}
+                                                                                                        value={field.id}
+                                                                                                    >
+                                                                                                        {field.name}
+                                                                                                    </option>
+                                                                                                ))}
+                                                                                            </select>
+                                                                                        </div>
+
+                                                                                        <div>
+                                                                                            <label>المسؤول</label>
+
+                                                                                            <select
+                                                                                                value={notificationMapping.responsible_field}
+                                                                                                onChange={(e) =>
+                                                                                                    setNotificationMapping({
+                                                                                                        ...notificationMapping,
+                                                                                                        responsible_field: e.target.value
+                                                                                                    })
+                                                                                                }
+                                                                                            >
+                                                                                                <option value="">اختر</option>
+
+                                                                                                {columns
+                                                                                                    .filter(c => c.type === "relation")
+                                                                                                    .map(field => (
+                                                                                                        <option
+                                                                                                            key={field.id}
+                                                                                                            value={field.id}
+                                                                                                        >
+                                                                                                            {field.name}
+                                                                                                        </option>
+                                                                                                    ))}
+                                                                                            </select>
+                                                                                        </div>
+
+                                                                                        <div>
+                                                                                            <label>وقت التذكير</label>
+
+                                                                                            <select
+                                                                                                value={notificationMapping.remind_before_minutes}
+                                                                                                onChange={(e) =>
+                                                                                                    setNotificationMapping({
+                                                                                                        ...notificationMapping,
+                                                                                                        remind_before_minutes: Number(e.target.value)
+                                                                                                    })
+                                                                                                }
+                                                                                            >
+                                                                                                <option value={5}>5 دقائق</option>
+                                                                                                <option value={15}>15 دقيقة</option>
+                                                                                                <option value={30}>30 دقيقة</option>
+                                                                                                <option value={60}>60 دقيقة</option>
+                                                                                                <option value={120}>ساعتان</option>
+                                                                                                <option value={1440}>يوم</option>
+                                                                                            </select>
+                                                                                        </div>
+
+                                                                                        <div>
+                                                                                            <label>عنوان الإشعار</label>
+
+                                                                                            <input
+                                                                                                type="text"
+                                                                                                value={notificationMapping.title}
+                                                                                                onChange={(e) =>
+                                                                                                    setNotificationMapping({
+                                                                                                        ...notificationMapping,
+                                                                                                        title: e.target.value
+                                                                                                    })
+                                                                                                }
+                                                                                            />
+                                                                                        </div>
+
+                                                                                        <div className="md:col-span-2">
+                                                                                            <label>نص الإشعار</label>
+
+                                                                                            <textarea
+                                                                                                rows={3}
+                                                                                                value={notificationMapping.message}
+                                                                                                onChange={(e) =>
+                                                                                                    setNotificationMapping({
+                                                                                                        ...notificationMapping,
+                                                                                                        message: e.target.value
+                                                                                                    })
+                                                                                                }
+                                                                                            />
+                                                                                        </div>
+                                                                                    </>
+                                                                                )}
 
                                                                             </div>
 
@@ -5043,6 +5218,16 @@ export default function SystemBuilderPage() {
                                                             color: "#3b82f6",
                                                             all_day: true,
                                                             editable: true,
+                                                        });
+
+                                                        setNotificationMapping({
+                                                            enabled: false,
+                                                            date_field: "",
+                                                            responsible_field: "",
+                                                            remind_before_minutes: 30,
+                                                            title: "📅 تذكير",
+                                                            message: "لديك موعد قريب: {title}",
+                                                            category: "calendar",
                                                         });
                                                     }}
                                                     className="rounded-2xl border border-slate-300 bg-white px-5 py-3 font-medium text-slate-700 transition hover:bg-slate-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"

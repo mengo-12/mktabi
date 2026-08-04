@@ -154,7 +154,7 @@ export default function DashboardLayout({ children }) {
             
             {/* 👈 جرس التنبيهات الذكي مستدعى بشكل نظيف ومباشر وبدون طبقات معقدة */}
             {user?.id && (
-                <NotificationBell lawyerId={user.id} />
+                <NotificationBell/>
             )}
             
             <div className="h-6 w-px bg-gray-200 dark:bg-slate-800" />

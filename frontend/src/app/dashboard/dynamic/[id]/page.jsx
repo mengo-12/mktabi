@@ -2917,7 +2917,7 @@ export default function DynamicSectionPage() {
                         if (filterOperator === 'eq') return numCell === numFilter;
                     }
 
-                    if (column.type === 'date') {
+                    if (column.type === 'date' || column.type === 'datetime') {
                         if (!filterDateStart && !filterDateEnd) return true;
                         const cellDate = new Date(cellValue);
                         if (isNaN(cellDate.getTime())) return false;
@@ -4087,7 +4087,8 @@ export default function DynamicSectionPage() {
                                         </select>
                                     )}
 
-                                    {activeFilterColumnObject.type === 'date' ? (
+                                    {activeFilterColumnObject.type === 'date' ||
+                                        activeFilterColumnObject.type === "datetime" ? (
 
                                         <div className="flex items-center gap-1 w-full">
                                             <input
@@ -4203,7 +4204,15 @@ export default function DynamicSectionPage() {
                                                                     </select>
                                                                 ) : (
                                                                     <input
-                                                                        type={col.type === 'number' ? 'number' : col.type === 'date' ? 'date' : 'text'}
+                                                                        type={
+                                                                            col.type === "number"
+                                                                                ? "number"
+                                                                                : col.type === "date"
+                                                                                    ? "date"
+                                                                                    : col.type === "datetime"
+                                                                                        ? "datetime-local"
+                                                                                        : "text"
+                                                                        }
                                                                         value={editValue} autoFocus onChange={(e) => setEditValue(e.target.value)}
                                                                         onBlur={() => handleCellBlur(row.id, col.id, cellValue)}
                                                                         className="w-full bg-white dark:bg-slate-950 border border-blue-600 dark:border-blue-500 rounded-xl p-1.5 text-xs text-blue-600 dark:text-blue-400 focus:outline-none"
@@ -4281,8 +4290,17 @@ export default function DynamicSectionPage() {
                                                                         col.type !== "relation" &&
                                                                         col.type !== "attachment" &&
                                                                         (
-                                                                            cellValue ||
-                                                                            <span className="text-slate-400 italic">فارغ</span>
+                                                                            (
+                                                                                col.type === "date" && cellValue ? (
+                                                                                    new Date(cellValue).toLocaleDateString("ar-SA")
+                                                                                ) : col.type === "datetime" && cellValue ? (
+                                                                                    new Date(cellValue).toLocaleString("ar-SA")
+                                                                                ) : (
+                                                                                    cellValue ||
+                                                                                    <span className="text-slate-400 italic">فارغ</span>
+                                                                                )
+                                                                            )
+
                                                                         )
                                                                     )}
                                                                 </div>
@@ -4948,11 +4966,13 @@ export default function DynamicSectionPage() {
                                                             ? "number"
                                                             : col.type === "date"
                                                                 ? "date"
-                                                                : col.type === "staff_password"
-                                                                    ? "password"
-                                                                    : col.type === "staff_email"
-                                                                        ? "email"
-                                                                        : "text"
+                                                                : col.type === "datetime"
+                                                                    ? "datetime-local"
+                                                                    : col.type === "staff_password"
+                                                                        ? "password"
+                                                                        : col.type === "staff_email"
+                                                                            ? "email"
+                                                                            : "text"
                                                     }
                                                     value={rowData[col.id] || ""}
                                                     placeholder={
@@ -4974,7 +4994,7 @@ export default function DynamicSectionPage() {
                                             )}
                                         </div>
                                     ))}
-                                       {/* 📂 قسم المستندات المرتبطة الديناميكي */}
+                                    {/* 📂 قسم المستندات المرتبطة الديناميكي */}
                                     {editingRow && (
                                         <div className="mt-6 pt-4 border-t border-slate-800 space-y-3 text-right">
                                             <div className="flex items-center gap-2 text-xs font-black text-emerald-400">

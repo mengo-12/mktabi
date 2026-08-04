@@ -4,23 +4,36 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
 
+
 from app.core.database import get_db
 from app.models.notification import InAppNotification
 from app.services.websocket_manager import notifier_manager
 from app.models.auth import User
 from app.api.deps import get_current_user # لضمان الأمان أثناء التحديث
+from jose import jwt, JWTError
+from app.core.config import settings
 
 router = APIRouter()
 
 # 📂 [1] مسار جلب التنبيهات غير المقروءة 
-@router.get("/unread/{lawyer_id}")
-async def get_unread_notifications(lawyer_id: int, db: AsyncSession = Depends(get_db)):
-    query = (
+@router.get("/unread")
+async def get_unread_notifications(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    يجلب تنبيهات المستخدم الحالي تلقائياً من التوكن.
+    """
+
+    result = await db.execute(
         select(InAppNotification)
-        .where(InAppNotification.lawyer_id == lawyer_id, InAppNotification.is_read == False)
+        .where(
+            InAppNotification.lawyer_id == current_user.id,
+            InAppNotification.is_read == False,
+        )
         .order_by(InAppNotification.created_at.desc())
     )
-    result = await db.execute(query)
+
     return result.scalars().all()
 
 
@@ -43,7 +56,10 @@ async def mark_notification_as_read(
         raise HTTPException(status_code=404, detail="التنبيه المطلوب غير موجود.")
         
     if notification.lawyer_id != current_user.id:
-        raise HTTPException(status_code=403, detail="لا تمتلك صلاحية لتعديل هذا التنبيه.")
+        raise HTTPException(
+            status_code=403,
+            detail="ليس لديك صلاحية لهذا التنبيه."
+        )
 
     # تحويل الحالة وحفظها في قاعدة البيانات
     notification.is_read = True
@@ -53,13 +69,90 @@ async def mark_notification_as_read(
 
 
 # 🔌 [3] نقطة اتصال الـ WebSocket 
-@router.websocket("/ws/{lawyer_id}")
-async def websocket_endpoint(websocket: WebSocket, lawyer_id: int):
-    await notifier_manager.connect(websocket=websocket, lawyer_id=lawyer_id)
+@router.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+
+    token = websocket.query_params.get("token")
+
+    if not token:
+        await websocket.close()
+        return
+
     try:
+
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=["HS256"]
+        )
+
+        sub = str(payload["sub"])
+        print("TOKEN SUB:", sub)
+
+    except JWTError:
+
+        await websocket.close()
+
+        return
+
+    # ===========================
+    # موظف ديناميكي
+    # ===========================
+
+    if sub.startswith("dynamic_staff_"):
+
+        parts = sub.split("_")
+
+        row_id = int(parts[2])
+
+        table_id = int(parts[4])
+
+        await notifier_manager.connect_staff(
+            table_id=table_id,
+            row_id=row_id,
+            websocket=websocket,
+        )
+
+        try:
+
+            while True:
+                await websocket.receive_text()
+
+        except Exception:
+            pass
+
+        finally:
+
+            notifier_manager.disconnect_staff(
+                table_id=table_id,
+                row_id=row_id,
+                websocket=websocket,
+            )
+
+        return
+
+    # ===========================
+    # مستخدم إدارة
+    # ===========================
+
+    user_id = int(sub)
+
+    await notifier_manager.connect_user(
+        user_id=user_id,
+        websocket=websocket,
+    )
+
+    try:
+
         while True:
-            data = await websocket.receive_text()
+            await websocket.receive_text()
+
     except Exception:
         pass
+
     finally:
-        notifier_manager.disconnect(websocket, lawyer_id)
+
+        notifier_manager.disconnect_user(
+            user_id=user_id,
+            websocket=websocket,
+        )

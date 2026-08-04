@@ -42,6 +42,14 @@ export const FIELD_TYPES = [
     },
 
     {
+        value: "datetime",
+        label: "📅🕒 تاريخ ووقت",
+        supportsOptions: false,
+        supportsRelation: false,
+        supportsPermissions: false,
+    },
+
+    {
         value: "dropdown",
         label: "📋 قائمة منسدلة",
         supportsOptions: true,

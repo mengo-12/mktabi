@@ -10,6 +10,8 @@ from app.schemas.calendar import CalendarEvent, CalendarEventUpdate, CalendarEve
 
 from typing import Optional
 
+from datetime import datetime
+
 from app.core.database import get_db
 from app.models.dynamic import CustomSection, CustomTable, CustomRow
 from app.schemas.dynamic import (
@@ -62,6 +64,40 @@ def check_dynamic_permission(current_user: User, table_id: int, required_level: 
 
     return True
 
+def normalize_datetime_fields(table: CustomTable, cells: dict) -> dict:
+    """
+    تحويل جميع حقول datetime إلى ISO8601 قبل التخزين.
+    """
+
+    data = dict(cells)
+
+    for column in table.columns_definition or []:
+
+        if column.get("type") != "datetime":
+            continue
+
+        field_name = column.get("name")
+
+        value = data.get(field_name)
+
+        if not value:
+            continue
+
+        try:
+            # إذا كانت القيمة أصلاً datetime
+            if isinstance(value, datetime):
+                data[field_name] = value.isoformat()
+
+            # إذا كانت string مثل:
+            # 2026-08-01T15:30
+            else:
+                dt = datetime.fromisoformat(str(value))
+                data[field_name] = dt.isoformat()
+
+        except Exception:
+            pass
+
+    return data
 
 def build_calendar_event(table: CustomTable, row: CustomRow) -> Optional[CalendarEvent]:
 
@@ -266,6 +302,9 @@ async def create_table(
     if table.calendar_mapping:
         table_data["calendar_mapping"] = table.calendar_mapping.model_dump()
 
+    if table.notification_mapping:
+        table_data["notification_mapping"] = table.notification_mapping.model_dump()
+
     table_data["display_column"] = table.display_column
 
     db_table = CustomTable(**table_data)
@@ -357,6 +396,11 @@ async def update_table_structure(
     else:
         db_table.calendar_mapping = None
 
+    if updated_data.notification_mapping:
+        db_table.notification_mapping = updated_data.notification_mapping.model_dump()
+    else:
+        db_table.notification_mapping = None
+
     await db.commit()
     await db.refresh(db_table)
     return db_table
@@ -407,6 +451,8 @@ async def create_row(
         )
 
     cells_content = row_data.get("cells_data", row_data)
+
+    cells_content = normalize_datetime_fields(table_check, cells_content)
 
     # 🧼 [تطهير الصلاحيات]: حماية حقول مصفوفة الصلاحيات لمنع التلاعب بها عند الإدخال
     if table_check.is_staff_table:
@@ -515,6 +561,11 @@ async def update_row_cell(
     )
     current_data = dict(db_row.cells_data) if db_row.cells_data else {}
     current_data.update(actual_data)
+
+    current_data = normalize_datetime_fields(
+    table_check,
+    current_data
+)
 
     # 🧼 [تطهير الصلاحيات]
     if table_check and table_check.is_staff_table:
@@ -799,6 +850,11 @@ async def update_calendar_event(
 
     cells = dict(row.cells_data or {})
 
+    cells = normalize_datetime_fields(
+    table,
+    cells
+    )
+
     if start_field:
         cells[start_field] = payload.start.isoformat()
 
@@ -844,6 +900,11 @@ async def create_calendar_event(
 
     # يجب أن يكون التقويم مفعلاً لهذا الجدول
     mapping = table.calendar_mapping or {}
+
+    cells = normalize_datetime_fields(
+    table,
+    cells
+    )
 
     if not mapping.get("enabled"):
         raise HTTPException(status_code=400, detail="هذا الجدول غير مرتبط بالتقويم.")

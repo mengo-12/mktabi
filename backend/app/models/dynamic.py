@@ -2,7 +2,7 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, JSON, Boolean
 from sqlalchemy.orm import relationship
 from app.core.database import Base
-
+from sqlalchemy.dialects.postgresql import JSONB
 
 class CustomSection(Base):
     """إنشاء الأقسام والصفحات الديناميكية في القائمة الجانبية"""
@@ -38,6 +38,7 @@ class CustomTable(Base):
 
     columns_definition = Column(JSON, nullable=False, default=list)
     calendar_mapping = Column(JSON, nullable=True, default=dict)
+    notification_mapping = Column(JSONB, nullable=True)
 
     section = relationship("CustomSection", back_populates="tables")
     rows = relationship(

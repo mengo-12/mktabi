@@ -36,7 +36,18 @@ class ColumnDefinition(BaseModel):
     options: Optional[List[str]] = None
     relatedTableId: Optional[str] = None
 
+class NotificationMapping(BaseModel):
+    enabled: bool = False
 
+    date_field: Optional[str] = None
+    title_field: Optional[str] = None
+
+    remind_before_minutes: int = 30
+
+    title: Optional[str] = None
+    message: Optional[str] = None
+
+    responsible_field: Optional[str] = None
 # --- مخططات الجداول والأعمدة ---
 class TableCreate(BaseModel):
     section_id: int
@@ -46,6 +57,7 @@ class TableCreate(BaseModel):
     columns_definition: List[Dict[str, Any]]  # مصفوفة الأعمدة الديناميكية
     is_staff_table: Optional[bool] = False
     calendar_mapping: Optional[CalendarMapping] = None
+    notification_mapping: Optional[NotificationMapping] = None
 
 
 class TableResponse(TableCreate):
@@ -97,3 +109,4 @@ class TableSchemaUpdate(BaseModel):
     columns_definition: List[ColumnDefinition]
     display_column: Optional[str] = None
     is_staff_table: bool = False
+    notification_mapping: Optional[NotificationMapping] = None

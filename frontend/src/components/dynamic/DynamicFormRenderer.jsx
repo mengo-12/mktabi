@@ -36,8 +36,8 @@ export default function DynamicFormRenderer({
 
                     <label
                         className={`block text-sm font-medium ${theme === "light"
-                                ? "text-slate-700"
-                                : "text-zinc-300"
+                            ? "text-slate-700"
+                            : "text-zinc-300"
                             }`}
                     >
                         {column.name}
@@ -90,6 +90,18 @@ export default function DynamicFormRenderer({
                     {column.type === "date" && (
                         <input
                             type="date"
+                            value={values[column.id] || ""}
+                            onChange={(e) =>
+                                updateValue(column.id, e.target.value)
+                            }
+                            style={inputStyle}
+                        />
+                    )}
+
+                    {/* DateTime */}
+                    {column.type === "datetime" && (
+                        <input
+                            type="datetime-local"
                             value={values[column.id] || ""}
                             onChange={(e) =>
                                 updateValue(column.id, e.target.value)

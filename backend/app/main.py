@@ -5,6 +5,7 @@ from app.core.config import settings
 from app.core.database import engine, Base
 from fastapi.security import OAuth2PasswordBearer
 from app.core.config import settings
+from app.services.calendar_notification_scheduler import start_calendar_scheduler
 # استيراد الموديلات هنا مهم جداً لكي يتعرف عليها Base.metadata أثناء الإنشاء
 from app.models.auth import User
 from app.models.client import Client
@@ -18,6 +19,8 @@ async def lifespan(app: FastAPI):
     # [1️⃣] إنشاء الجداول بشكل Async عند تشغيل السيرفر
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        
+    start_calendar_scheduler()
     
     yield
     # هنا يمكنك وضع أي عمليات تنظيف عند إغلاق السيرفر مستقبلاً (مثل غلق اتصالات الواتساب)
