@@ -2,6 +2,8 @@ from pathlib import Path
 from datetime import datetime
 import subprocess
 import os
+import shutil
+import zipfile
 from pathlib import Path
 from app.core.config import settings
 
@@ -11,6 +13,7 @@ import app.core.system_state as system_state
 
 BACKUP_DIR = Path("backups")
 BACKUP_DIR.mkdir(exist_ok=True)
+UPLOADS_DIR = Path("storage/uploads")
 
 MIN_BACKUPS = 5
 
@@ -23,6 +26,7 @@ def format_size(size):
 
 def create_backup():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    zip_file = BACKUP_DIR / f"{settings.POSTGRES_DB}_{timestamp}.zip"
 
     backup_file = BACKUP_DIR / f"{settings.POSTGRES_DB}_{timestamp}.backup"
 
@@ -47,15 +51,43 @@ def create_backup():
         env=env,
         check=True,
     )
+
+    with zipfile.ZipFile(
+        zip_file,
+        "w",
+        compression=zipfile.ZIP_DEFLATED,
+    ) as archive:
+
+        # قاعدة البيانات
+        archive.write(
+            backup_file,
+            arcname="database.backup",
+        )
+
+        # جميع المستندات
+        if UPLOADS_DIR.exists():
+
+            for file in UPLOADS_DIR.rglob("*"):
+
+                if file.is_file():
+
+                    archive.write(
+                        file,
+                        arcname=f"uploads/{file.relative_to(UPLOADS_DIR)}",
+                    )
+
+
+    backup_file.unlink(missing_ok=True)
+
     cleanup_old_backups()
 
     return {
-        "filename": backup_file.name,
-        "path": str(backup_file),
-        "size": format_size(backup_file.stat().st_size),
+        "filename": zip_file.name,
+        "path": str(zip_file),
+        "size": format_size(zip_file.stat().st_size),
         "created_at": datetime.fromtimestamp(
-            backup_file.stat().st_mtime
-        ),
+            zip_file.stat().st_mtime
+        )
     }
 
 
@@ -64,7 +96,7 @@ def list_backups():
     backups = []
 
     for file in sorted(
-        BACKUP_DIR.glob("*.backup"),
+        BACKUP_DIR.glob("*.zip"),
         key=lambda f: f.stat().st_mtime,
         reverse=True,
     ):
@@ -83,7 +115,7 @@ def list_backups():
 def cleanup_old_backups():
 
     backups = sorted(
-        BACKUP_DIR.glob("*.backup"),
+        BACKUP_DIR.glob("*.zip"),
         key=lambda f: f.stat().st_mtime,
         reverse=True,
     )
@@ -117,6 +149,13 @@ def restore_backup(filename: str):
 
     backup_file = BACKUP_DIR / filename
 
+    temp_restore_dir = BACKUP_DIR / "restore_temp"
+
+    if temp_restore_dir.exists():
+        shutil.rmtree(temp_restore_dir)
+
+    temp_restore_dir.mkdir(parents=True)
+
     if not backup_file.exists():
         raise FileNotFoundError("Backup not found")
 
@@ -132,6 +171,14 @@ def restore_backup(filename: str):
 
         # إنشاء نسخة احتياطية قبل الاستعادة
         create_backup()
+
+        with zipfile.ZipFile(backup_file, "r") as archive:
+            archive.extractall(temp_restore_dir)
+
+        database_backup = temp_restore_dir / "database.backup"
+
+        if not database_backup.exists():
+            raise Exception("Database backup not found inside archive.")
 
         env = os.environ.copy()
         env["PGPASSWORD"] = settings.POSTGRES_PASSWORD
@@ -151,18 +198,33 @@ def restore_backup(filename: str):
                 "--if-exists",
                 "--no-owner",
                 "--no-privileges",
-                str(backup_file),
+                str(database_backup),
             ],
             env=env,
             check=True,
         )
 
+        restored_uploads = temp_restore_dir / "uploads"
+
+        if restored_uploads.exists():
+
+            if UPLOADS_DIR.exists():
+                shutil.rmtree(UPLOADS_DIR)
+
+            shutil.copytree(
+                restored_uploads,
+                UPLOADS_DIR,
+            )
+
         return {
             "success": True,
-            "message": "Database restored successfully",
+            "message": "Database and documents restored successfully",
         }
 
     finally:
+
+        if temp_restore_dir.exists():
+            shutil.rmtree(temp_restore_dir)
 
         system_state.is_restoring = False
 
