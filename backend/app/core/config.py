@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     POSTGRES_DB: str
     POSTGRES_PORT: int = 5432
 
+    PG_DUMP_PATH: str
+    PG_RESTORE_PATH: str
+
+    BACKUP_KEEP_COUNT: int = 30
+
     @computed_field
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> PostgresDsn:

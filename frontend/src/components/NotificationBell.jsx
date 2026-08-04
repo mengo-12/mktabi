@@ -179,7 +179,7 @@ export default function NotificationBell() {
 
             ws.onopen = () => {
 
-                console.log("✅ WS Connected");
+                // console.log("✅ WS Connected");
 
                 if (reconnectTimeoutRef.current) {
                     clearTimeout(reconnectTimeoutRef.current);
@@ -190,7 +190,7 @@ export default function NotificationBell() {
 
             ws.onmessage = (event) => {
 
-                console.log("NEW MESSAGE", event.data);
+                // console.log("NEW MESSAGE", event.data);
 
                 const newNotif = JSON.parse(event.data);
 
@@ -198,15 +198,15 @@ export default function NotificationBell() {
                 setUnreadCount(prev => prev + 1);
 
                 try {
-                    const audio = new Audio("/sounds/notification.mp3");
-                    audio.play();
+                    // const audio = new Audio("/sounds/notification.mp3");
+                    // audio.play();
                 } catch { }
 
             };
 
             ws.onerror = (e) => {
 
-                console.log("WS ERROR", e);
+                // console.log("WS ERROR", e);
 
                 ws.close();
 
@@ -214,11 +214,11 @@ export default function NotificationBell() {
 
             ws.onclose = () => {
 
-                console.log("WS CLOSED");
+                // console.log("WS CLOSED");
 
                 reconnectTimeoutRef.current = setTimeout(() => {
 
-                    console.log("🔄 Reconnecting...");
+                    // console.log("🔄 Reconnecting...");
 
                     connectWebSocket();
 
