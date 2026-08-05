@@ -134,7 +134,13 @@
 'use client';
 import { useEffect, useState, useRef } from 'react';
 
-import { Bell } from 'lucide-react'; // استيراد الأيقونة الفاخرة هنا
+import {
+    Bell,
+    Briefcase,
+    CalendarDays,
+    Scale,
+    Clock3
+} from 'lucide-react'; // استيراد الأيقونة الفاخرة هنا
 
 export default function NotificationBell() {
     const [notifications, setNotifications] = useState([]);
@@ -241,7 +247,7 @@ export default function NotificationBell() {
             }
 
         };
-        
+
     }, []);
 
     // إغلاق القائمة المنسدلة عند الضغط خارج المكون
@@ -280,52 +286,190 @@ export default function NotificationBell() {
 
     return (
         <div className="relative" ref={dropdownRef}>
-            {/* 👈 زر أيقونة الجرس الملكي الجديد متضمناً كامل التأثيرات الحركية والتفاعلية البصرية */}
             <button
                 onClick={handleToggleDropdown}
-                className="relative group p-2.5 rounded-xl bg-slate-900/40 hover:bg-slate-800/60 border border-slate-800/60 hover:border-amber-500/30 transition-all duration-300 shadow-inner flex items-center justify-center text-slate-400 hover:text-amber-400 focus:outline-none"
+                className="
+            group
+            relative
+            flex h-10 w-10 items-center justify-center
+            rounded-xl
+            border border-slate-200
+            bg-white
+            text-slate-600
+            shadow-sm
+            transition-all duration-300
+            hover:-translate-y-0.5
+            hover:border-blue-500
+            hover:bg-blue-50
+            hover:text-blue-600
+            hover:shadow-md
+            active:scale-95
+
+            dark:border-slate-700
+            dark:bg-slate-900
+            dark:text-slate-300
+            dark:hover:border-blue-500
+            dark:hover:bg-slate-800
+            dark:hover:text-blue-400
+        "
             >
-                {/* تأثير الـ Hover الشعاعي الخلفي النبضي */}
-                <span className="absolute inset-0 rounded-xl bg-amber-500/0 group-hover:bg-amber-500/5 blur-sm transition-all duration-300 pointer-events-none" />
+                {/* Glow */}
+                <span
+                    className="
+                absolute inset-0 rounded-xl
+                bg-blue-500/0
+                opacity-0
+                blur-md
+                transition-all duration-300
+                group-hover:bg-blue-500/10
+                group-hover:opacity-100
+            "
+                />
 
-                {/* الأيقونة الفاخرة مع حركة الاهتزاز الذكية والتكبير الصغير عند الـ Hover */}
-                <Bell className="w-4.5 h-4.5 transition-all duration-300 group-hover:rotate-12 group-hover:scale-105 active:scale-95" />
+                {/* Icon */}
+                <Bell
+                    className="
+                relative z-10
+                h-5 w-5
+                transition-all duration-300
+                group-hover:rotate-12
+                group-hover:scale-110
+            "
+                />
 
-                {/* 👈 نقطة التنبيه النابضة الذكية والمخصصة للنظام */}
+                {/* Badge */}
                 {unreadCount > 0 && (
-                    <span className="absolute top-1 left-1 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-[#0F172A] animate-pulse" />
+                    <>
+                        <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow">
+                            {unreadCount > 99 ? "99+" : unreadCount}
+                        </span>
+
+                        <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 animate-ping opacity-40" />
+                    </>
                 )}
             </button>
 
             {/* القائمة المنسدلة للتنبيهات مع إضافة تنسيق داكن (Dark Mode) متناسق مع نظامك الفاخر */}
             {isOpen && (
-                <div className="absolute left-0 mt-2 w-80 max-h-96 bg-[#0F172A] rounded-2xl shadow-xl border border-slate-800/80 overflow-y-auto z-50 py-2 transition-all">
-                    <div className="px-4 py-2 border-b border-slate-800/60 flex justify-between items-center">
-                        <span className="font-bold text-sm text-slate-200">التنبيهات الإدارية الحية</span>
-                        <span className="text-[10px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full font-medium tracking-wider">REAL-TIME</span>
-                    </div>
+                <div className="absolute left-0 mt-3 w-[390px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 z-50">
 
-                    <div className="divide-y divide-slate-800/40">
-                        {!Array.isArray(notifications) || notifications.length === 0 ? (
-                            <div className="p-6 text-center text-xs text-slate-500">
-                                لا توجد تنبيهات جديدة حالياً
-                            </div>
-                        ) : (
-                            notifications.map((notif) => (
-                                <div key={notif.id || Math.random()} className="p-4 hover:bg-slate-900/40 transition-colors">
-                                    <div className="flex items-start gap-2.5">
-                                        <span className="text-base mt-0.5">
-                                            {notif.category === 'case' ? '💼' : notif.category === 'visit' ? '📅' : '⚖️'}
-                                        </span>
-                                        <div>
-                                            <h4 className="text-xs font-bold text-slate-200">{notif.title}</h4>
-                                            <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">{notif.message}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-5 py-4 bg-blue-50 dark:bg-blue-950/30 border-b border-slate-200 dark:border-slate-700">
+                        <div>
+                            <h3 className="text-sm font-semibold text-slate-800 dark:text-white">
+                                الإشعارات
+                            </h3>
+
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                جميع تنبيهات النظام
+                            </p>
+                        </div>
+
+                        {unreadCount > 0 && (
+                            <span className="min-w-6 h-6 px-2 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center">
+                                {unreadCount}
+                            </span>
                         )}
                     </div>
+
+                    {/* Body */}
+                    <div className="max-h-[450px] overflow-y-auto">
+
+                        {!notifications.length ? (
+
+                            <div className="flex flex-col items-center justify-center py-16">
+
+                                <div className="w-16 h-16 rounded-2xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                                    <Bell className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+                                </div>
+
+                                <p className="mt-5 font-medium text-slate-700 dark:text-slate-200">
+                                    لا توجد إشعارات
+                                </p>
+
+                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                    سيتم عرض الإشعارات الجديدة هنا.
+                                </p>
+
+                            </div>
+
+                        ) : (
+
+                            notifications.map((notif) => (
+
+                                <div
+                                    key={notif.id}
+                                    className={`group cursor-pointer border-b border-slate-100 dark:border-slate-800 px-5 py-4 transition-all duration-200 hover:bg-blue-50 dark:hover:bg-slate-800/70 ${!notif.is_read ? "bg-blue-50/40 dark:bg-blue-950/10" : ""
+                                        }`}
+                                >
+
+                                    <div className="flex gap-4">
+
+                                        {/* Icon */}
+                                        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+
+                                            {notif.category === "case" ? (
+                                                <Scale className="w-5 h-5" />
+                                            ) : notif.category === "visit" ? (
+                                                <CalendarDays className="w-5 h-5" />
+                                            ) : notif.category === "calendar" ? (
+                                                <Clock3 className="w-5 h-5" />
+                                            ) : (
+                                                <Bell className="w-5 h-5" />
+                                            )}
+
+                                        </div>
+
+                                        {/* Content */}
+                                        <div className="flex-1">
+
+                                            <div className="flex items-start justify-between gap-3">
+
+                                                <h4 className="text-sm font-semibold text-slate-800 dark:text-white leading-5">
+                                                    {notif.title}
+                                                </h4>
+
+                                                {!notif.is_read && (
+                                                    <span className="mt-1.5 h-2.5 w-2.5 rounded-full bg-blue-600 animate-pulse" />
+                                                )}
+
+                                            </div>
+
+                                            <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
+                                                {notif.message}
+                                            </p>
+
+                                            {notif.created_at && (
+                                                <p className="mt-3 text-[11px] text-slate-400 dark:text-slate-500">
+                                                    {new Date(notif.created_at).toLocaleString("ar-SA")}
+                                                </p>
+                                            )}
+
+                                        </div>
+
+                                    </div>
+
+                                </div>
+
+                            ))
+
+                        )}
+
+                    </div>
+
+                    {/* Footer */}
+                    {notifications.length > 0 && (
+                        <div className="border-t border-slate-200 dark:border-slate-700 p-3 bg-slate-50 dark:bg-slate-800/40">
+
+                            <button
+                                className="w-full rounded-lg py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-700 transition"
+                            >
+                                عرض جميع الإشعارات
+                            </button>
+
+                        </div>
+                    )}
+
                 </div>
             )}
         </div>
