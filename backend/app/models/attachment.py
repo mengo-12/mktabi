@@ -4,6 +4,10 @@ from app.core.database import Base
 from datetime import datetime
 from typing import Optional
 
+from app.models.auth import User
+from app.models.dynamic import CustomRow
+from app.models.case import Case
+
 class Attachment(Base):
     __tablename__ = "attachments"
 
@@ -17,7 +21,23 @@ class Attachment(Base):
     file_type: Mapped[str] = mapped_column(String(100), nullable=False) 
     file_size: Mapped[int] = mapped_column(Integer, nullable=False) 
     
-    uploaded_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    uploaded_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
+
+    uploaded_by_staff: Mapped[Optional[int]] = mapped_column(
+    ForeignKey("custom_rows.id", ondelete="RESTRICT"),
+    nullable=True
+    )
+
     uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     case: Mapped[Optional["Case"]] = relationship("Case", back_populates="attachments")
+
+    user: Mapped[Optional["User"]] = relationship(
+    "User",
+    foreign_keys=[uploaded_by]
+    )
+
+    staff: Mapped[Optional["CustomRow"]] = relationship(
+        "CustomRow",
+        foreign_keys=[uploaded_by_staff]
+    )

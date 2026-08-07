@@ -182,6 +182,7 @@ async def get_current_user(
             make_transient(fake_user)
             
             fake_user.is_dynamic_staff = True
+            fake_user.staff_row_id = row_id
             fake_user.dynamic_permissions = permissions_dict
             fake_user.system_pages = system_pages
             fake_user.staff_table_id = table_id

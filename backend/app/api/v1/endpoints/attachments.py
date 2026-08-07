@@ -219,13 +219,23 @@ async def upload_general_file(
         shutil.copyfileobj(file.file, buffer)
 
     # 4. تسجيل المياداتا في قاعدة البيانات (بدون case_id)
+    # تحديد نوع المستخدم الذي قام بالرفع
+    is_dynamic_staff = getattr(current_user, "is_dynamic_staff", False)
+
     db_attachment = Attachment(
-        case_id=None,  # حقل عام غير مرتبط بقضية معينة
+        case_id=None,
         original_name=file.filename,
         file_path=dest_path,
         file_type=file.content_type,
         file_size=len(file_content),
-        uploaded_by=current_user.id
+
+        uploaded_by=(
+            None if is_dynamic_staff else current_user.id
+        ),
+
+        uploaded_by_staff=(
+            current_user.staff_row_id if is_dynamic_staff else None
+        )
     )
     db.add(db_attachment)
     await db.commit()
