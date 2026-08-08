@@ -3324,7 +3324,7 @@ export default function SystemBuilderPage() {
                                 </div>
                             </div> */}
 
-                            {/* ================= 🏢 شعار المكتب ================= */}
+                            {/* ================= 🏢 بيانات وهوية المكتب ================= */}
                             <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-all dark:border-zinc-800 dark:bg-zinc-900">
 
                                 {/* Header */}
@@ -3337,15 +3337,13 @@ export default function SystemBuilderPage() {
                                         </div>
 
                                         <div>
-
                                             <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                                                شعار المكتب
+                                                بيانات وهوية المكتب
                                             </h2>
 
                                             <p className="mt-1 text-sm text-slate-500 dark:text-zinc-400">
-                                                إدارة الشعار الرسمي الظاهر في النظام.
+                                                إدارة اسم المكتب وبياناته وشعاره الرسمي.
                                             </p>
-
                                         </div>
 
                                     </div>
@@ -3353,68 +3351,200 @@ export default function SystemBuilderPage() {
                                 </div>
 
                                 {/* Body */}
-                                <div className="p-7">
+                                <div className="p-7 space-y-7">
 
-                                    {/* معاينة الشعار */}
-                                    <div className="flex min-h-[180px] items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 dark:border-zinc-700 dark:bg-zinc-800">
+                                    {/* ================= بيانات المكتب ================= */}
+                                    <div className="space-y-5">
 
-                                        {officeLogoUrl ? (
+                                        <div>
+                                            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                                                بيانات المكتب
+                                            </h3>
 
-                                            <img
-                                                src={getOfficeLogoSrc(officeLogoUrl)}
-                                                alt="شعار المكتب"
-                                                className="max-h-36 max-w-full object-contain"
+                                            <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400">
+                                                هذه البيانات يمكن استخدامها لاحقاً في النظام والمستندات الرسمية.
+                                            </p>
+                                        </div>
+
+                                        {/* اسم المكتب */}
+                                        <div>
+                                            <label className="mb-2 block text-sm font-semibold text-slate-700 dark:text-zinc-200">
+                                                اسم المكتب
+                                            </label>
+
+                                            <input
+                                                type="text"
+                                                value={officeName}
+                                                onChange={(e) => setOfficeName(e.target.value)}
+                                                placeholder="مثال: مكتب المحامي محمد أحمد للمحاماة"
+                                                disabled={
+                                                    isOfficeProfileLoading ||
+                                                    !currentUserPermissions.can_manage_identity
+                                                }
+                                                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white dark:focus:border-cyan-500 dark:focus:ring-cyan-900/30"
                                             />
+                                        </div>
 
-                                        ) : (
+                                        {/* الهاتف والبريد */}
+                                        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
 
-                                            <div className="text-center">
+                                            <div>
+                                                <label className="mb-2 block text-sm font-semibold text-slate-700 dark:text-zinc-200">
+                                                    رقم الهاتف
+                                                </label>
 
-                                                <div className="text-5xl">
-                                                    🏢
-                                                </div>
-
-                                                <p className="mt-3 text-sm text-slate-500 dark:text-zinc-400">
-                                                    لم يتم رفع شعار المكتب بعد
-                                                </p>
-
+                                                <input
+                                                    type="tel"
+                                                    value={officePhone}
+                                                    onChange={(e) => setOfficePhone(e.target.value)}
+                                                    placeholder="05xxxxxxxx"
+                                                    disabled={
+                                                        isOfficeProfileLoading ||
+                                                        !currentUserPermissions.can_manage_identity
+                                                    }
+                                                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white dark:focus:border-cyan-500 dark:focus:ring-cyan-900/30"
+                                                />
                                             </div>
 
-                                        )}
+                                            <div>
+                                                <label className="mb-2 block text-sm font-semibold text-slate-700 dark:text-zinc-200">
+                                                    البريد الإلكتروني
+                                                </label>
+
+                                                <input
+                                                    type="email"
+                                                    value={officeEmail}
+                                                    onChange={(e) => setOfficeEmail(e.target.value)}
+                                                    placeholder="office@example.com"
+                                                    disabled={
+                                                        isOfficeProfileLoading ||
+                                                        !currentUserPermissions.can_manage_identity
+                                                    }
+                                                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white dark:focus:border-cyan-500 dark:focus:ring-cyan-900/30"
+                                                />
+                                            </div>
+
+                                        </div>
+
+                                        {/* العنوان */}
+                                        <div>
+                                            <label className="mb-2 block text-sm font-semibold text-slate-700 dark:text-zinc-200">
+                                                عنوان المكتب
+                                            </label>
+
+                                            <textarea
+                                                value={officeAddress}
+                                                onChange={(e) => setOfficeAddress(e.target.value)}
+                                                placeholder="مثال: الرياض، حي العليا..."
+                                                rows={3}
+                                                disabled={
+                                                    isOfficeProfileLoading ||
+                                                    !currentUserPermissions.can_manage_identity
+                                                }
+                                                className="w-full resize-none rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white dark:focus:border-cyan-500 dark:focus:ring-cyan-900/30"
+                                            />
+                                        </div>
+
+                                        {/* حفظ البيانات */}
+                                        <button
+                                            type="button"
+                                            disabled={
+                                                isOfficeProfileLoading ||
+                                                !currentUserPermissions.can_manage_identity
+                                            }
+                                            onClick={handleSaveOfficeProfile}
+                                            className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-5 py-3 font-semibold text-white shadow-lg transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            {isOfficeProfileLoading
+                                                ? "⏳ جاري الحفظ..."
+                                                : "💾 حفظ بيانات المكتب"}
+                                        </button>
 
                                     </div>
 
-                                    {/* اختيار الملف */}
-                                    <input
-                                        ref={officeLogoInputRef}
-                                        type="file"
-                                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                                        onChange={handleOfficeLogoUpload}
-                                        className="hidden"
-                                    />
 
-                                    {/* زر رفع الشعار */}
-                                    <button
-                                        type="button"
-                                        disabled={
-                                            isLogoUploading ||
-                                            !currentUserPermissions.can_manage_identity
-                                        }
-                                        onClick={() => officeLogoInputRef.current?.click()}
-                                        className="mt-4 w-full rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-5 py-3 font-semibold text-white shadow-lg transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-50"
-                                    >
+                                    {/* ================= فاصل ================= */}
+                                    <div className="border-t border-slate-200 dark:border-zinc-800" />
 
-                                        {isLogoUploading
-                                            ? "⏳ جاري رفع الشعار..."
-                                            : officeLogoUrl
-                                                ? "🔄 تغيير الشعار"
-                                                : "📤 رفع الشعار"}
 
-                                    </button>
+                                    {/* ================= شعار المكتب ================= */}
+                                    <div className="space-y-5">
 
-                                    <p className="mt-3 text-center text-xs text-slate-500 dark:text-zinc-400">
-                                        PNG أو JPG أو WEBP أو SVG — الحد الأقصى 5MB
-                                    </p>
+                                        <div>
+                                            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                                                شعار المكتب
+                                            </h3>
+
+                                            <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400">
+                                                الشعار الرسمي الذي سيظهر في واجهة النظام والمستندات لاحقاً.
+                                            </p>
+                                        </div>
+
+                                        {/* معاينة الشعار */}
+                                        <div className="flex min-h-[200px] items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 dark:border-zinc-700 dark:bg-zinc-800">
+
+                                            {officeLogoUrl ? (
+
+                                                <img
+                                                    src={getOfficeLogoSrc(officeLogoUrl)}
+                                                    alt={officeName || "شعار المكتب"}
+                                                    className="max-h-40 max-w-[80%] object-contain"
+                                                />
+
+                                            ) : (
+
+                                                <div className="text-center">
+
+                                                    <div className="text-5xl">
+                                                        🏢
+                                                    </div>
+
+                                                    <p className="mt-3 text-sm text-slate-500 dark:text-zinc-400">
+                                                        لم يتم رفع شعار المكتب بعد
+                                                    </p>
+
+                                                </div>
+
+                                            )}
+
+                                        </div>
+
+
+                                        {/* اختيار الملف */}
+                                        <input
+                                            ref={officeLogoInputRef}
+                                            type="file"
+                                            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                                            onChange={handleOfficeLogoUpload}
+                                            className="hidden"
+                                        />
+
+
+                                        {/* زر رفع الشعار */}
+                                        <button
+                                            type="button"
+                                            disabled={
+                                                isLogoUploading ||
+                                                !currentUserPermissions.can_manage_identity
+                                            }
+                                            onClick={() => officeLogoInputRef.current?.click()}
+                                            className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-5 py-3 font-semibold text-white shadow-lg transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+
+                                            {isLogoUploading
+                                                ? "⏳ جاري رفع الشعار..."
+                                                : officeLogoUrl
+                                                    ? "🔄 تغيير الشعار"
+                                                    : "📤 رفع الشعار"}
+
+                                        </button>
+
+
+                                        <p className="text-center text-xs text-slate-500 dark:text-zinc-400">
+                                            PNG أو JPG أو WEBP أو SVG — الحد الأقصى 5MB
+                                        </p>
+
+                                    </div>
 
                                 </div>
 
