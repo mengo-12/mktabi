@@ -1939,6 +1939,8 @@ import {
     fieldSupportsPermissions,
 } from "@/constants/fieldTypes";
 
+import officeProfileService from "@/services/officeProfileService";
+
 export default function SystemBuilderPage() {
     // التحكم في التبويب النشط
     const [activeTab, setActiveTab] = useState('engine'); // 'engine' أو 'identity'
@@ -2046,11 +2048,25 @@ export default function SystemBuilderPage() {
         category: "calendar",
     });
 
+    const [officeProfile, setOfficeProfile] = useState(null);
+    const [officeName, setOfficeName] = useState("");
+    const [officePhone, setOfficePhone] = useState("");
+    const [officeEmail, setOfficeEmail] = useState("");
+    const [officeAddress, setOfficeAddress] = useState("");
+
+    const [officeLogoUrl, setOfficeLogoUrl] = useState("");
+
+    const [isOfficeProfileLoading, setIsOfficeProfileLoading] = useState(false);
+    const [isLogoUploading, setIsLogoUploading] = useState(false);
+
+    const officeLogoInputRef = useRef(null);
+
     // جلب البيانات عند تحميل الصفحة كلياً
     useEffect(() => {
         loadSections();
         loadTemplates();
         loadOfficeSettings();
+        loadOfficeProfile();
         // هنا يمكن جلب صلاحيات المستخدم الحالي من الـ Context أو API الخاص بالـ Auth
     }, []);
 
@@ -2092,6 +2108,138 @@ export default function SystemBuilderPage() {
                 if (data.primary_color) setPrimaryColor(data.primary_color);
             }
         } catch (error) { console.error(error); }
+    };
+
+
+
+    const loadOfficeProfile = async () => {
+        try {
+            setIsOfficeProfileLoading(true);
+
+            const data = await officeProfileService.getProfile();
+
+            setOfficeProfile(data);
+
+            setOfficeName(data.office_name || "");
+            setOfficePhone(data.phone || "");
+            setOfficeEmail(data.email || "");
+            setOfficeAddress(data.address || "");
+            setOfficeLogoUrl(data.logo_url || "");
+
+        } catch (error) {
+            console.error("خطأ أثناء جلب بيانات المكتب:", error);
+        } finally {
+            setIsOfficeProfileLoading(false);
+        }
+    };
+
+    const handleSaveOfficeProfile = async () => {
+        if (!currentUserPermissions.can_manage_identity) {
+            return alert(
+                "⛔ عذراً، حسابك لا يملك صلاحيات تعديل بيانات هوية المكتب"
+            );
+        }
+
+        try {
+            setIsOfficeProfileLoading(true);
+
+            const data = await officeProfileService.updateProfile({
+                office_name: officeName,
+                phone: officePhone || null,
+                email: officeEmail || null,
+                address: officeAddress || null,
+            });
+
+            setOfficeProfile(data);
+            setOfficeName(data.office_name || "");
+            setOfficePhone(data.phone || "");
+            setOfficeEmail(data.email || "");
+            setOfficeAddress(data.address || "");
+            setOfficeLogoUrl(data.logo_url || "");
+
+            alert("✅ تم حفظ بيانات المكتب بنجاح");
+
+        } catch (error) {
+            console.error("خطأ أثناء حفظ بيانات المكتب:", error);
+
+            const message =
+                error?.response?.data?.detail ||
+                "حدث خطأ أثناء حفظ بيانات المكتب";
+
+            alert(`❌ ${message}`);
+
+        } finally {
+            setIsOfficeProfileLoading(false);
+        }
+    };
+
+    const handleOfficeLogoUpload = async (event) => {
+        const file = event.target.files?.[0];
+
+        if (!file) return;
+
+        if (!currentUserPermissions.can_manage_identity) {
+            event.target.value = "";
+
+            return alert(
+                "⛔ عذراً، حسابك لا يملك صلاحيات تعديل شعار المكتب"
+            );
+        }
+
+        // التحقق من نوع الملف
+        if (!file.type.startsWith("image/")) {
+            event.target.value = "";
+
+            return alert("⚠️ يرجى اختيار ملف صورة فقط");
+        }
+
+        // حد أقصى 5MB
+        if (file.size > 5 * 1024 * 1024) {
+            event.target.value = "";
+
+            return alert("⚠️ حجم الشعار يجب ألا يتجاوز 5MB");
+        }
+
+        try {
+            setIsLogoUploading(true);
+
+            const data = await officeProfileService.uploadLogo(file);
+
+            setOfficeProfile(data);
+            setOfficeLogoUrl(data.logo_url || "");
+
+            alert("✅ تم رفع شعار المكتب بنجاح");
+
+        } catch (error) {
+            console.error("خطأ أثناء رفع شعار المكتب:", error);
+
+            const message =
+                error?.response?.data?.detail ||
+                "حدث خطأ أثناء رفع شعار المكتب";
+
+            alert(`❌ ${message}`);
+
+        } finally {
+            setIsLogoUploading(false);
+
+            // السماح باختيار نفس الملف مرة أخرى
+            event.target.value = "";
+        }
+    };
+
+    const getOfficeLogoSrc = (logoUrl) => {
+        if (!logoUrl) return "";
+
+        // إذا كان الرابط كاملاً
+        if (
+            logoUrl.startsWith("http://") ||
+            logoUrl.startsWith("https://")
+        ) {
+            return logoUrl;
+        }
+
+        // في بيئة التطوير المحلية
+        return `http://127.0.0.1:8000${logoUrl}`;
     };
 
     // --- دوال إدارة الصفحات والجداول والقوالب (CRUD الأقسام) ---
@@ -3175,6 +3323,103 @@ export default function SystemBuilderPage() {
                                     ))}
                                 </div>
                             </div> */}
+
+                            {/* ================= 🏢 شعار المكتب ================= */}
+                            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-all dark:border-zinc-800 dark:bg-zinc-900">
+
+                                {/* Header */}
+                                <div className="border-b border-slate-200 px-7 py-6 dark:border-zinc-800">
+
+                                    <div className="flex items-center gap-4">
+
+                                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-lg">
+                                            🏢
+                                        </div>
+
+                                        <div>
+
+                                            <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                                                شعار المكتب
+                                            </h2>
+
+                                            <p className="mt-1 text-sm text-slate-500 dark:text-zinc-400">
+                                                إدارة الشعار الرسمي الظاهر في النظام.
+                                            </p>
+
+                                        </div>
+
+                                    </div>
+
+                                </div>
+
+                                {/* Body */}
+                                <div className="p-7">
+
+                                    {/* معاينة الشعار */}
+                                    <div className="flex min-h-[180px] items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 dark:border-zinc-700 dark:bg-zinc-800">
+
+                                        {officeLogoUrl ? (
+
+                                            <img
+                                                src={getOfficeLogoSrc(officeLogoUrl)}
+                                                alt="شعار المكتب"
+                                                className="max-h-36 max-w-full object-contain"
+                                            />
+
+                                        ) : (
+
+                                            <div className="text-center">
+
+                                                <div className="text-5xl">
+                                                    🏢
+                                                </div>
+
+                                                <p className="mt-3 text-sm text-slate-500 dark:text-zinc-400">
+                                                    لم يتم رفع شعار المكتب بعد
+                                                </p>
+
+                                            </div>
+
+                                        )}
+
+                                    </div>
+
+                                    {/* اختيار الملف */}
+                                    <input
+                                        ref={officeLogoInputRef}
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                                        onChange={handleOfficeLogoUpload}
+                                        className="hidden"
+                                    />
+
+                                    {/* زر رفع الشعار */}
+                                    <button
+                                        type="button"
+                                        disabled={
+                                            isLogoUploading ||
+                                            !currentUserPermissions.can_manage_identity
+                                        }
+                                        onClick={() => officeLogoInputRef.current?.click()}
+                                        className="mt-4 w-full rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-5 py-3 font-semibold text-white shadow-lg transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+
+                                        {isLogoUploading
+                                            ? "⏳ جاري رفع الشعار..."
+                                            : officeLogoUrl
+                                                ? "🔄 تغيير الشعار"
+                                                : "📤 رفع الشعار"}
+
+                                    </button>
+
+                                    <p className="mt-3 text-center text-xs text-slate-500 dark:text-zinc-400">
+                                        PNG أو JPG أو WEBP أو SVG — الحد الأقصى 5MB
+                                    </p>
+
+                                </div>
+
+                            </div>
+
                         </div>
 
                         {/* 2. هندسة وبناء جداول المحرك الديناميكي */}

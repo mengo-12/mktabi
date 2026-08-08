@@ -342,6 +342,8 @@ import {
     DatabaseBackup,
 } from 'lucide-react';
 
+import officeProfileService from '@/services/officeProfileService';
+
 export default function Sidebar() {
     const pathname = usePathname();
     const { user } = useAuth();
@@ -354,6 +356,8 @@ export default function Sidebar() {
     const searchParams = useSearchParams();
     const currentTableId = searchParams.get("table");
     const pagePermissions = user?.system_pages || {};
+    const [officeProfile, setOfficeProfile] = useState(null);
+    const [isOfficeProfileLoading, setIsOfficeProfileLoading] = useState(true);
 
     // const canViewPage = (pageId) => {
 
@@ -387,6 +391,40 @@ export default function Sidebar() {
     //     );
 
     // };
+
+
+    const loadOfficeProfile = async () => {
+        try {
+            setIsOfficeProfileLoading(true);
+
+            const data = await officeProfileService.getProfile();
+
+            setOfficeProfile(data || null);
+
+        } catch (error) {
+            console.error(
+                "خطأ في جلب بيانات المكتب داخل Sidebar:",
+                error
+            );
+        } finally {
+            setIsOfficeProfileLoading(false);
+        }
+    };
+
+    const getOfficeLogoSrc = (logoUrl) => {
+        if (!logoUrl) return "";
+
+        if (
+            logoUrl.startsWith("http://") ||
+            logoUrl.startsWith("https://")
+        ) {
+            return logoUrl;
+        }
+
+        return `http://127.0.0.1:8000${logoUrl}`;
+    };
+
+
     // جلب الصفحات والأقسام الديناميكية التي صممها المدير من الباك إند
     useEffect(() => {
         const fetchDynamicPages = async () => {
@@ -402,12 +440,19 @@ export default function Sidebar() {
                 );
 
             } catch (error) {
-                console.error("خطأ في جلب الأقسام الديناميكية بالـ Sidebar:", error);
+                console.error(
+                    "خطأ في جلب الأقسام الديناميكية بالـ Sidebar:",
+                    error
+                );
             }
         };
 
         fetchDynamicPages();
     }, [pathname, user]);
+
+    useEffect(() => {
+        loadOfficeProfile();
+    }, []);
 
     // const canViewPage = (pageId) => {
 
@@ -507,18 +552,49 @@ export default function Sidebar() {
         <aside className="w-64 bg-blue-600 dark:bg-blue-600 text-white h-screen fixed top-0 right-0 flex flex-col border-l border-blue-700 dark:border-blue-700 shadow-xl select-none z-50 transition-all" dir="rtl">
 
             {/* هيدر القائمة الجانبية */}
-            <div className="p-5 border-b border-blue-500/50 relative overflow-hidden bg-blue-600 dark:bg-blue-600">
-                <div className="absolute -top-10 -left-10 w-24 h-24 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+            {/* هيدر القائمة الجانبية */}
+            <div className="relative overflow-hidden border-b border-blue-500/50 bg-blue-600 px-4 py-5 dark:bg-blue-600">
 
-                <div className="flex items-center gap-3">
-                    <div className="p-2 bg-white/15 rounded-xl border border-white/20 shadow-inner">
-                        <Scale className="w-5 h-5 text-white" />
+                {/* تأثير بصري */}
+                <div className="pointer-events-none absolute -left-10 -top-10 h-28 w-28 rounded-full bg-white/10 blur-2xl" />
+
+                <div className="relative flex flex-col items-center text-center">
+
+                    {/* شعار المكتب */}
+                    <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border-2 border-white/30 bg-white shadow-lg">
+
+                        {isOfficeProfileLoading ? (
+
+                            <div className="h-7 w-7 animate-spin rounded-full border-2 border-blue-600/30 border-t-blue-600" />
+
+                        ) : officeProfile?.logo_url ? (
+
+                            <img
+                                src={getOfficeLogoSrc(officeProfile.logo_url)}
+                                alt={officeProfile?.office_name || "شعار المكتب"}
+                                className="h-full w-full object-contain p-2"
+                            />
+
+                        ) : (
+
+                            <Scale className="h-9 w-9 text-blue-600" />
+
+                        )}
+
                     </div>
-                    <div>
-                        <h2 className="text-sm font-black text-white tracking-wide leading-tight">مَكْتَبِي الرَّقْمِي</h2>
-                        <p className="text-[10px] text-blue-100 font-medium mt-0.5">نظام إدارة شركات المحاماة</p>
-                    </div>
+
+                    {/* اسم المكتب */}
+                    <h2 className="mt-3 max-w-full truncate px-2 text-sm font-black leading-6 tracking-wide text-white">
+                        {officeProfile?.office_name || "مكتب المحاماة"}
+                    </h2>
+
+                    {/* الوصف */}
+                    <p className="mt-0.5 text-[10px] font-medium text-blue-100">
+                        نظام إدارة مكتب المحاماة
+                    </p>
+
                 </div>
+
             </div>
 
             {/* روابط التنقل مقسمة بشكل منسق */}
