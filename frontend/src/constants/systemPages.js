@@ -38,5 +38,10 @@ export const SYSTEM_PAGES = [
         id: "saved-reports",
         name: "التقارير المحفوظة",
         category: "الإدارة"
+    },
+    {
+        id: "backups",
+        name: "النسخ الاحتياطي",
+        category: "الإدارة"
     }
 ];

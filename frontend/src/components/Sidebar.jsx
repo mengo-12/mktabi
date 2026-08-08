@@ -339,6 +339,7 @@ import {
     FolderOpen,
     ChevronDown,
     ChevronLeft,
+    DatabaseBackup,
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -473,6 +474,12 @@ export default function Sidebar() {
                     icon: ClipboardList
                 },
                 {
+                    id: "backups",
+                    name: "النسخ الاحتياطي",
+                    path: "/dashboard/backups",
+                    icon: DatabaseBackup
+                },
+                {
                     id: "report-builder",
                     name: "منشئ التقارير",
                     path: "/dashboard/report-builder",
@@ -497,187 +504,188 @@ export default function Sidebar() {
     };
 
     return (
-    <aside className="w-64 bg-blue-600 dark:bg-blue-600 text-white h-screen fixed top-0 right-0 flex flex-col border-l border-blue-700 dark:border-blue-700 shadow-xl select-none z-50 transition-all" dir="rtl">
+        <aside className="w-64 bg-blue-600 dark:bg-blue-600 text-white h-screen fixed top-0 right-0 flex flex-col border-l border-blue-700 dark:border-blue-700 shadow-xl select-none z-50 transition-all" dir="rtl">
 
-        {/* هيدر القائمة الجانبية */}
-        <div className="p-5 border-b border-blue-500/50 relative overflow-hidden bg-blue-600 dark:bg-blue-600">
-            <div className="absolute -top-10 -left-10 w-24 h-24 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+            {/* هيدر القائمة الجانبية */}
+            <div className="p-5 border-b border-blue-500/50 relative overflow-hidden bg-blue-600 dark:bg-blue-600">
+                <div className="absolute -top-10 -left-10 w-24 h-24 bg-white/10 rounded-full blur-2xl pointer-events-none" />
 
-            <div className="flex items-center gap-3">
-                <div className="p-2 bg-white/15 rounded-xl border border-white/20 shadow-inner">
-                    <Scale className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                    <h2 className="text-sm font-black text-white tracking-wide leading-tight">مَكْتَبِي الرَّقْمِي</h2>
-                    <p className="text-[10px] text-blue-100 font-medium mt-0.5">نظام إدارة شركات المحاماة</p>
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-white/15 rounded-xl border border-white/20 shadow-inner">
+                        <Scale className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                        <h2 className="text-sm font-black text-white tracking-wide leading-tight">مَكْتَبِي الرَّقْمِي</h2>
+                        <p className="text-[10px] text-blue-100 font-medium mt-0.5">نظام إدارة شركات المحاماة</p>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        {/* روابط التنقل مقسمة بشكل منسق */}
-        <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto custom-scrollbar">
+            {/* روابط التنقل مقسمة بشكل منسق */}
+            <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto custom-scrollbar">
 
-            {/* 1. المجموعات الأساسية الثابتة للنظام */}
-            {menuGroups.map((group, groupIdx) => (
-                <div key={groupIdx} className="space-y-1">
+                {/* 1. المجموعات الأساسية الثابتة للنظام */}
+                {menuGroups.map((group, groupIdx) => (
+                    <div key={groupIdx} className="space-y-1">
 
-                    <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-blue-200/80 mb-2">
-                        {group.groupName}
-                    </p>
+                        <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-blue-200/80 mb-2">
+                            {group.groupName}
+                        </p>
 
-                    {group.items
-                        .filter(item => canViewPage(item.id))
-                        .map((item) => {      
+                        {group.items
+                            .filter(item => canViewPage(item.id))
+                            .map((item) => {
 
-                            if (!canViewPage(item.id)) {
-                                return null;
-                            }
+                                if (!canViewPage(item.id)) {
+                                    return null;
+                                }
 
-                            const Icon = item.icon;
-                            const isActive = pathname === item.path;
+                                const Icon = item.icon;
+                                const isActive = pathname === item.path;
+
+                                return (
+                                    <Link
+                                        key={item.path}
+                                        href={item.path}
+                                        className={`flex items-center justify-between px-4 py-2 rounded-xl text-xs font-semibold transition-all
+                                    ${isActive
+                                                ? "bg-white text-blue-700 font-bold shadow-md"
+                                                : "text-blue-50 hover:bg-white/10 hover:text-white"
+                                            }`}
+                                    >
+
+                                        <div className="flex items-center gap-3">
+
+                                            <Icon
+                                                className={`w-4 h-4 ${isActive
+                                                    ? "text-blue-700"
+                                                    : "text-blue-200"
+                                                    }`}
+                                            />
+
+                                            <span>{item.name}</span>
+
+                                        </div>
+
+                                    </Link>
+                                );
+
+                            })}
+
+                    </div>
+                ))}
+
+                {/* 2. الأقسام المخصصة والمولدة ديناميكياً من قبل المدير (تنزل تلقائياً هنا) */}
+                {dynamicSections.length > 0 && (
+                    <div className="space-y-1 pt-2 border-t border-blue-500/50">
+                        <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-blue-200/80 mb-2">
+                            الأقسام المخصصة
+                        </p>
+
+                        {dynamicSections.map((section) => {
+
+                            // إظهار الجداول المسموح بها فقط
+                            const visibleTables = (section.tables || []).filter(
+                                table =>
+                                    table.user_permission !== "hidden" &&
+                                    table.user_permission !== "no_access"
+                            );
+
+                            // إذا لم يوجد أي جدول فلا يظهر القسم
+                            if (visibleTables.length === 0) return null;
 
                             return (
-                                <Link
-                                    key={item.path}
-                                    href={item.path}
-                                    className={`flex items-center justify-between px-4 py-2 rounded-xl text-xs font-semibold transition-all
-                                    ${isActive
-                                        ? "bg-white text-blue-700 font-bold shadow-md"
-                                        : "text-blue-50 hover:bg-white/10 hover:text-white"
-                                    }`}
-                                >
+                                <div key={section.id} className="space-y-1">
 
-                                    <div className="flex items-center gap-3">
+                                    {/* زر فتح وإغلاق القسم */}
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleSection(section.id)}
+                                        className="w-full flex items-center justify-between px-4 py-2 rounded-xl text-xs font-semibold text-blue-50 hover:bg-white/10 hover:text-white transition-all duration-200"
+                                    >
 
-                                        <Icon
-                                            className={`w-4 h-4 ${isActive
-                                                ? "text-blue-700"
-                                                : "text-blue-200"
-                                            }`}
-                                        />
+                                        <div className="flex items-center gap-3">
 
-                                        <span>{item.name}</span>
+                                            {expandedSections[section.id] ? (
+                                                <ChevronDown className="w-4 h-4 text-blue-200" />
+                                            ) : (
+                                                <ChevronLeft className="w-4 h-4 text-blue-200" />
+                                            )}
 
-                                    </div>
+                                            <FolderOpen className="w-4 h-4 text-blue-100" />
 
-                                </Link>
+                                            <span>{section.title}</span>
+
+                                        </div>
+
+                                    </button>
+
+                                    {/* الجداول */}
+                                    {expandedSections[section.id] && (
+
+                                        <div className="mr-8 space-y-1">
+
+                                            {visibleTables.map((table) => {
+
+                                                const tablePath =
+                                                    `/dashboard/dynamic/${section.id}?table=${table.id}`;
+
+                                                const tableActive =
+                                                    String(currentTableId) === String(table.id);
+
+                                                return (
+
+                                                    <Link
+                                                        key={table.id}
+                                                        href={tablePath}
+                                                        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-[11px] transition-all
+                                                    ${tableActive
+                                                                ? "bg-white/20 text-white font-bold backdrop-blur-sm"
+                                                                : "text-blue-100 hover:bg-white/10 hover:text-white"
+                                                            }`}
+                                                    >
+                                                        <div className={`w-1.5 h-1.5 rounded-full ${tableActive ? "bg-white" : "bg-blue-300"}`} />
+                                                        <span>{table.name}</span>
+                                                    </Link>
+
+                                                );
+
+                                            })}
+
+                                        </div>
+
+                                    )}
+
+                                </div>
                             );
 
                         })}
+                    </div>
+                )}
+            </nav>
 
-                </div>
-            ))}
-
-            {/* 2. الأقسام المخصصة والمولدة ديناميكياً من قبل المدير (تنزل تلقائياً هنا) */}
-            {dynamicSections.length > 0 && (
-                <div className="space-y-1 pt-2 border-t border-blue-500/50">
-                    <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-blue-200/80 mb-2">
-                        الأقسام المخصصة
-                    </p>
-
-                    {dynamicSections.map((section) => {
-
-                        // إظهار الجداول المسموح بها فقط
-                        const visibleTables = (section.tables || []).filter(
-                            table =>
-                                table.user_permission !== "hidden" &&
-                                table.user_permission !== "no_access"
-                        );
-
-                        // إذا لم يوجد أي جدول فلا يظهر القسم
-                        if (visibleTables.length === 0) return null;
-
-                        return (
-                            <div key={section.id} className="space-y-1">
-
-                                {/* زر فتح وإغلاق القسم */}
-                                <button
-                                    type="button"
-                                    onClick={() => toggleSection(section.id)}
-                                    className="w-full flex items-center justify-between px-4 py-2 rounded-xl text-xs font-semibold text-blue-50 hover:bg-white/10 hover:text-white transition-all duration-200"
-                                >
-
-                                    <div className="flex items-center gap-3">
-
-                                        {expandedSections[section.id] ? (
-                                            <ChevronDown className="w-4 h-4 text-blue-200" />
-                                        ) : (
-                                            <ChevronLeft className="w-4 h-4 text-blue-200" />
-                                        )}
-
-                                        <FolderOpen className="w-4 h-4 text-blue-100" />
-
-                                        <span>{section.title}</span>
-
-                                    </div>
-
-                                </button>
-
-                                {/* الجداول */}
-                                {expandedSections[section.id] && (
-
-                                    <div className="mr-8 space-y-1">
-
-                                        {visibleTables.map((table) => {
-
-                                            const tablePath =
-                                                `/dashboard/dynamic/${section.id}?table=${table.id}`;
-
-                                            const tableActive =
-                                                String(currentTableId) === String(table.id);
-
-                                            return (
-
-                                                <Link
-                                                    key={table.id}
-                                                    href={tablePath}
-                                                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-[11px] transition-all
-                                                    ${tableActive
-                                                        ? "bg-white/20 text-white font-bold backdrop-blur-sm"
-                                                        : "text-blue-100 hover:bg-white/10 hover:text-white"
-                                                    }`}
-                                                >
-                                                    <div className={`w-1.5 h-1.5 rounded-full ${tableActive ? "bg-white" : "bg-blue-300"}`} />
-                                                    <span>{table.name}</span>
-                                                </Link>
-
-                                            );
-
-                                        })}
-
-                                    </div>
-
-                                )}
-
+            {/* فوتر يعرض بطاقة المحامي بشكل سفلي أنيق جداً */}
+            <div className="p-3 bg-blue-700/50 border-t border-blue-500/50">
+                <div className="flex items-center gap-3 bg-white/10 p-2.5 rounded-xl border border-white/10 backdrop-blur-sm shadow-sm">
+                    <div className="w-9 h-9 rounded-lg bg-white flex items-center justify-center font-bold text-blue-700 shrink-0 shadow-sm relative">
+                        {user?.full_name?.charAt(0) || 'م'}
+                        {user?.role === 'admin' && (
+                            <div className="absolute -top-1 -right-1 bg-amber-400 p-0.5 rounded-full border border-blue-700 shadow">
+                                <Crown className="w-2 h-2 text-slate-900" />
                             </div>
-                        );
+                        )}
+                    </div>
 
-                    })}
-                </div>
-            )}
-        </nav>
-
-        {/* فوتر يعرض بطاقة المحامي بشكل سفلي أنيق جداً */}
-        <div className="p-3 bg-blue-700/50 border-t border-blue-500/50">
-            <div className="flex items-center gap-3 bg-white/10 p-2.5 rounded-xl border border-white/10 backdrop-blur-sm shadow-sm">
-                <div className="w-9 h-9 rounded-lg bg-white flex items-center justify-center font-bold text-blue-700 shrink-0 shadow-sm relative">
-                    {user?.full_name?.charAt(0) || 'م'}
-                    {user?.role === 'admin' && (
-                        <div className="absolute -top-1 -right-1 bg-amber-400 p-0.5 rounded-full border border-blue-700 shadow">
-                            <Crown className="w-2 h-2 text-slate-900" />
-                        </div>
-                    )}
-                </div>
-
-                <div className="truncate flex-1">
-                    <p className="text-xs font-bold text-white truncate">
-                        {user?.full_name || 'الأستاذ المحامي'}
-                    </p>
-                    <span className="block text-[10px] text-blue-200 font-bold mt-0.5">
-                        {user?.role === 'admin' ? 'مدير النظام' : 'محامي ممارس'}
-                    </span>
+                    <div className="truncate flex-1">
+                        <p className="text-xs font-bold text-white truncate">
+                            {user?.full_name || 'الأستاذ المحامي'}
+                        </p>
+                        <span className="block text-[10px] text-blue-200 font-bold mt-0.5">
+                            {user?.role === 'admin' ? 'مدير النظام' : 'محامي ممارس'}
+                        </span>
+                    </div>
                 </div>
             </div>
-        </div>
-    </aside>
-);}
+        </aside>
+    );
+}

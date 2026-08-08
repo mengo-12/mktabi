@@ -2,8 +2,18 @@
 
 import { useEffect, useState } from "react";
 import backupService from "@/services/backupService";
+import usePagePermission from "@/hooks/usePagePermission";
+import { useRouter } from "next/navigation";
 
 export default function BackupsPage() {
+
+    const router = useRouter();
+
+    const {
+        permission,
+        canRead,
+        canWrite
+    } = usePagePermission("backups");
 
     const [backups, setBackups] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -24,6 +34,13 @@ export default function BackupsPage() {
     };
 
     useEffect(() => {
+        if (permission === "no_access") {
+            router.replace("/dashboard");
+        }
+    }, [permission, router]);
+
+
+    useEffect(() => {
 
         loadBackups();
 
@@ -31,13 +48,21 @@ export default function BackupsPage() {
 
     const handleCreateBackup = async () => {
 
+        if (!canWrite) {
+            return;
+        }
+
         await backupService.createBackup();
 
         await loadBackups();
-
     };
 
+
     const handleDeleteBackup = async (filename) => {
+
+        if (!canWrite) {
+            return;
+        }
 
         if (!confirm("هل تريد حذف هذه النسخة الاحتياطية؟")) {
             return;
@@ -46,10 +71,13 @@ export default function BackupsPage() {
         await backupService.deleteBackup(filename);
 
         await loadBackups();
-
     };
 
     const handleRestoreBackup = async (filename) => {
+
+        if (!canWrite) {
+            return;
+        }
 
         if (
             !confirm(
@@ -62,7 +90,6 @@ export default function BackupsPage() {
         await backupService.restoreBackup(filename);
 
         alert("تمت استعادة النسخة الاحتياطية بنجاح.");
-
     };
 
     return (
@@ -75,12 +102,14 @@ export default function BackupsPage() {
                     النسخ الاحتياطية
                 </h1>
 
-                <button
-                    onClick={handleCreateBackup}
-                    className="px-4 py-2 rounded bg-blue-600 text-white"
-                >
-                    إنشاء نسخة احتياطية
-                </button>
+                {canWrite && (
+                    <button
+                        onClick={handleCreateBackup}
+                        className="px-4 py-2 rounded bg-blue-600 text-white"
+                    >
+                        إنشاء نسخة احتياطية
+                    </button>
+                )}
 
             </div>
 
@@ -151,23 +180,35 @@ export default function BackupsPage() {
 
                                 <td className="border p-2">
 
-                                    <button
-                                        onClick={() => handleDeleteBackup(backup.filename)}
-                                        className="text-red-600"
-                                    >
-                                        حذف
-                                    </button>
+                                    {canWrite && (
+                                        <td className="border p-2">
+                                            <button
+                                                onClick={() =>
+                                                    handleDeleteBackup(backup.filename)
+                                                }
+                                                className="text-red-600"
+                                            >
+                                                حذف
+                                            </button>
+                                        </td>
+                                    )}
 
                                 </td>
 
                                 <td className="border p-2">
 
-                                    <button
-                                        onClick={() => handleRestoreBackup(backup.filename)}
-                                        className="text-green-600"
-                                    >
-                                        استعادة
-                                    </button>
+                                    {canWrite && (
+                                        <td className="border p-2">
+                                            <button
+                                                onClick={() =>
+                                                    handleRestoreBackup(backup.filename)
+                                                }
+                                                className="text-green-600"
+                                            >
+                                                استعادة
+                                            </button>
+                                        </td>
+                                    )}
 
                                 </td>
 
