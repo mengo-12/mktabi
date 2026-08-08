@@ -2610,6 +2610,8 @@ import {
 } from "@/constants/fieldTypes";
 
 import { SYSTEM_PAGES } from "@/constants/systemPages";
+import DateConversionButton from '@/components/DateConversionButton';
+import DateInputWithConversion from '@/components/DateInputWithConversion';
 
 export default function DynamicSectionPage() {
     const { id: sectionId } = useParams();
@@ -4196,28 +4198,7 @@ export default function DynamicSectionPage() {
                                                                 }
                                                             }}
                                                         >
-                                                            {isEditing ? (
-                                                                col.type === 'dropdown' ? (
-                                                                    <select value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={() => handleCellBlur(row.id, col.id, cellValue)} className="w-full bg-white dark:bg-slate-950 border border-blue-600 dark:border-blue-500 text-xs text-blue-600 dark:text-blue-400 p-1 rounded-xl">
-                                                                        <option value="">إختر...</option>
-                                                                        {col.options?.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
-                                                                    </select>
-                                                                ) : (
-                                                                    <input
-                                                                        type={
-                                                                            col.type === "number"
-                                                                                ? "number"
-                                                                                : col.type === "date"
-                                                                                    ? "date"
-                                                                                    : col.type === "datetime"
-                                                                                        ? "datetime-local"
-                                                                                        : "text"
-                                                                        }
-                                                                        value={editValue} autoFocus onChange={(e) => setEditValue(e.target.value)}
-                                                                        onBlur={() => handleCellBlur(row.id, col.id, cellValue)}
-                                                                        className="w-full bg-white dark:bg-slate-950 border border-blue-600 dark:border-blue-500 rounded-xl p-1.5 text-xs text-blue-600 dark:text-blue-400 focus:outline-none"
-                                                                    />
-                                                                )
+                                                            {isEditing ? (col.type === 'dropdown' ? (<select value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={() => handleCellBlur(row.id, col.id, cellValue)} className=" w-full bg-white dark:bg-slate-950 border border-blue-600 dark:border-blue-500 text-xs text-blue-600 dark:text-blue-400 p-1 rounded-xl " > <option value=""> إختر... </option> {col.options?.map((opt, i) => (<option key={i} value={opt} > {opt} </option>))} </select>) : col.type === 'date' || col.type === 'datetime' ? (<DateInputWithConversion value={editValue} type={col.type} onChange={(e) => setEditValue(e.target.value)} onBlur={() => handleCellBlur(row.id, col.id, cellValue)} className="w-full" />) : (<input type={col.type === "number" ? "number" : "text"} value={editValue} autoFocus onChange={(e) => setEditValue(e.target.value)} onBlur={() => handleCellBlur(row.id, col.id, cellValue)} className=" w-full bg-white dark:bg-slate-950 border border-blue-600 dark:border-blue-500 rounded-xl p-1.5 text-xs text-blue-600 dark:text-blue-400 focus:outline-none " />)
                                                             ) : (
                                                                 <div className="p-1 rounded min-h-[20px] flex items-center gap-1.5 flex-wrap">
                                                                     {col.type === 'relation' && (
@@ -4292,12 +4273,20 @@ export default function DynamicSectionPage() {
                                                                         (
                                                                             (
                                                                                 col.type === "date" && cellValue ? (
-                                                                                    new Date(cellValue).toLocaleDateString("ar-SA")
+                                                                                    <DateConversionButton
+                                                                                        value={cellValue}
+                                                                                        type="date"
+                                                                                    />
                                                                                 ) : col.type === "datetime" && cellValue ? (
-                                                                                    new Date(cellValue).toLocaleString("ar-SA")
+                                                                                    <DateConversionButton
+                                                                                        value={cellValue}
+                                                                                        type="datetime"
+                                                                                    />
                                                                                 ) : (
                                                                                     cellValue ||
-                                                                                    <span className="text-slate-400 italic">فارغ</span>
+                                                                                    <span className="text-slate-400 italic">
+                                                                                        فارغ
+                                                                                    </span>
                                                                                 )
                                                                             )
 
