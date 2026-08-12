@@ -447,7 +447,10 @@ export default function BackupsPage() {
          * لذلك نستخدم mr-64 حتى لا يدخل المحتوى تحته.
          */
         <main
-            className="min-h-screen bg-slate-50 dark:bg-zinc-950 mr-64"
+            className="min-h-screen mr-64 transition-colors"
+            style={{
+                backgroundColor: 'var(--mktabi-page-background, #F8FAFC)',
+            }}
             dir="rtl"
         >
 
@@ -917,7 +920,7 @@ export default function BackupsPage() {
                                                     >
 
                                                         {deleting ===
-                                                        backup.filename ? (
+                                                            backup.filename ? (
 
                                                             <RefreshCw className="h-4 w-4 animate-spin" />
 
@@ -957,7 +960,7 @@ export default function BackupsPage() {
                                                     >
 
                                                         {restoring ===
-                                                        backup.filename ? (
+                                                            backup.filename ? (
 
                                                             <RefreshCw className="h-4 w-4 animate-spin" />
 

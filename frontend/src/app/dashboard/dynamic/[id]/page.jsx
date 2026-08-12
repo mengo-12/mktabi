@@ -3934,7 +3934,13 @@ export default function DynamicSectionPage() {
     };
 
     return (
-        <div className="md:mr-64 min-h-screen min-w-0 p-6 bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100" dir="rtl">
+        <div
+            className="md:mr-64 min-h-screen min-w-0 p-6 text-slate-900 dark:text-slate-100 transition-colors"
+            style={{
+                backgroundColor: 'var(--mktabi-page-background, #F8FAFC)',
+            }}
+            dir="rtl"
+        >
             {/* شريط الجداول العلوية */}
             <div className="flex flex-wrap gap-2 border-b border-gray-200 dark:border-slate-800 pb-3 mb-6">
                 {tables.map((tab) => (

@@ -2903,7 +2903,12 @@ export default function DashboardCanvasPage() {
 
     return (
 
-        <div className="mr-64 min-h-screen bg-slate-50 dark:bg-slate-950 p-8 space-y-6">
+        <div
+            className="mr-64 min-h-screen p-8 space-y-6 text-slate-900 dark:text-slate-100 transition-colors"
+            style={{
+                backgroundColor: 'var(--mktabi-page-background, #F8FAFC)',
+            }}
+        >
 
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6">
 

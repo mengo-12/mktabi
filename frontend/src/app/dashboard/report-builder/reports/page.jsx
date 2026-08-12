@@ -268,7 +268,12 @@ export default function ReportsPage() {
     };
 
     return (
-        <div className="mr-64 min-h-screen bg-slate-100 dark:bg-slate-950">
+        <div
+            className="mr-64 min-h-screen transition-colors"
+            style={{
+                backgroundColor: 'var(--mktabi-page-background, #F8FAFC)',
+            }}
+        >
             <div className="space-y-8">
 
                 {/* ================= Header ================= */}
