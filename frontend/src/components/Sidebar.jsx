@@ -344,7 +344,7 @@ import {
 
 import officeProfileService from '@/services/officeProfileService';
 
-export default function Sidebar() {
+export default function Sidebar({ uiColor }) {
     const pathname = usePathname();
     const { user } = useAuth();
     console.log("USER", user);
@@ -358,6 +358,7 @@ export default function Sidebar() {
     const pagePermissions = user?.system_pages || {};
     const [officeProfile, setOfficeProfile] = useState(null);
     const [isOfficeProfileLoading, setIsOfficeProfileLoading] = useState(true);
+
 
     // const canViewPage = (pageId) => {
 
@@ -453,7 +454,6 @@ export default function Sidebar() {
     useEffect(() => {
         loadOfficeProfile();
     }, []);
-
     // const canViewPage = (pageId) => {
 
     //     if (isAdmin) {
@@ -494,18 +494,18 @@ export default function Sidebar() {
                     path: "/dashboard/calendar",
                     icon: CalendarDays
                 },
-                {
-                    id: "finance",
-                    name: "المالية",
-                    path: "/dashboard/finance",
-                    icon: CircleDollarSign
-                },
-                {
-                    id: "reports",
-                    name: "التقارير",
-                    path: "/dashboard/analytics",
-                    icon: BarChart3
-                },
+                // {
+                //     id: "finance",
+                //     name: "المالية",
+                //     path: "/dashboard/finance",
+                //     icon: CircleDollarSign
+                // },
+                // {
+                //     id: "reports",
+                //     name: "التقارير",
+                //     path: "/dashboard/analytics",
+                //     icon: BarChart3
+                // },
                 {
                     id: "dashboard-builder",
                     name: "منشئ لوحة التحكم",
@@ -549,11 +549,23 @@ export default function Sidebar() {
     };
 
     return (
-        <aside className="w-64 bg-blue-600 dark:bg-blue-600 text-white h-screen fixed top-0 right-0 flex flex-col border-l border-blue-700 dark:border-blue-700 shadow-xl select-none z-50 transition-all" dir="rtl">
+        <aside
+            className="w-64 text-white h-screen fixed top-0 right-0 flex flex-col shadow-xl select-none z-50 transition-colors duration-300"
+            style={{
+                backgroundColor:
+                    'var(--mktabi-ui-color, #2563EB)',
+            }}
+            dir="rtl"
+        >
 
             {/* هيدر القائمة الجانبية */}
             {/* هيدر القائمة الجانبية */}
-            <div className="relative overflow-hidden border-b border-blue-500/50 bg-blue-600 px-4 py-5 dark:bg-blue-600">
+            <div
+                className="relative overflow-hidden border-b border-white/20 px-4 py-5"
+                style={{
+                    backgroundColor: uiColor,
+                }}
+            >
 
                 {/* تأثير بصري */}
                 <div className="pointer-events-none absolute -left-10 -top-10 h-28 w-28 rounded-full bg-white/10 blur-2xl" />
@@ -604,17 +616,13 @@ export default function Sidebar() {
                 {menuGroups.map((group, groupIdx) => (
                     <div key={groupIdx} className="space-y-1">
 
-                        <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-blue-200/80 mb-2">
+                        <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-white/70 mb-2">
                             {group.groupName}
                         </p>
 
                         {group.items
                             .filter(item => canViewPage(item.id))
                             .map((item) => {
-
-                                if (!canViewPage(item.id)) {
-                                    return null;
-                                }
 
                                 const Icon = item.icon;
                                 const isActive = pathname === item.path;
@@ -623,23 +631,39 @@ export default function Sidebar() {
                                     <Link
                                         key={item.path}
                                         href={item.path}
-                                        className={`flex items-center justify-between px-4 py-2 rounded-xl text-xs font-semibold transition-all
-                                    ${isActive
-                                                ? "bg-white text-blue-700 font-bold shadow-md"
-                                                : "text-blue-50 hover:bg-white/10 hover:text-white"
-                                            }`}
+                                        className={`
+                            flex
+                            items-center
+                            justify-between
+                            px-4
+                            py-2
+                            rounded-xl
+                            text-xs
+                            font-semibold
+                            transition-all
+                            duration-200
+                            ${isActive
+                                                ? "bg-white text-slate-900 font-bold shadow-md"
+                                                : "text-white/90 hover:bg-white/10 hover:text-white"
+                                            }
+                        `}
                                     >
 
                                         <div className="flex items-center gap-3">
 
                                             <Icon
-                                                className={`w-4 h-4 ${isActive
-                                                    ? "text-blue-700"
-                                                    : "text-blue-200"
-                                                    }`}
+                                                className={`
+                                    w-4 h-4 shrink-0
+                                    ${isActive
+                                                        ? "text-slate-700"
+                                                        : "text-white/70"
+                                                    }
+                                `}
                                             />
 
-                                            <span>{item.name}</span>
+                                            <span className="whitespace-nowrap">
+                                                {item.name}
+                                            </span>
 
                                         </div>
 
@@ -653,8 +677,8 @@ export default function Sidebar() {
 
                 {/* 2. الأقسام المخصصة والمولدة ديناميكياً من قبل المدير (تنزل تلقائياً هنا) */}
                 {dynamicSections.length > 0 && (
-                    <div className="space-y-1 pt-2 border-t border-blue-500/50">
-                        <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-blue-200/80 mb-2">
+                    <div className="space-y-1 pt-2 border-t border-white/15">
+                        <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-white/60 mb-2">
                             الأقسام المخصصة
                         </p>
 
@@ -677,18 +701,18 @@ export default function Sidebar() {
                                     <button
                                         type="button"
                                         onClick={() => toggleSection(section.id)}
-                                        className="w-full flex items-center justify-between px-4 py-2 rounded-xl text-xs font-semibold text-blue-50 hover:bg-white/10 hover:text-white transition-all duration-200"
+                                        className="w-full flex items-center justify-between px-4 py-2 rounded-xl text-xs font-semibold text-white/90 hover:bg-white/10 hover:text-white transition-all duration-200"
                                     >
 
                                         <div className="flex items-center gap-3">
 
                                             {expandedSections[section.id] ? (
-                                                <ChevronDown className="w-4 h-4 text-blue-200" />
+                                                <ChevronDown className="w-4 h-4 text-white/60" />
                                             ) : (
-                                                <ChevronLeft className="w-4 h-4 text-blue-200" />
+                                                <ChevronLeft className="w-4 h-4 text-white/60" />
                                             )}
 
-                                            <FolderOpen className="w-4 h-4 text-blue-100" />
+                                            <FolderOpen className="w-4 h-4 text-white/70" />
 
                                             <span>{section.title}</span>
 
@@ -715,12 +739,19 @@ export default function Sidebar() {
                                                         key={table.id}
                                                         href={tablePath}
                                                         className={`flex items-center gap-3 px-3 py-2 rounded-lg text-[11px] transition-all
-                                                    ${tableActive
+                                                        ${tableActive
                                                                 ? "bg-white/20 text-white font-bold backdrop-blur-sm"
-                                                                : "text-blue-100 hover:bg-white/10 hover:text-white"
+                                                                : "text-white/75 hover:bg-white/10 hover:text-white"
                                                             }`}
                                                     >
-                                                        <div className={`w-1.5 h-1.5 rounded-full ${tableActive ? "bg-white" : "bg-blue-300"}`} />
+                                                        <div
+                                                            className="w-1.5 h-1.5 rounded-full"
+                                                            style={{
+                                                                backgroundColor: tableActive
+                                                                    ? '#FFFFFF'
+                                                                    : 'rgba(255,255,255,0.45)',
+                                                            }}
+                                                        />
                                                         <span>{table.name}</span>
                                                     </Link>
 
@@ -741,12 +772,23 @@ export default function Sidebar() {
             </nav>
 
             {/* فوتر يعرض بطاقة المحامي بشكل سفلي أنيق جداً */}
-            <div className="p-3 bg-blue-700/50 border-t border-blue-500/50">
+            <div
+                className="p-3 border-t border-white/15"
+                style={{
+                    backgroundColor: 'rgba(0, 0, 0, 0.15)',
+                }}
+            >
                 <div className="flex items-center gap-3 bg-white/10 p-2.5 rounded-xl border border-white/10 backdrop-blur-sm shadow-sm">
-                    <div className="w-9 h-9 rounded-lg bg-white flex items-center justify-center font-bold text-blue-700 shrink-0 shadow-sm relative">
+                    <div
+                        className="w-9 h-9 rounded-lg bg-white flex items-center justify-center font-bold shrink-0 shadow-sm relative"
+                        style={{
+                            color: 'var(--mktabi-ui-color, #2563EB)',
+                        }}
+                    >
                         {user?.full_name?.charAt(0) || 'م'}
+
                         {user?.role === 'admin' && (
-                            <div className="absolute -top-1 -right-1 bg-amber-400 p-0.5 rounded-full border border-blue-700 shadow">
+                            <div className="absolute -top-1 -right-1 bg-amber-400 p-0.5 rounded-full border border-slate-700 shadow">
                                 <Crown className="w-2 h-2 text-slate-900" />
                             </div>
                         )}

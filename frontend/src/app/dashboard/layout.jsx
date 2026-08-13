@@ -116,6 +116,11 @@ export default function DashboardLayout({ children }) {
     // 🎨 لون خلفية صفحات النظام
     const [pageBackground, setPageBackground] = useState('#F8FAFC');
 
+    // 🎨 لون واجهة النظام
+    // Header + Sidebar
+
+    const [uiColor, setUiColor] = useState('#2563EB');
+
     // 🎨 إظهار/إخفاء قائمة الألوان
     const [showColorPicker, setShowColorPicker] = useState(false);
 
@@ -144,17 +149,44 @@ export default function DashboardLayout({ children }) {
     useEffect(() => {
         if (!user?.id) return;
 
-        const storageKey = `dashboard-background-${user.id}`;
+        // ================================
+        // 🎨 لون خلفية الصفحات
+        // ================================
 
-        const savedColor =
-            localStorage.getItem(storageKey) || '#F8FAFC';
+        const backgroundStorageKey =
+            `dashboard-background-${user.id}`;
 
-        setPageBackground(savedColor);
+        const savedBackground =
+            localStorage.getItem(backgroundStorageKey) || '#F8FAFC';
+
+        setPageBackground(savedBackground);
 
         document.documentElement.style.setProperty(
             '--mktabi-page-background',
-            savedColor
+            savedBackground
         );
+
+
+        // ================================
+        // 🎨 لون الواجهة
+        // Header + Sidebar
+        // ================================
+
+        const uiStorageKey =
+            `dashboard-ui-color-${user.id}`;
+
+        const savedUiColor =
+            localStorage.getItem(uiStorageKey) || '#2563EB';
+
+        setUiColor(savedUiColor);
+
+        // ⭐ مهم جدًا
+        // وضع اللون في CSS Variable
+        document.documentElement.style.setProperty(
+            '--mktabi-ui-color',
+            savedUiColor
+        );
+
     }, [user?.id]);
 
     // --------------------------------------------------
@@ -178,6 +210,29 @@ export default function DashboardLayout({ children }) {
         }
     };
 
+    const handleUiColorChange = (color) => {
+
+        // تحديث React
+        setUiColor(color);
+
+        // تحديث CSS Variable مباشرة
+        document.documentElement.style.setProperty(
+            '--mktabi-ui-color',
+            color
+        );
+
+        // حفظ اللون للمستخدم
+        if (user?.id) {
+
+            const storageKey =
+                `dashboard-ui-color-${user.id}`;
+
+            localStorage.setItem(
+                storageKey,
+                color
+            );
+        }
+    };
 
     // --------------------------------------------------
     // إعادة اللون الافتراضي
@@ -194,6 +249,26 @@ export default function DashboardLayout({ children }) {
 
         if (user?.id) {
             const storageKey = `dashboard-background-${user.id}`;
+
+            localStorage.removeItem(storageKey);
+        }
+    };
+
+    const resetUiColor = () => {
+
+        const defaultColor = '#2563EB';
+
+        setUiColor(defaultColor);
+
+        document.documentElement.style.setProperty(
+            '--mktabi-ui-color',
+            defaultColor
+        );
+
+        if (user?.id) {
+
+            const storageKey =
+                `dashboard-ui-color-${user.id}`;
 
             localStorage.removeItem(storageKey);
         }
@@ -423,6 +498,86 @@ export default function DashboardLayout({ children }) {
 
     ];
 
+    // --------------------------------------------------
+    // الألوان الواجهة (Header + Sidebar)
+    // --------------------------------------------------
+
+
+    const uiColors = [
+        {
+            name: 'أزرق ملكي',
+            color: '#2563EB',
+        },
+        {
+            name: 'أزرق',
+            color: '#1D4ED8',
+        },
+        {
+            name: 'كحلي',
+            color: '#1E3A8A',
+        },
+        {
+            name: 'أزرق داكن',
+            color: '#1E40AF',
+        },
+        {
+            name: 'سماوي داكن',
+            color: '#0369A1',
+        },
+        {
+            name: 'تركوازي',
+            color: '#0F766E',
+        },
+        {
+            name: 'زمردي',
+            color: '#047857',
+        },
+        {
+            name: 'أخضر داكن',
+            color: '#166534',
+        },
+        {
+            name: 'بنفسجي',
+            color: '#7C3AED',
+        },
+        {
+            name: 'بنفسجي داكن',
+            color: '#5B21B6',
+        },
+        {
+            name: 'نيلي',
+            color: '#4338CA',
+        },
+        {
+            name: 'وردي',
+            color: '#BE185D',
+        },
+        {
+            name: 'أحمر',
+            color: '#B91C1C',
+        },
+        {
+            name: 'برتقالي',
+            color: '#C2410C',
+        },
+        {
+            name: 'بني',
+            color: '#78350F',
+        },
+        {
+            name: 'رمادي فحمي',
+            color: '#334155',
+        },
+        {
+            name: 'رمادي داكن',
+            color: '#1F2937',
+        },
+        {
+            name: 'أسود',
+            color: '#111827',
+        },
+    ];
+
 
     // --------------------------------------------------
     // شاشة التحقق
@@ -479,7 +634,12 @@ export default function DashboardLayout({ children }) {
                     HEADER
                 ====================================================== */}
 
-                <header className="bg-blue-600 dark:bg-blue-600 text-white backdrop-blur-md h-20 border-b border-blue-700 dark:border-blue-700 px-8 flex justify-between items-center sticky top-0 z-30 shadow-md transition-all">
+                <header
+                    className="text-white backdrop-blur-md h-20 border-b border-white/20 px-8 flex justify-between items-center sticky top-0 z-30 shadow-md transition-all"
+                    style={{
+                        backgroundColor: uiColor,
+                    }}
+                >
 
                     <div>
 
@@ -548,141 +708,354 @@ export default function DashboardLayout({ children }) {
 
                                     <div
                                         className="
-                                            absolute
-                                            left-0
-                                            top-12
-                                            z-50
-                                            w-72
-                                            bg-white
-                                            dark:bg-slate-900
-                                            border
-                                            border-slate-200
-                                            dark:border-slate-700
-                                            rounded-2xl
-                                            shadow-2xl
-                                            p-4
-                                            text-right
-                                        "
+        absolute
+        left-0
+        top-12
+        z-50
+        w-80
+        bg-white
+        dark:bg-slate-900
+        border
+        border-slate-200
+        dark:border-slate-700
+        rounded-2xl
+        shadow-2xl
+        p-4
+        text-right
+    "
                                     >
 
-                                        <div className="mb-3">
+                                        {/* =================================================
+        العنوان
+    ================================================== */}
 
-                                            <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                                                لون خلفية الصفحات
-                                            </p>
+                                        <div className="mb-5">
 
-                                            <p className="text-[10px] text-slate-400 mt-1">
-                                                يتم حفظ اللون لهذا المستخدم
-                                            </p>
+                                            <div className="flex items-center gap-2">
+
+                                                <div
+                                                    className="w-8 h-8 rounded-lg flex items-center justify-center"
+                                                    style={{
+                                                        backgroundColor: uiColor,
+                                                    }}
+                                                >
+                                                    <Palette className="w-4 h-4 text-white" />
+                                                </div>
+
+                                                <div>
+
+                                                    <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                                                        تخصيص المظهر
+                                                    </p>
+
+                                                    <p className="text-[10px] text-slate-400 mt-0.5">
+                                                        تخصيص مظهر النظام لهذا المستخدم
+                                                    </p>
+
+                                                </div>
+
+                                            </div>
 
                                         </div>
 
 
-                                        {/* الألوان */}
+                                        {/* =================================================
+        1. لون خلفية الصفحات
+    ================================================== */}
 
-                                        <div className="grid grid-cols-5 gap-2 max-h-[360px] overflow-y-auto pr-1 custom-scrollbar">
+                                        <div className="mb-5">
 
-                                            {backgroundColors.map((item) => {
+                                            <div className="mb-3">
 
-                                                const isSelected =
-                                                    pageBackground === item.color;
+                                                <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                                                    خلفية الصفحات
+                                                </p>
 
-                                                return (
-                                                    <button
-                                                        key={item.color}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            handleBackgroundChange(
-                                                                item.color
-                                                            );
+                                                <p className="text-[10px] text-slate-400 mt-1">
+                                                    لون محتوى صفحات النظام
+                                                </p>
 
-                                                            setShowColorPicker(
-                                                                false
-                                                            );
-                                                        }}
-                                                        title={item.name}
-                                                        className="
-                                                            relative
-                                                            h-12
-                                                            rounded-xl
-                                                            border
-                                                            border-slate-200
-                                                            dark:border-slate-700
-                                                            hover:scale-105
-                                                            transition-all
-                                                            shadow-sm
-                                                        "
-                                                        style={{
-                                                            backgroundColor:
-                                                                item.color,
-                                                        }}
-                                                    >
+                                            </div>
 
-                                                        {isSelected && (
-                                                            <span
-                                                                className="
-                                                                    absolute
-                                                                    inset-0
-                                                                    flex
-                                                                    items-center
-                                                                    justify-center
-                                                                "
-                                                            >
-                                                                <span className="
-                                                                    w-6
-                                                                    h-6
-                                                                    rounded-full
-                                                                    bg-blue-600
-                                                                    text-white
-                                                                    flex
-                                                                    items-center
-                                                                    justify-center
-                                                                    shadow-lg
-                                                                ">
-                                                                    <Check className="w-3.5 h-3.5" />
+
+                                            <div
+                                                className="
+                grid
+                grid-cols-5
+                gap-2
+                max-h-[230px]
+                overflow-y-auto
+                pr-1
+                custom-scrollbar
+            "
+                                            >
+
+                                                {backgroundColors.map((item) => {
+
+                                                    const isSelected =
+                                                        pageBackground === item.color;
+
+                                                    return (
+
+                                                        <button
+                                                            key={item.color}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                handleBackgroundChange(item.color);
+                                                            }}
+                                                            title={item.name}
+                                                            className="
+                            relative
+                            h-11
+                            rounded-xl
+                            border
+                            border-slate-200
+                            dark:border-slate-700
+                            hover:scale-105
+                            transition-all
+                            shadow-sm
+                        "
+                                                            style={{
+                                                                backgroundColor: item.color,
+                                                            }}
+                                                        >
+
+                                                            {isSelected && (
+
+                                                                <span
+                                                                    className="
+                                    absolute
+                                    inset-0
+                                    flex
+                                    items-center
+                                    justify-center
+                                "
+                                                                >
+
+                                                                    <span
+                                                                        className="
+                                        w-6
+                                        h-6
+                                        rounded-full
+                                        bg-blue-600
+                                        text-white
+                                        flex
+                                        items-center
+                                        justify-center
+                                        shadow-lg
+                                    "
+                                                                    >
+
+                                                                        <Check className="w-3.5 h-3.5" />
+
+                                                                    </span>
+
                                                                 </span>
-                                                            </span>
-                                                        )}
 
-                                                    </button>
-                                                );
-                                            })}
+                                                            )}
+
+                                                        </button>
+
+                                                    );
+
+                                                })}
+
+                                            </div>
 
                                         </div>
 
 
-                                        {/* إعادة الافتراضي */}
+                                        {/* =================================================
+        فاصل
+    ================================================== */}
 
-                                        <button
-                                            type="button"
-                                            onClick={resetBackgroundColor}
-                                            className="
-                                                mt-4
-                                                w-full
-                                                flex
-                                                items-center
-                                                justify-center
-                                                gap-2
-                                                px-3
-                                                py-2
-                                                rounded-xl
-                                                text-xs
-                                                font-bold
-                                                text-slate-600
-                                                dark:text-slate-300
-                                                bg-slate-100
-                                                dark:bg-slate-800
-                                                hover:bg-slate-200
-                                                dark:hover:bg-slate-700
-                                                transition
-                                            "
-                                        >
+                                        <div className="border-t border-slate-200 dark:border-slate-700 my-4" />
 
-                                            <RotateCcw className="w-3.5 h-3.5" />
 
-                                            إعادة اللون الافتراضي
+                                        {/* =================================================
+        2. لون الهيدر والـ Sidebar
+    ================================================== */}
 
-                                        </button>
+                                        <div className="mb-4">
+
+                                            <div className="mb-3">
+
+                                                <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                                                    لون الهيدر والقائمة الجانبية
+                                                </p>
+
+                                                <p className="text-[10px] text-slate-400 mt-1">
+                                                    لون واجهة النظام بالكامل
+                                                </p>
+
+                                            </div>
+
+
+                                            <div
+                                                className="
+                grid
+                grid-cols-5
+                gap-2
+                max-h-[200px]
+                overflow-y-auto
+                pr-1
+                custom-scrollbar
+            "
+                                            >
+
+                                                {uiColors.map((item) => {
+
+                                                    const isSelected =
+                                                        uiColor === item.color;
+
+                                                    return (
+
+                                                        <button
+                                                            key={item.color}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                handleUiColorChange(item.color);
+                                                            }}
+                                                            title={item.name}
+                                                            className="
+                            relative
+                            h-11
+                            rounded-xl
+                            border
+                            border-slate-200
+                            dark:border-slate-700
+                            hover:scale-105
+                            transition-all
+                            shadow-sm
+                        "
+                                                            style={{
+                                                                backgroundColor: item.color,
+                                                            }}
+                                                        >
+
+                                                            {isSelected && (
+
+                                                                <span
+                                                                    className="
+                                    absolute
+                                    inset-0
+                                    flex
+                                    items-center
+                                    justify-center
+                                "
+                                                                >
+
+                                                                    <span
+                                                                        className="
+                                        w-6
+                                        h-6
+                                        rounded-full
+                                        bg-white
+                                        flex
+                                        items-center
+                                        justify-center
+                                        shadow-lg
+                                    "
+                                                                    >
+
+                                                                        <Check
+                                                                            className="w-3.5 h-3.5"
+                                                                            style={{
+                                                                                color: item.color,
+                                                                            }}
+                                                                        />
+
+                                                                    </span>
+
+                                                                </span>
+
+                                                            )}
+
+                                                        </button>
+
+                                                    );
+
+                                                })}
+
+                                            </div>
+
+                                        </div>
+
+
+                                        {/* =================================================
+        إعادة الافتراضي
+    ================================================== */}
+
+                                        <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+
+                                            <div className="grid grid-cols-2 gap-2">
+
+                                                {/* إعادة خلفية الصفحات */}
+
+                                                <button
+                                                    type="button"
+                                                    onClick={resetBackgroundColor}
+                                                    className="
+                    flex
+                    items-center
+                    justify-center
+                    gap-2
+                    px-3
+                    py-2.5
+                    rounded-xl
+                    text-[11px]
+                    font-bold
+                    text-slate-600
+                    dark:text-slate-300
+                    bg-slate-100
+                    dark:bg-slate-800
+                    hover:bg-slate-200
+                    dark:hover:bg-slate-700
+                    transition
+                "
+                                                >
+
+                                                    <RotateCcw className="w-3.5 h-3.5" />
+
+                                                    خلفية الصفحات
+
+                                                </button>
+
+
+                                                {/* إعادة لون الواجهة */}
+
+                                                <button
+                                                    type="button"
+                                                    onClick={resetUiColor}
+                                                    className="
+                    flex
+                    items-center
+                    justify-center
+                    gap-2
+                    px-3
+                    py-2.5
+                    rounded-xl
+                    text-[11px]
+                    font-bold
+                    text-slate-600
+                    dark:text-slate-300
+                    bg-slate-100
+                    dark:bg-slate-800
+                    hover:bg-slate-200
+                    dark:hover:bg-slate-700
+                    transition
+                "
+                                                >
+
+                                                    <RotateCcw className="w-3.5 h-3.5" />
+
+                                                    لون الواجهة
+
+                                                </button>
+
+                                            </div>
+
+                                        </div>
 
                                     </div>
                                 </>
