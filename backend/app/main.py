@@ -17,7 +17,7 @@ from app.models.attachment import Attachment
 from app.api.v1.api import api_router
 
 from fastapi.responses import JSONResponse
-from app.core.system_state import is_restoring
+import app.core.system_state as system_state
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -30,6 +30,11 @@ async def lifespan(app: FastAPI):
     start_backup_scheduler()
     
     yield
+
+    # إغلاق اتصالات SQLAlchemy
+    await engine.dispose()
+
+    print("🔌 Database engine disposed")
     # هنا يمكنك وضع أي عمليات تنظيف عند إغلاق السيرفر مستقبلاً (مثل غلق اتصالات الواتساب)
 
 app = FastAPI(
@@ -55,12 +60,12 @@ app.add_middleware(
 @app.middleware("http")
 async def maintenance_middleware(request, call_next):
 
-    if is_restoring:
+    if system_state.is_restoring:
 
         allowed = (
             "/docs",
             "/openapi.json",
-            "/api/v1/backups",
+            "/api/v1/backups/restore/",
         )
 
         if not any(request.url.path.startswith(p) for p in allowed):

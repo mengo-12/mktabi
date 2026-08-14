@@ -4,8 +4,11 @@ import subprocess
 import os
 import shutil
 import zipfile
+import time
 from pathlib import Path
 from app.core.config import settings
+
+from app.core.database import engine
 
 from app.services.calendar_notification_scheduler import scheduler
 
@@ -145,7 +148,7 @@ def delete_backup(filename: str):
         "message": "Backup deleted successfully",
     }
 
-def restore_backup(filename: str):
+async def restore_backup(filename: str):
 
     backup_file = BACKUP_DIR / filename
 
@@ -180,8 +183,38 @@ def restore_backup(filename: str):
         if not database_backup.exists():
             raise Exception("Database backup not found inside archive.")
 
+        # ============================================================
+        # إغلاق اتصالات SQLAlchemy قبل استعادة قاعدة البيانات
+        # ============================================================
+
+        print("🔌 Closing SQLAlchemy database connections...")
+
+        await engine.dispose()
+
+        print("✅ SQLAlchemy connections disposed")
+
+        # ============================================================
+        # إنهاء أي اتصالات PostgreSQL أخرى قبل pg_restore
+        # ============================================================
+
+        print("🔌 Terminating remaining PostgreSQL connections...")
+
+        terminate_database_connections()
+
+        print("✅ PostgreSQL connections terminated")
+
+        # إعطاء PostgreSQL لحظة لإنهاء الاتصالات فعلياً
+        time.sleep(1)
+
+
+        # ============================================================
+        # استعادة قاعدة البيانات
+        # ============================================================
+
         env = os.environ.copy()
         env["PGPASSWORD"] = settings.POSTGRES_PASSWORD
+
+        print("🔄 Starting PostgreSQL restore...")
 
         subprocess.run(
             [
@@ -203,6 +236,8 @@ def restore_backup(filename: str):
             env=env,
             check=True,
         )
+
+        print("✅ PostgreSQL restore completed")
 
         restored_uploads = temp_restore_dir / "uploads"
 
@@ -230,3 +265,32 @@ def restore_backup(filename: str):
 
         if was_running:
             scheduler.resume()
+
+def terminate_database_connections():
+    env = os.environ.copy()
+    env["PGPASSWORD"] = settings.POSTGRES_PASSWORD
+
+    sql = f"""
+    SELECT pg_terminate_backend(pid)
+    FROM pg_stat_activity
+    WHERE datname = '{settings.POSTGRES_DB}'
+      AND pid <> pg_backend_pid();
+    """
+
+    subprocess.run(
+        [
+            settings.PSQL_PATH,
+            "-h",
+            settings.POSTGRES_SERVER,
+            "-p",
+            str(settings.POSTGRES_PORT),
+            "-U",
+            settings.POSTGRES_USER,
+            "-d",
+            "postgres",
+            "-c",
+            sql,
+        ],
+        env=env,
+        check=True,
+    )

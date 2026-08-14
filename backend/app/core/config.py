@@ -22,6 +22,8 @@ class Settings(BaseSettings):
 
     PG_DUMP_PATH: str
     PG_RESTORE_PATH: str
+    
+    PSQL_PATH: str = r"C:\Program Files\PostgreSQL\17\bin\psql.exe"
 
     BACKUP_KEEP_COUNT: int = 30
 

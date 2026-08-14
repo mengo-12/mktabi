@@ -1,10 +1,15 @@
 from fastapi import APIRouter
 
+from fastapi import BackgroundTasks
+
 from fastapi.responses import FileResponse
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.models.auth import User, UserRole
 from app.api.deps import get_current_user
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import get_db
 
 from app.services.backup_service import (
     create_backup,
@@ -192,14 +197,17 @@ def remove_backup(
     return delete_backup(filename)
 
 @router.post("/restore/{filename}")
-def restore_database(
+async def restore_database(
     filename: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-
     check_backup_permission(
         current_user,
         "write"
     )
 
-    return restore_backup(filename)
+    # تحرير اتصال SQLAlchemy قبل بدء pg_restore
+    await db.close()
+
+    return await restore_backup(filename)
