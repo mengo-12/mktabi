@@ -2869,7 +2869,7 @@ export default function DynamicSectionPage() {
                     const column = activeTable?.columns_definition.find(c => c.id === colId);
                     if (column?.type === 'relation' && Array.isArray(val)) {
                         return val.some(id => {
-                            const name = getRelationDisplayValue(col, id)
+                            const name = getRelationDisplayValue(column, id);
                             return name.toLowerCase().includes(term);
                         });
                     }
