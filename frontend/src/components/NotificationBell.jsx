@@ -147,15 +147,22 @@ export default function NotificationBell() {
     const [unreadCount, setUnreadCount] = useState(0);
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef(null);
-    const API_URL = process.env.NEXT_PUBLIC_API_URL;
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
     const wsRef = useRef(null);
     const reconnectTimeoutRef = useRef(null);
 
-    const WS_URL = API_URL
-        .replace("http://", "ws://")
-        .replace("https://", "wss://")
-        .replace("/api/v1", "");
+    const WS_PROTOCOL =
+        typeof window !== "undefined" && window.location.protocol === "https:"
+            ? "wss:"
+            : "ws:";
+
+    const WS_HOST =
+        typeof window !== "undefined"
+            ? window.location.host
+            : "localhost";
+
+    const WS_URL = `${WS_PROTOCOL}//${WS_HOST}`;
 
     useEffect(() => {
 
@@ -165,7 +172,7 @@ export default function NotificationBell() {
 
             if (!token) return;
 
-            fetch("http://localhost:8000/api/v1/notifications/unread", {
+            fetch(`${API_URL}/notifications/unread`, {
                 headers: {
                     Authorization: `Bearer ${token}`,
                 },
@@ -271,7 +278,7 @@ export default function NotificationBell() {
             const token = localStorage.getItem('token');
 
             const updatePromises = notifications.map((notif) =>
-                fetch(`http://localhost:8000/api/v1/notifications/${notif.id}/read`, {
+                fetch(`${API_URL}/notifications/${notif.id}/read`, {
                     method: 'PATCH',
                     headers: {
                         'Authorization': `Bearer ${token}`,
