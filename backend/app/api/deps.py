@@ -139,32 +139,63 @@ async def get_current_user(
             cells = staff_row.cells_data or {}
             
             # 🎯 استخراج الصلاحيات بشكل مرن وذكي
+            # 🎯 استخراج صلاحيات الجداول وصفحات النظام بشكل صريح
             permissions_dict = {}
             system_pages = {}
+
+            TABLE_PERMISSION_LEVELS = {
+                "read_only",
+                "read_write",
+                "no_access",
+            }
+
+            PAGE_PERMISSION_LEVELS = {
+                "read",
+                "write",
+                "no_access",
+            }
+
             for key, value in cells.items():
 
                 parsed = value
 
+                # بعض الحقول قد تكون JSON string
                 if isinstance(value, str):
                     try:
                         parsed = json.loads(value)
-                    except:
+                    except (json.JSONDecodeError, TypeError):
                         continue
 
                 if not isinstance(parsed, dict):
                     continue
 
-                values = set(parsed.values())
+                # ---------------------------------------------------------
+                # 1️⃣ صلاحيات الجداول
+                # ---------------------------------------------------------
+                # نعتبر القاموس صلاحيات جداول إذا كانت مفاتيحه رقمية
+                # وقيمه من مستويات صلاحيات الجداول.
+                table_permissions = {
+                    str(k): v
+                    for k, v in parsed.items()
+                    if str(k).isdigit() and v in TABLE_PERMISSION_LEVELS
+                }
 
-                # صلاحيات الجداول
-                if values.issubset({"read_only", "read_write", "no_access"}):
-                    permissions_dict = parsed
+                if table_permissions:
+                    permissions_dict.update(table_permissions)
 
-                # صلاحيات الصفحات
-                page_levels = {"write", "read", "no_access"}
+                # ---------------------------------------------------------
+                # 2️⃣ صلاحيات صفحات النظام
+                # ---------------------------------------------------------
+                # نعتبر القاموس صلاحيات صفحات إذا كانت مفاتيحه أسماء صفحات
+                # وقيمه من مستويات صلاحيات الصفحات.
+                page_permissions = {
+                    str(k): v
+                    for k, v in parsed.items()
+                    if not str(k).isdigit() and v in PAGE_PERMISSION_LEVELS
+                }
 
-                if set(parsed.values()).issubset(page_levels):
-                    system_pages = parsed
+                if page_permissions:
+                    system_pages.update(page_permissions)
 
             # 🔒 [قفل الأمان الصارم]: حظر صلاحية التعديل على جدول الموظفين حتى لو تم التلاعب بقاعدة البيانات
             # نجبر النظام على جعل جدول الموظفين الحالي للقراءة فقط بالنسبة لهذا الموظف لمنع تصعيد الصلاحيات.
