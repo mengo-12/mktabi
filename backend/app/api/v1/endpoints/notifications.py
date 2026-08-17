@@ -12,6 +12,7 @@ from app.models.auth import User
 from app.api.deps import get_current_user # لضمان الأمان أثناء التحديث
 from jose import jwt, JWTError
 from app.core.config import settings
+from sqlalchemy import select, or_, and_
 
 router = APIRouter()
 
@@ -22,16 +23,52 @@ async def get_unread_notifications(
     current_user: User = Depends(get_current_user),
 ):
     """
-    يجلب تنبيهات المستخدم الحالي تلقائياً من التوكن.
+    جلب جميع الإشعارات غير المقروءة للمستخدم الحالي.
+
+    يدعم:
+    1. المحامي / المستخدم العادي
+    2. الموظف الديناميكي
     """
+
+    # =========================================================
+    # 👨‍⚖️ المستخدم العادي
+    # =========================================================
+
+    if not getattr(current_user, "is_dynamic_staff", False):
+
+        result = await db.execute(
+            select(InAppNotification)
+            .where(
+                InAppNotification.lawyer_id == current_user.id,
+                InAppNotification.is_read == False,
+            )
+            .order_by(
+                InAppNotification.created_at.desc()
+            )
+        )
+
+        return result.scalars().all()
+
+    # =========================================================
+    # 👤 الموظف الديناميكي
+    # =========================================================
+
+    table_id = getattr(current_user, "staff_table_id", None)
+    row_id = getattr(current_user, "staff_row_id", None)
+
+    if table_id is None or row_id is None:
+        return []
 
     result = await db.execute(
         select(InAppNotification)
         .where(
-            InAppNotification.lawyer_id == current_user.id,
+            InAppNotification.dynamic_table_id == table_id,
+            InAppNotification.dynamic_row_id == row_id,
             InAppNotification.is_read == False,
         )
-        .order_by(InAppNotification.created_at.desc())
+        .order_by(
+            InAppNotification.created_at.desc()
+        )
     )
 
     return result.scalars().all()
@@ -55,11 +92,27 @@ async def mark_notification_as_read(
     if not notification:
         raise HTTPException(status_code=404, detail="التنبيه المطلوب غير موجود.")
         
-    if notification.lawyer_id != current_user.id:
-        raise HTTPException(
-            status_code=403,
-            detail="ليس لديك صلاحية لهذا التنبيه."
-        )
+    if getattr(current_user, "is_dynamic_staff", False):
+
+        table_id = getattr(current_user, "staff_table_id", None)
+        row_id = getattr(current_user, "staff_row_id", None)
+
+        if (
+            notification.dynamic_table_id != table_id
+            or notification.dynamic_row_id != row_id
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="ليس لديك صلاحية لهذا التنبيه."
+            )
+
+    else:
+
+        if notification.lawyer_id != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail="ليس لديك صلاحية لهذا التنبيه."
+            )
 
     # تحويل الحالة وحفظها في قاعدة البيانات
     notification.is_read = True
