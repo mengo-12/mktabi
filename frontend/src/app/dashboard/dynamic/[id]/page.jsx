@@ -4873,7 +4873,7 @@ export default function DynamicSectionPage() {
                                                     })()}
                                                 </div>
                                             ) : col.type === 'user_account' ? (
-                                                /* 👤 توليد مصفوفة الصلاحيات لجميع الجداول باستثناء جدول الموظفين الحالي */
+                                                /* 👤 توليد مصفوفة الصلاحيات لجميع جداول النظام بما فيها جدول الموظفين */
                                                 <div className="p-3.5 bg-white dark:bg-slate-800 rounded-xl border border-gray-300 dark:border-slate-700 shadow-sm space-y-3 w-full text-right">
                                                     <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
                                                         {!hasPermission(userRole, "canEditRow") ? 'مستويات الوصول الممنوحة لهذا الموظف على جداول النظام:' : 'قم بتعيين مستويات الوصول الخاصة بهذا الموظف على جداول النظام المتاحة حالياً:'}
@@ -4881,25 +4881,28 @@ export default function DynamicSectionPage() {
                                                     <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                                                         {systemTables && systemTables.length > 0 ? (
                                                             systemTables
-                                                                .filter((table) => table.id !== activeTable?.id)
                                                                 .map((table) => {
                                                                     let permissionsObj = {};
+
                                                                     try {
                                                                         if (rowData && rowData[col.id]) {
-                                                                            permissionsObj = typeof rowData[col.id] === 'string'
-                                                                                ? JSON.parse(rowData[col.id])
-                                                                                : rowData[col.id];
+                                                                            permissionsObj =
+                                                                                typeof rowData[col.id] === 'string'
+                                                                                    ? JSON.parse(rowData[col.id])
+                                                                                    : rowData[col.id];
                                                                         }
                                                                     } catch (e) {
                                                                         console.error("خطأ أثناء تحليل الصلاحيات الحالية:", e);
                                                                         permissionsObj = {};
                                                                     }
 
-                                                                    const currentPermission = permissionsObj[table.id] || 'no_access';
+                                                                    const currentPermission =
+                                                                        permissionsObj[table.id] || 'no_access';
 
                                                                     const updatePermissionState = (level) => {
-                                                                        // 🔒 منع أي تعديل إذا لم يمتلك المستخدم صلاحية تعديل الصلاحيات
-                                                                        if (!hasPermission(userRole, "canEditPermissions")) return;
+                                                                        if (!hasPermission(userRole, "canEditPermissions")) {
+                                                                            return;
+                                                                        }
 
                                                                         const updatedPermissions = {
                                                                             ...permissionsObj,

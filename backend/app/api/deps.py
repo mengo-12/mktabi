@@ -199,7 +199,8 @@ async def get_current_user(
 
             # 🔒 [قفل الأمان الصارم]: حظر صلاحية التعديل على جدول الموظفين حتى لو تم التلاعب بقاعدة البيانات
             # نجبر النظام على جعل جدول الموظفين الحالي للقراءة فقط بالنسبة لهذا الموظف لمنع تصعيد الصلاحيات.
-            permissions_dict[str(table_id)] = "read_only"
+
+            # permissions_dict[str(table_id)] = "read_only"
 
             fake_user = User(
                 id=row_id,
@@ -302,7 +303,7 @@ def sanitize_staff_permissions(cells_data: dict, staff_table_id: int) -> dict:
                 
         if permissions_dict is not None:
             # 🚨 حماية صارمة: الموظف الجديد لا يجب أن يأخذ صلاحية read_write على جدول الموظفين نفسه
-            permissions_dict[staff_table_key] = "read_only" 
+            # permissions_dict[staff_table_key] = "read_only" 
             
             if is_json_string:
                 cleaned_cells[k] = json.dumps(permissions_dict)

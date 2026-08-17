@@ -210,14 +210,14 @@ async def get_sections(
                 table_id_str = str(table.id)
 
                 # استثناء: جدول الموظفين يظهر دوماً كقراءة فقط للموظف لضمان بيئة العمل
-                if (
-                    hasattr(current_user, "staff_table_id")
-                    and table.id == current_user.staff_table_id
-                ):
-                    table_data = table.__dict__.copy()
-                    table_data["user_permission"] = "read_only"
-                    allowed_tables.append(table_data)
-                    continue
+                # if (
+                #     hasattr(current_user, "staff_table_id")
+                #     and table.id == current_user.staff_table_id
+                # ):
+                #     table_data = table.__dict__.copy()
+                #     table_data["user_permission"] = "read_only"
+                #     allowed_tables.append(table_data)
+                #     continue
 
                 permission = user_perms.get(table_id_str, "no_access")
 
@@ -443,11 +443,11 @@ async def create_row(
     check_dynamic_permission(current_user, table_id, required_level="write")
 
     # 🛑 [حماية جدول الموظفين]: منع أي موظف من توليد حسابات أو موظفين جدد
-    if getattr(current_user, "is_dynamic_staff", False) and table_check.is_staff_table:
-        raise HTTPException(
-            status_code=403,
-            detail="غير مصرح لك بإضافة موظفين، هذه الصلاحية للمحامي المدير فقط.",
-        )
+    # if getattr(current_user, "is_dynamic_staff", False) and table_check.is_staff_table:
+    #     raise HTTPException(
+    #         status_code=403,
+    #         detail="غير مصرح لك بإضافة موظفين، هذه الصلاحية للمحامي المدير فقط.",
+    #     )
 
     cells_content = row_data.get("cells_data", row_data)
 
@@ -543,15 +543,15 @@ async def update_row_cell(
     check_dynamic_permission(current_user, db_row.table_id, required_level="write")
 
     # 🛑 [حماية جدول الموظفين]: منع الموظف من تعديل بيانات أو رتب زملائه
-    if (
-        getattr(current_user, "is_dynamic_staff", False)
-        and table_check
-        and table_check.is_staff_table
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="غير مصرح للموظفين بتعديل سجلات جدول الموظفين والصلاحيات.",
-        )
+    # if (
+    #     getattr(current_user, "is_dynamic_staff", False)
+    #     and table_check
+    #     and table_check.is_staff_table
+    # ):
+    #     raise HTTPException(
+    #         status_code=403,
+    #         detail="غير مصرح للموظفين بتعديل سجلات جدول الموظفين والصلاحيات.",
+    #     )
 
     actual_data = (
         updated_cells.get("cells_data", updated_cells)
@@ -594,14 +594,14 @@ async def delete_row(
     check_dynamic_permission(current_user, db_row.table_id, required_level="write")
 
     # 🛑 منع حذف سجلات من جدول الموظفين عبر طاقم العمل الديناميكي
-    if (
-        getattr(current_user, "is_dynamic_staff", False)
-        and table_check
-        and table_check.is_staff_table
-    ):
-        raise HTTPException(
-            status_code=403, detail="إجراء محظور. لا يمكنك حذف سجلات من جدول الموظفين."
-        )
+    # if (
+    #     getattr(current_user, "is_dynamic_staff", False)
+    #     and table_check
+    #     and table_check.is_staff_table
+    # ):
+    #     raise HTTPException(
+    #         status_code=403, detail="إجراء محظور. لا يمكنك حذف سجلات من جدول الموظفين."
+    #     )
 
     await db.delete(db_row)
     await db.commit()
