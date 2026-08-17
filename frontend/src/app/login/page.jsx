@@ -196,7 +196,7 @@ export default function LoginPage() {
             return logoUrl;
         }
 
-        return `http://127.0.0.1:8000${logoUrl}`;
+        return logoUrl;
     };
 
     const handleSubmit = async (e) => {

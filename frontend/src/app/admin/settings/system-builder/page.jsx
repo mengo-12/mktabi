@@ -2239,7 +2239,7 @@ export default function SystemBuilderPage() {
         }
 
         // في بيئة التطوير المحلية
-        return `http://127.0.0.1:8000${logoUrl}`;
+        return logoUrl;
     };
 
     // --- دوال إدارة الصفحات والجداول والقوالب (CRUD الأقسام) ---

@@ -422,7 +422,7 @@ export default function Sidebar({ uiColor }) {
             return logoUrl;
         }
 
-        return `http://127.0.0.1:8000${logoUrl}`;
+        return logoUrl;
     };
 
 
