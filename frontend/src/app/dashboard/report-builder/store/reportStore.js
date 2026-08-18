@@ -1,5 +1,16 @@
 import { create } from "zustand";
 
+const generateUUID = () => {
+    if (
+        typeof crypto !== "undefined" &&
+        typeof crypto.randomUUID === "function"
+    ) {
+        return crypto.randomUUID();
+    }
+
+    return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+};
+
 const initialReport = {
     id: null,
     name: "",
@@ -272,7 +283,7 @@ const useReportStore = create((set) => ({
                         ...(state.report.query.filters || []),
 
                         {
-                            id: crypto.randomUUID(),
+                            id: generateUUID(),
                             column: "",
                             operator: "=",
                             value: "",
@@ -361,7 +372,7 @@ const useReportStore = create((set) => ({
                     sorting: [
                         ...(state.report.query.sorting || []),
                         {
-                            id: crypto.randomUUID(),
+                            id: generateUUID(),
                             column: "",
                             direction: "asc",
                         },
@@ -413,7 +424,7 @@ const useReportStore = create((set) => ({
                     widgets: [
                         ...state.report.dashboard.widgets,
                         {
-                            id: crypto.randomUUID(),
+                            id: generateUUID(),
                             reportId: null,
                             title: "",
                             type: "table",
@@ -537,7 +548,7 @@ const useReportStore = create((set) => ({
                     calculatedFields: [
                         ...(state.report.query.calculatedFields || []),
                         {
-                            id: crypto.randomUUID(),
+                            id: generateUUID(),
                             name: "",
                             operation: "sum",
                             column: "",
