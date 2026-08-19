@@ -3729,7 +3729,7 @@ export default function DynamicSectionPage() {
             const authToken = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('access_token')) : '';
 
             // إرسال طلب الحذف المادي للملف
-            const response = await fetch(`http://127.0.0.1:8000/api/v1/attachments/${attachmentId}`, {
+            const response = await fetch(`/api/v1/attachments/${attachmentId}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${authToken}` }
             });
@@ -3861,7 +3861,7 @@ export default function DynamicSectionPage() {
 
                     console.log(`إرسال طلب التحديث الفوري للسجل ${rowId}:`, payload);
 
-                    const updateResponse = await fetch(`http://127.0.0.1:8000/api/v1/dynamic/rows/${rowId}`, {
+                    const updateResponse = await fetch(`/api/v1/dynamic/rows/${rowId}`, {
                         method: 'PUT',
                         headers: {
                             'Content-Type': 'application/json',
@@ -3913,7 +3913,7 @@ export default function DynamicSectionPage() {
         if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
             fullUrl = fileUrl;
         } else {
-            fullUrl = `http://127.0.0.1:8000/api/v1${fileUrl}`;
+            fullUrl = `/api/v1${fileUrl}`;
         }
 
         // 3. حقن التوكن في الرابط كـ Query Parameter
