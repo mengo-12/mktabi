@@ -593,42 +593,161 @@ class ReportRunnerService:
 
             reverse = sort.get("direction") == "desc"
 
-            def sort_key(row):
-
+            def get_sort_value(row):
                 value = ReportRunnerService.extract_value(
                     row,
                     column,
                     relation_cache,
                 )
 
+                # فك القيم المركبة
                 if isinstance(value, dict):
                     value = value.get("display")
 
+                # القوائم تتحول إلى نص موحد
                 if isinstance(value, list):
-                    value = ", ".join(str(v) for v in value)
+                    value = ", ".join(
+                        str(v)
+                        for v in value
+                        if v is not None
+                    )
 
-                if value is None:
-                    return ""
+                column_type = str(
+                    column.get("type", "text")
+                ).lower()
 
-                # إذا كان العمود رقمياً رتب كرقم
-                if column.get("type") == "number":
+                # =====================================================
+                # Numeric columns
+                # =====================================================
+                if column_type in (
+                    "number",
+                    "integer",
+                    "float",
+                    "decimal",
+                    "numeric",
+                ):
+                    if value is None:
+                        return None
+
+                    if isinstance(value, str):
+                        value = value.strip()
+
+                        if not value:
+                            return None
+
+                        # دعم الأرقام المكتوبة بفواصل
+                        value = value.replace(",", "")
+
                     try:
                         return float(value)
-                    except Exception:
+                    except (TypeError, ValueError):
+                        return None
+
+                # =====================================================
+                # Date / DateTime
+                # =====================================================
+                if column_type in (
+                    "date",
+                    "datetime",
+                    "date_time",
+                ):
+                    if value is None:
+                        return None
+
+                    value = str(value).strip()
+
+                    if not value:
+                        return None
+
+                    return value
+
+                # =====================================================
+                # Boolean
+                # =====================================================
+                if column_type in (
+                    "boolean",
+                    "bool",
+                ):
+                    if value is None:
+                        return None
+
+                    if isinstance(value, bool):
+                        return 1 if value else 0
+
+                    normalized = str(value).strip().lower()
+
+                    if normalized in (
+                        "true",
+                        "1",
+                        "yes",
+                        "نعم",
+                        "صح",
+                    ):
+                        return 1
+
+                    if normalized in (
+                        "false",
+                        "0",
+                        "no",
+                        "لا",
+                        "خطأ",
+                    ):
                         return 0
 
-                # إذا كان تاريخاً
-                if column.get("type") == "date":
-                    return str(value)
+                    return None
 
-                # باقي الأنواع
-                return str(value).lower()
+                # =====================================================
+                # Text / other types
+                # =====================================================
+                if value is None:
+                    return None
 
-            rows = sorted(
-                rows,
-                key=sort_key,
+                value = str(value).strip()
+
+                if not value:
+                    return None
+
+                return value.lower()
+
+            # ---------------------------------------------------------
+            # نفصل القيم الفارغة عن القيم الصالحة.
+            #
+            # بهذه الطريقة لا يحدث أبدًا:
+            # float < str
+            #
+            # كما أن القيم الفارغة تبقى في النهاية في Asc و Desc.
+            # ---------------------------------------------------------
+
+            valid_rows = []
+            empty_rows = []
+
+            for row in rows:
+
+                sort_value = get_sort_value(row)
+
+                if sort_value is None:
+                    empty_rows.append(row)
+                else:
+                    valid_rows.append(
+                        (sort_value, row)
+                    )
+
+            # إذا لم توجد قيم صالحة، لا حاجة للترتيب
+            if not valid_rows:
+                rows = empty_rows
+                continue
+
+            # جميع القيم هنا من نفس النوع حسب نوع العمود
+            valid_rows.sort(
+                key=lambda item: item[0],
                 reverse=reverse,
             )
+
+            # القيم الفارغة دائمًا في النهاية
+            rows = [
+                row
+                for _, row in valid_rows
+            ] + empty_rows
 
         return rows
     
